@@ -1,4 +1,5 @@
 extern crate dirs;
+extern crate tch;
 
 use std::fs;
 
