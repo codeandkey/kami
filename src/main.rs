@@ -1,5 +1,5 @@
 extern crate dirs;
-extern crate tch;
+extern crate tensorflow;
 
 use std::fs;
 

@@ -6,4 +6,4 @@ edition = "2018"
 
 [dependencies]
 dirs = "3.0.1"
-tch  = "0.4.0"
+tensorflow = "0.16.1"
