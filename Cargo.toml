@@ -6,4 +6,4 @@ edition = "2018"
 
 [dependencies]
 dirs = "3.0.1"
-tensorflow = "0.16.1"
+tensorflow = { version = "0.16.1", features = ["tensorflow_gpu"] }
