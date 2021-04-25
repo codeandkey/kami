@@ -4,7 +4,7 @@ extern crate dirs;
 extern crate pretty_env_logger;
 extern crate tensorflow;
 
-use clap::{Arg, App, SubCommand};
+use clap::{Arg, App};
 use tensorflow::SessionOptions;
 
 mod net;
