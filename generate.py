@@ -1,10 +1,32 @@
 import numpy as np
+import os
+import pathlib
+import random
+import string
 import sys
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 
+data_dir = None
+
+if len(sys.argv) > 1:
+    data_dir = sys.argv[1]
+else:
+    if os.name == 'posix':
+        data_dir = os.path.join(os.getenv('HOME'), '.local', 'share', 'kami')
+    elif os.name == 'nt':
+        data_dir = os.path.join(os.getenv('APPDATA'), 'kami')
+    else:
+        raise RuntimeError('Unsupported platform "{}".'.format(os.name))
+
+    pathlib.Path(data_dir).mkdir(parents=True, exist_ok=True)
+
+print('Using data directory "{}".'.format(data_dir))
 print('Generating model.')
+
+# Model version number
+VERSION = 1
 
 # Number of previous board states to include in input.
 HISTORY_PLY = 5
@@ -83,10 +105,20 @@ model.compile(
 print('Initialized model.')
 
 # Write output
-output = 'model' if len(sys.argv) < 2 else sys.argv[1]
+output = os.path.join(data_dir, 'model')
 print('Writing model to "%s".' % output)
 model.save(output)
 
+# Write version and uid
+with open(os.path.join(output, 'version'), 'w') as f:
+    f.write('{}\n'.format(VERSION))
+
+uid = ''.join(random.choices(string.ascii_uppercase, k=4))
+
+with open(os.path.join(output, 'id'), 'w') as f:
+    f.write(uid)
+
 # All done!
 model.summary()
-print('Ready.')
+
+print('Wrote model {}, version {}'.format(uid, VERSION))
