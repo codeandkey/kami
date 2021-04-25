@@ -18,19 +18,10 @@ fn main() {
             .short("v")
             .long("verbose")
             .help("Enables verbose logging"))
-        .arg(Arg::with_name("initdata")
-            .long("initdata")
-            .help("Initialize data directory"))
         .get_matches();
 
     // Init data dirs
     let data_dir = dirs::data_dir().unwrap().join("kami");
-
-    if matches.is_present("initdata") {
-        std::fs::create_dir_all(&data_dir).expect("Failed to initialize data directory");
-        println!("{}", data_dir.display());
-        return;
-    }
 
     // Verbose logging option
     if matches.is_present("v") {
