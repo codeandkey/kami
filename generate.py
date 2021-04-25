@@ -17,7 +17,7 @@ HISTORY_PLY = 5
 # |    4 | castling weights (WwBb) from pov
 # |  14H | > 12 piece values from pov
 # |      | > 2 repetition bits
-SQUARE_BITS = 14 + 6 + 4 + 12 * HISTORY_PLY
+SQUARE_BITS = 14 + 6 + 4 + 12 * (HISTORY_PLY + 1)
 
 # Input layers
 input_board = keras.Input(shape=(8, 8, SQUARE_BITS))
