@@ -4,10 +4,10 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::io;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::sync::mpsc::{Sender, Receiver, channel};
-use std::net::{TcpListener, SocketAddr, TcpStream};
-use std::io::{BufReader, BufWriter, BufRead, Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::io::{BufReader, BufWriter, BufRead, Write};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 use tensorflow::SessionOptions;
@@ -21,7 +21,7 @@ impl Server {
     pub fn start(data_dir: &Path) -> Result<Server, Box<dyn Error>> {
         let model = Arc::new(Model::load(&data_dir.join("model"), SessionOptions::new())?);
         let srv = TcpListener::bind("127.0.0.1:2191")?;
-        let (tx, rx) = std::sync::mpsc::channel::<()>();
+        let (tx, rx) = channel::<()>();
 
         srv.set_nonblocking(true)?;
 
@@ -36,7 +36,7 @@ impl Server {
 
     pub fn stop(&mut self) {
         info!("Stopping server.");
-        self.stop.send(());
+        self.stop.send(()).expect("dispatch stop notify failed");
 
         match self.dispatch.take().unwrap().join() {
             Ok(_) => {},
@@ -86,7 +86,7 @@ impl Server {
         }
 
         for stop in client_stops {
-            stop.send(());
+            stop.send(()).expect("client stop notify failed");
         }
 
         for client in client_threads {
