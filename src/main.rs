@@ -1,17 +1,20 @@
+
+#![feature(proc_macro_hygiene, decl_macro)]
+
 extern crate clap;
 extern crate dirs;
 #[macro_use] extern crate log;
 extern crate pretty_env_logger;
 extern crate tensorflow;
 
+#[macro_use]
+extern crate rocket;
+
 mod net;
-mod server;
 
 use clap::{Arg, App};
+use config::Config;
 use std::error::Error;
-use std::path::PathBuf;
-use server::Server;
-
 
 fn main() -> Result<(), Box<dyn Error>> {
     let matches = App::new("kami")
@@ -24,36 +27,24 @@ fn main() -> Result<(), Box<dyn Error>> {
             .help("Enables verbose logging"))
         .get_matches();
 
+    let mut config = Config::new();
+
+    // Define config options
+    config.set_default("verbose", false)?;
+    config.set_default("data_dir", dirs::data_dir().unwrap().join("kami").to_str().unwrap())?;
+
     // Verbose logging option
     if matches.is_present("verbose") {
-        std::env::set_var("RUST_LOG", "kami");
+        config.set("verbose", true)?;
+    }
+
+    std::env::set_var("RUST_LOG", "warn");
+
+    if config.get_bool("verbose")? {
+        std::env::set_var("RUST_LOG", std::env::var("RUST_LOG").unwrap() + ",debug"); 
     }
 
     pretty_env_logger::init();
 
-    info!("Verbose logging enabled.");
-
-    // Set data dir.
-    let data_dir = dirs::data_dir().unwrap().join("kami");
-
-    if !PathBuf::from(&data_dir).exists() {
-        panic!("Data directory \"{}\" does not exist! To create it:\n\tpython generate.py", data_dir.display());
-    }
-
-    info!("Found data dir \"{}\".", data_dir.display());
-
-    // Start compute server.
-    let mut srv = Server::start(&data_dir)?;
-
-    // Run TUI
-    // ...
-
-    let mut line = String::new();
-    std::io::stdin().read_line(&mut line).unwrap();
-
-    info!("Shutting down.");
-    srv.stop();
-
-    info!("Bye!");
     Ok(())
 }
