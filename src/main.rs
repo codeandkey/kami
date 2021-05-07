@@ -20,7 +20,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let matches = App::new("kami")
         .version(env!("CARGO_PKG_VERSION"))
         .author("Justin Stanley <jtst@iastate.edu>")
-        .about("portable chess engine powered by reinforcement learning")
+        .about("A portable chess engine powered by reinforcement learning.")
         .arg(Arg::with_name("verbose")
             .short("v")
             .long("verbose")
