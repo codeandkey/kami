@@ -1,127 +1,110 @@
 use crate::input::Input;
+use crate::inputframe::InputFrame;
 use chess::{Board, ChessMove, Color, Square, Piece, Rank, File, MoveGen};
 
+struct State {
+    b: Board,
+    halfmove_clock: usize,
+    move_number: usize,
+    repetitions: usize,
+}
+
 pub struct Position {
-    hist_boards: Vec<Board>,
-    hmc_bits: Vec<usize>,
-    white_input: Input,
-    black_input: Input,
+    states: Vec<State>,
+    input: Input,
 }
 
 impl Position {
     pub fn new() -> Self {
-        let mut p = Position {
-            hist_boards: vec![Board::default()],
-            white_input: Input::new(),
-            black_input: Input::new(),
-            hmc_bits: vec![0],
-        };
+        let b = Board::default();
 
-        p.write_frame();
-        p
+        Position {
+            states: vec![State {
+                b: b,
+                halfmove_clock: 0,
+                move_number: 1,
+                repetitions: 0,
+            }],
+            input: Input::new(&b, 1, 0),
+        }
     }
 
-    pub fn generate_moves(&self) -> Vec<chess::ChessMove> {
-        let gen = MoveGen::new_legal(self.hist_boards.last().unwrap());
-        let mut output = Vec::new();
+    fn top(&self) -> &State {
+        &self.states.last().unwrap()
+    }
 
-        for current in gen {
-            output.push(current);
-        }
-
-        output
+    pub fn iterate_moves(&self) -> impl Iterator<Item = chess::ChessMove> {
+        MoveGen::new_legal(&self.top().b)
     }
 
     pub fn make_move(&mut self, mv: ChessMove) -> Result<(), chess::Error> {
-        // Set new hmc
-        let src_piece = self.hist_boards.last().unwrap().piece_on(mv.get_source());
-        let dst_piece = self.hist_boards.last().unwrap().piece_on(mv.get_dest());
+        // Find next halfmove clock
+        let src_piece = self.top().b.piece_on(mv.get_source());
+        let dst_piece = self.top().b.piece_on(mv.get_dest());
+        let mut next_halfmove_clock = self.top().halfmove_clock + 1;
 
         if src_piece.unwrap() == Piece::Pawn || dst_piece.is_some() {
-            self.hmc_bits.push(0);
-        } else {
-            let last_hmc = *self.hmc_bits.last().unwrap();
-            self.hmc_bits.push(last_hmc + 1);
+            next_halfmove_clock = 0;
         }
 
-        // Make move on board
-        self.hist_boards.push(self.hist_boards.last().unwrap().make_move_new(mv));
+        // Find next move number
+        let mut next_move_number = self.top().move_number;
 
-        // Push input frames
-        self.white_input.push_frames();
-        self.black_input.push_frames();
+        if self.top().b.side_to_move() == Color::Black {
+            next_move_number += 1;
+        }
 
-        // Write current frame
-        self.write_frame();
+        // Make move, build next board
+        let next_board = self.top().b.make_move_new(mv);
+
+        // Count repetitions
+        let current_hash = next_board.get_hash();
+        let mut num_repetitions = 0;
+
+        for s in &self.states {
+            if s.b.get_hash() == current_hash {
+                num_repetitions += 1;
+            }
+        }
+
+        // Build next state
+        let next_state = State {
+            b: next_board,
+            halfmove_clock: next_halfmove_clock,
+            move_number: next_move_number,
+            repetitions: num_repetitions,
+        };
+
+        // Update input header
+        self.input.write_headers(&next_board, next_state.move_number, next_state.halfmove_clock);
+
+        // Push new frame
+        self.input.push_frame(InputFrame::new(&next_board, next_state.repetitions));
+
+        // Push state to history
+        self.states.push(next_state);
 
         Ok(())
     }
 
     pub fn unmake_move(&mut self) {
         // Pop board state
-        self.hist_boards.pop();
+        self.states.pop();
 
-        // Pop history frames
-        self.white_input.pop_frames();
-        self.black_input.pop_frames();
+        let top = self.states.last().unwrap();
 
-        // Write current frame
-        self.write_frame();
-    }
+        // Update input header
+        self.input.write_headers(&top.b, top.move_number, top.halfmove_clock);
 
-    fn write_frame(&mut self) {
-        let move_number = (self.hist_boards.len() - 1) / 2;
-        let halfmove_clock = *self.hmc_bits.last().unwrap();
-
-        let board = self.hist_boards.last().unwrap();
-        let wrights = board.castle_rights(Color::White);
-        let brights = board.castle_rights(Color::Black);
-
-        let wks = wrights.has_kingside();
-        let wqs = wrights.has_queenside();
-        let bks = brights.has_kingside();
-        let bqs = brights.has_queenside();
-
-        // Iterate board squares once
-        for r in 0..8 {
-            for f in 0..8 {
-                // Get piece type, color if there is one
-                let sq = Square::make_square(Rank::from_index(r), File::from_index(f));
-                let pc = board.piece_on(sq);
-                let col = board.color_on(sq);
-
-                // Write white header at destination (r, f)
-                self.white_input.write_header(r, f, move_number, halfmove_clock, wks, wqs, bks, bqs);
-
-                // Write black header at destination (7 - r, 7 - f) to mirror
-                self.black_input.write_header(7 - r, 7 - f, move_number, halfmove_clock, wks, wqs, bks, bqs);
-
-                // Write piece bits if there is one
-                if let Some(p) = pc {
-                    if col.unwrap() == Color::White {
-                        self.white_input.write_frame(r, f, p.to_index());
-                        self.black_input.write_frame(7 - r, 7 - f, 6 + p.to_index());
-                    } else {
-                        self.white_input.write_frame(r, f, 6 + p.to_index());
-                        self.black_input.write_frame(7 - r, 7 - f, p.to_index());
-                    }
-                } else {
-                    // No piece, just clear the frame
-                    self.white_input.clear_frame(r, f);
-                    self.black_input.clear_frame(7 - r, 7 - f);
-                }
-            }
-        }
+        // Pop input frame
+        self.input.pop_frame();
     }
 
     pub fn get_input(&self) -> &Input {
-        match self.hist_boards.last().unwrap().side_to_move() {
-            Color::White => &self.white_input,
-            Color::Black => &self.black_input,
-        }
+        &self.input
     }
 
     pub fn get_fen(&self) -> String {
-        self.hist_boards.last().unwrap().to_string()
+        self.top().b.to_string()
     }
 }

@@ -9,6 +9,7 @@ extern crate tensorflow;
 #[macro_use] extern crate log;
 
 mod input;
+mod inputframe;
 mod net;
 mod perft;
 mod position;
@@ -20,7 +21,7 @@ use clap::{Arg, App};
 use config::Config;
 
 use actix_web::{
-    get, post, web, HttpResponse, HttpServer, Responder
+    get, web, HttpServer, Responder
 };
     
 use search::Search;
@@ -71,6 +72,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     pretty_env_logger::init();
+
+    let mut p = position::Position::new();
+    perft::perft(&mut p, 4);
+
+    return Ok(());
 
     let searcher = Arc::new(Mutex::new(Search::new(&config)?));
 

@@ -1,96 +1,60 @@
 /**
  * Input layer type.
  */
-
-use chess::Board;
+ 
+use chess::{Board, Color};
+use crate::inputframe::InputFrame;
 
 pub const PLY_FRAME_SIZE: usize = 14;
 pub const PLY_FRAME_COUNT: usize = 6;
-pub const SQUARE_BITS: usize = 108;
 pub const SQUARE_HEADER_SIZE: usize = 24;
+pub const SQUARE_BITS: usize = SQUARE_HEADER_SIZE + PLY_FRAME_SIZE * PLY_FRAME_COUNT;
+pub const COUNTER_BITS: usize = 20;
 
 pub struct Input {
-    layer: Vec<f32>,
-    hist_frames: Vec<Vec<Vec<Vec<f32>>>>,
+    counters: [f32; COUNTER_BITS],
+    castle_rights: [f32; 4],
+    frames: Vec<InputFrame>,
 }
 
 impl Input {
-    pub fn new() -> Self {
-        let mut layer = Vec::new();
-        layer.resize(SQUARE_BITS * 64, 0.0);
+    pub fn new(b: &Board, move_number: usize, halfmove_clock: usize) -> Self {
+        let mut inp = Input {
+            counters: [0.0; COUNTER_BITS],
+            castle_rights: [1.0; 4],
+            frames: vec![InputFrame::new(b, 0)],
+        };
 
-        let mut hist_frames: Vec<Vec<Vec<Vec<f32>>>> = Vec::new();
-
-        hist_frames.resize_with(8, Vec::new);
-
-        for i in 0..8 {
-            hist_frames[i].resize_with(8, Vec::new);
-        }
-
-        Input {
-            layer: layer,
-            hist_frames: hist_frames,
-        }
+        inp.write_headers(b, move_number, halfmove_clock);
+        inp
     }
 
-    pub fn write_header(&mut self, rank: usize, file: usize, move_num: usize, hmc: usize, our_ks: bool, our_qs: bool, their_ks: bool, their_qs: bool) {
-        let offset = rank * (8 * SQUARE_BITS) + file * SQUARE_BITS;
-
+    pub fn write_headers(&mut self, b: &Board, move_num: usize, hmc: usize) {
         // Write full move number
         for i in 0..14 {
-            self.layer[offset + i] = ((move_num >> i) & 0x1) as f32;
+            self.counters[i] = ((move_num >> i) & 0x1) as f32;
         }
 
         // Write halfmove clock
         for i in 0..6 {
-            self.layer[offset + 14 + i] = ((hmc >> i) & 0x1) as f32;
+            self.counters[i + 14] = ((hmc >> i) & 0x1) as f32;
         }
 
         // Write castling rights
-        self.layer[offset + 20] = if our_ks { 1.0 } else { 0.0 };
-        self.layer[offset + 21] = if our_qs { 1.0 } else { 0.0 };
-        self.layer[offset + 22] = if their_ks { 1.0 } else { 0.0 };
-        self.layer[offset + 23] = if their_qs { 1.0 } else { 0.0 };
+        let wrights = b.castle_rights(Color::White);
+        let brights = b.castle_rights(Color::Black);
+
+        self.castle_rights[0] = wrights.has_kingside() as i32 as f32;
+        self.castle_rights[1] = wrights.has_queenside() as i32 as f32;
+        self.castle_rights[2] = brights.has_kingside() as i32 as f32;
+        self.castle_rights[3] = brights.has_queenside() as i32 as f32;
     }
 
-    pub fn write_frame(&mut self, r: usize, f: usize, pbit: usize) {
-        self.layer[r * (8 * SQUARE_BITS) + f * SQUARE_BITS + 24 + pbit] = 1.0;
+    pub fn push_frame(&mut self, frame: InputFrame) {
+        self.frames.push(frame);
     }
 
-    pub fn clear_frame(&mut self, r: usize, f: usize) {
-        let offset = r * (8 * SQUARE_BITS) + f * SQUARE_BITS + 24;
-        self.layer[offset .. offset + 12].fill(0.0);
-    }
-
-    pub fn push_frames(&mut self) {
-        for r in 0..8 {
-            for f in 0..8 {
-                let start = r * (8 * SQUARE_BITS) + f * SQUARE_BITS + 24;
-                let end = start + PLY_FRAME_SIZE * PLY_FRAME_COUNT;
-
-                // Save frame before rotating
-                self.hist_frames[r][f].push(self.layer[end - PLY_FRAME_SIZE .. end].to_vec());
-
-                self.layer[start .. end].rotate_right(PLY_FRAME_SIZE);
-            }
-        }
-    }
-
-    pub fn pop_frames(&mut self) {
-        for r in 0..8 {
-            for f in 0..8 {
-                let start = r * (8 * SQUARE_BITS) + f * SQUARE_BITS + 24;
-                let end = start + PLY_FRAME_SIZE * PLY_FRAME_COUNT;
-
-                self.layer[start .. end].rotate_left(PLY_FRAME_SIZE);
-
-                // Restore frame if there is one, otherwise fill with 0
-                if self.hist_frames.len() > 0 {
-                    self.layer[end - PLY_FRAME_SIZE .. end].copy_from_slice(&self.hist_frames[r][f].pop().unwrap());
-                } else {
-                    self.layer[end - PLY_FRAME_SIZE .. end].fill(0.0);
-                }
-            }
-        }
+    pub fn pop_frame(&mut self) {
+        self.frames.pop().expect("pop frame failed");
     }
 }

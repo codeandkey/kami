@@ -33,10 +33,9 @@ fn perft_sub(root: &mut Position, depth: usize) -> usize {
     }
 
     // Iterate over moves in root
-    let moves = root.generate_moves();
     let mut nodes = 0;
 
-    for m in moves {
+    for m in root.iterate_moves() {
         root.make_move(m).expect("Make move failed.");
         nodes += perft_sub(root, depth - 1);
         root.unmake_move();
@@ -52,10 +51,12 @@ mod tests {
 
     #[test]
     fn perft_default_fen_nochange() {
+        println!("Running fen nochange test.");
+
         let mut p = Position::new();
         let starting_fen = p.get_fen();
 
-        perft(&mut p, 4);
+        perft(&mut p, 3);
 
         assert_eq!(starting_fen, p.get_fen());
     }
