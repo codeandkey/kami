@@ -1,84 +1,28 @@
 use crate::net::Model;
-use chess::Board;
+use crate::position::Position;
+use crate::tree::Tree;
+use crate::worker::Worker;
+
 use config::Config;
 use std::error::Error;
 use std::path::Path;
-use std::sync::RwLock;
-use std::sync::atomic::AtomicBool;
-use std::thread::Thread;
 use tensorflow::SessionOptions;
 
-use serde::Serialize;
-
-#[derive(Clone, Serialize)]
-pub struct NodeValue {
-    n: u32,
-    w: f32,
-}
-
-impl NodeValue {
-    pub fn new() -> Self {
-        NodeValue {
-            n: 0,
-            w: 0.0,
-        }
+use std::sync::{
+    Arc, RwLock,
+    atomic::{
+        AtomicBool,
+        Ordering
     }
-}
-
-#[derive(Serialize)]
-pub struct TreeStatus {
-    values: Vec<NodeValue>,
-    actions: Vec<String>,
-    p: Vec<f32>,
-}
-
-impl TreeStatus {
-    pub fn add(&mut self, v: NodeValue, action: String, p: f32) {
-        self.values.push(v);
-        self.actions.push(action);
-        self.p.push(p);
-    }
-}
-
-pub struct Tree {
-    children: Vec<Box<Tree>>,
-    claim: AtomicBool,
-    value: RwLock<NodeValue>,
-    p: RwLock<Option<f32>>,
-    action: String,
-}
-
-impl Tree {
-    pub fn root() -> Self {
-        Tree {
-            children: Vec::new(),
-            claim: AtomicBool::from(false),
-            value: RwLock::new(NodeValue::new()),
-            p: RwLock::new(None),
-            action: "none".to_string(),
-        }
-    }
-
-    pub fn status(&self) -> TreeStatus {
-        TreeStatus {
-            values: self.children.iter().map(|c| c.value.read().unwrap().clone()).collect(),
-            actions: self.children.iter().map(|c| c.action.clone()).collect(),
-            p: self.children.iter().map(|c| c.p.read().unwrap().unwrap_or(-1.0)).collect(),
-        }
-    }
-}
-
-#[derive(Serialize)]
-pub struct Status {
-    state: String,
-    tree: TreeStatus,
-}
+};
 
 pub struct Search {
-    model: Model,
+    model: Arc<Model>,
     tree: Tree,
     state: RwLock<String>,
-    workers: Vec<Thread>,
+    workers: Vec<Worker>,
+    stopflag: Arc<AtomicBool>,
+    rootpos: Position,
 }
 
 impl Search {
@@ -86,21 +30,37 @@ impl Search {
         let model_path = Path::new(&config.get_str("data_dir").unwrap()).join("model");
 
         Ok(Search {
-            model: Model::load(&model_path, SessionOptions::new())?,
-            tree: Tree::root(),
+            model: Arc::new(Model::load(&model_path, SessionOptions::new())?),
+            tree: Tree::new(),
             state: RwLock::new("idle".to_string()),
             workers: Vec::new(),
+            rootpos: Position::new(),
+            stopflag: Arc::new(AtomicBool::from(false)),
         })
     }
 
-    pub fn status(&self) -> Status {
-        Status {
-            state: self.state.read().unwrap().clone(),
-            tree: self.tree.status(),
-        }
+    pub fn load(&mut self, p: Position) {
+        self.stop();
+        self.rootpos = p;
     }
 
-    pub fn advance(&mut self, b: Board, time: u32) -> String {
-        "".to_string()
+    pub fn stop(&mut self) {
+        if self.workers.is_empty() {
+            return;
+        }
+
+        self.stopflag.store(true, Ordering::Relaxed);
+
+        for worker in self.workers {
+            worker.join();
+        }
+
+        self.stopflag.store(false, Ordering::Relaxed);
     }
+
+    pub fn start(&mut self, num_workers: usize) {
+        // Launch worker threads
+        self.workers = (0..num_workers).map(|_| Worker::new(self.tree.clone(), self.stopflag.clone(), 16, self.rootpos.clone(), self.model.clone())).collect();
+    }
+
 }

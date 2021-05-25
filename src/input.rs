@@ -2,26 +2,21 @@
  * Input layer type.
  */
  
-use chess::{Board, Color};
 use crate::inputframe::InputFrame;
+use crate::net;
 
-pub const PLY_FRAME_SIZE: usize = 14;
-pub const PLY_FRAME_COUNT: usize = 6;
-pub const SQUARE_HEADER_SIZE: usize = 24;
-pub const SQUARE_BITS: usize = SQUARE_HEADER_SIZE + PLY_FRAME_SIZE * PLY_FRAME_COUNT;
-pub const COUNTER_BITS: usize = 20;
+use chess::{Board, Color};
 
+#[derive(Clone)]
 pub struct Input {
-    counters: [f32; COUNTER_BITS],
-    castle_rights: [f32; 4],
+    headers: [f32; 24],
     frames: Vec<InputFrame>,
 }
 
 impl Input {
-    pub fn new(b: &Board, move_number: usize, halfmove_clock: usize) -> Self {
+    pub fn new(b: &Board, move_number: u8, halfmove_clock: u8) -> Self {
         let mut inp = Input {
-            counters: [0.0; COUNTER_BITS],
-            castle_rights: [1.0; 4],
+            headers: [0.0; 24],
             frames: vec![InputFrame::new(b, 0)],
         };
 
@@ -29,25 +24,25 @@ impl Input {
         inp
     }
 
-    pub fn write_headers(&mut self, b: &Board, move_num: usize, hmc: usize) {
+    pub fn write_headers(&mut self, b: &Board, move_num: u8, hmc: u8) {
         // Write full move number
-        for i in 0..14 {
-            self.counters[i] = ((move_num >> i) & 0x1) as f32;
+        for i in 0..8 {
+            self.headers[i] = ((move_num >> i) & 0x1) as f32;
         }
 
         // Write halfmove clock
         for i in 0..6 {
-            self.counters[i + 14] = ((hmc >> i) & 0x1) as f32;
+            self.headers[i + 14] = ((hmc >> i) & 0x1) as f32;
         }
 
         // Write castling rights
         let wrights = b.castle_rights(Color::White);
         let brights = b.castle_rights(Color::Black);
 
-        self.castle_rights[0] = wrights.has_kingside() as i32 as f32;
-        self.castle_rights[1] = wrights.has_queenside() as i32 as f32;
-        self.castle_rights[2] = brights.has_kingside() as i32 as f32;
-        self.castle_rights[3] = brights.has_queenside() as i32 as f32;
+        self.headers[20] = wrights.has_kingside() as i32 as f32;
+        self.headers[21] = wrights.has_queenside() as i32 as f32;
+        self.headers[22] = brights.has_kingside() as i32 as f32;
+        self.headers[23] = brights.has_queenside() as i32 as f32;
     }
 
     pub fn push_frame(&mut self, frame: InputFrame) {
@@ -56,5 +51,13 @@ impl Input {
 
     pub fn pop_frame(&mut self) {
         self.frames.pop().expect("pop frame failed");
+    }
+
+    pub fn get_headers(&self) -> &[f32; 24] {
+        &self.headers
+    }
+
+    pub fn get_frames(&self) -> impl Iterator<Item = &InputFrame> {
+        self.frames.iter().rev().take(net::PLY_FRAME_COUNT).rev()
     }
 }

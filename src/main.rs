@@ -8,12 +8,16 @@ extern crate tensorflow;
 
 #[macro_use] extern crate log;
 
+mod batch;
 mod input;
 mod inputframe;
 mod net;
+mod node;
 mod perft;
 mod position;
 mod search;
+mod tree;
+mod worker;
 
 static BIND: &'static str = "0.0.0.0:8000";
 
@@ -24,7 +28,7 @@ use actix_web::{
     get, web, HttpServer, Responder
 };
     
-use search::Search;
+use crate::search::Search;
 use std::error::Error;
 use std::sync::{Arc, Mutex};
 
@@ -34,7 +38,7 @@ use std::sync::{Arc, Mutex};
 
 #[get("/api/status")]
 async fn status(data: web::Data<Arc<Mutex<Search>>>) -> impl Responder {
-    web::Json(data.lock().unwrap().status())
+    web::Json(0)
 }
 
 /**

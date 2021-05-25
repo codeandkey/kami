@@ -2,13 +2,15 @@ use crate::input::Input;
 use crate::inputframe::InputFrame;
 use chess::{Board, ChessMove, Color, Square, Piece, Rank, File, MoveGen};
 
+#[derive(Clone)]
 struct State {
     b: Board,
-    halfmove_clock: usize,
-    move_number: usize,
-    repetitions: usize,
+    halfmove_clock: u8,
+    move_number: u8,
+    repetitions: u8,
 }
 
+#[derive(Clone)]
 pub struct Position {
     states: Vec<State>,
     input: Input,
@@ -33,8 +35,12 @@ impl Position {
         &self.states.last().unwrap()
     }
 
-    pub fn iterate_moves(&self) -> impl Iterator<Item = chess::ChessMove> {
+    pub fn iterate_moves(&self) -> impl Iterator<Item = ChessMove> {
         MoveGen::new_legal(&self.top().b)
+    }
+
+    pub fn generate_moves(&self) -> Vec<ChessMove> {
+        self.iterate_moves().collect()
     }
 
     pub fn make_move(&mut self, mv: ChessMove) -> Result<(), chess::Error> {
