@@ -1,68 +1,60 @@
-
+extern crate actix_web;
 extern crate clap;
 extern crate dirs;
 extern crate pretty_env_logger;
-extern crate actix_web;
 extern crate serde;
 extern crate tensorflow;
 
-#[macro_use] extern crate log;
+#[macro_use]
+extern crate log;
 
 mod batch;
-mod input;
-mod inputframe;
+mod control;
 mod net;
 mod node;
 mod perft;
 mod position;
-mod search;
+mod searcher;
 mod tree;
 mod worker;
 
-static BIND: &'static str = "0.0.0.0:8000";
-
-use clap::{Arg, App};
+use clap::{App, Arg};
 use config::Config;
 
-use actix_web::{
-    get, web, HttpServer, Responder
-};
-    
-use crate::search::Search;
 use std::error::Error;
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
-
-/**
- * Server routes and API
- */
-
-#[get("/api/status")]
-async fn status(data: web::Data<Arc<Mutex<Search>>>) -> impl Responder {
-    web::Json(0)
-}
+use std::thread::{spawn, JoinHandle};
+use tensorflow::SessionOptions;
 
 /**
  * Server entry point
  */
 
-#[actix_web::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     // Parse arguments
     let matches = App::new("kami")
         .version(env!("CARGO_PKG_VERSION"))
         .author("Justin Stanley <jtst@iastate.edu>")
-        .about("A portable chess engine powered by reinforcement learning.")
-        .arg(Arg::with_name("verbose")
-            .short("v")
-            .long("verbose")
-            .help("Enables verbose logging"))
+        .about("A chess engine powered by reinforcement learning.")
+        .arg(
+            Arg::with_name("verbose")
+                .short("v")
+                .long("verbose")
+                .help("Enables verbose logging"),
+        )
         .get_matches();
 
     // Initialize config
     let mut config = Config::new();
 
     config.set_default("verbose", false)?;
-    config.set_default("data_dir", dirs::data_dir().unwrap().join("kami").to_str().unwrap())?;
+    config.set_default(
+        "data_dir",
+        dirs::data_dir().unwrap().join("kami").to_str().unwrap(),
+    )?;
 
     // Initialize logging
     if matches.is_present("verbose") {
@@ -77,27 +69,79 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     pretty_env_logger::init();
 
-    let mut p = position::Position::new();
-    perft::perft(&mut p, 4);
+    // Initialize model
+    let model = Arc::new(net::Model::load(
+        Path::new(&config.get_str("data_dir").unwrap())
+            .join("model")
+            .as_path(),
+        SessionOptions::new(),
+    )?);
 
-    return Ok(());
+    // Start control
+    let control = Arc::new(Mutex::new(control::Control::new(model.clone(), &config)));
 
-    let searcher = Arc::new(Mutex::new(Search::new(&config)?));
+    // Wait for connections
+    const BIND: &str = "0.0.0.0:2961";
 
-    info!("Starting server on {}", BIND);
-
-    // Start web service
-    let srv = HttpServer::new(move ||
-        actix_web::App::new()
-            .data(searcher.clone())
-            .service(status)
-    )
-    .bind(BIND)?
-    .run();
+    let listener = TcpListener::bind(BIND)?;
+    let mut clients: Vec<JoinHandle<()>> = Vec::new();
 
     println!("Listening on {}", BIND);
 
-    srv.await?;
+    let listener_control = control.clone();
+    let listener_thread = spawn(move || {
+        for stream in listener.incoming() {
+            match stream {
+                Ok(mut stream) => {
+                    println!("{}: accepted connection", stream.peer_addr().unwrap());
 
+                    let client_control = listener_control.clone();
+                    let addr = stream.peer_addr().unwrap();
+
+                    clients.push(spawn(move || {
+                        loop {
+                            let mut buf = [0u8; 512];
+
+                            if let Err(e) = stream.read(&mut buf) {
+                                println!("{}: read fail: {}", addr, e);
+                                break;
+                            }
+
+                            let trim_chars: &[_] = &['\n', '\r', ' ', '\t', '\0'];
+                            let contents = String::from_utf8_lossy(&buf)
+                                .trim_matches(trim_chars)
+                                .to_string();
+
+                            let rx = client_control.lock().unwrap().execute(contents);
+
+                            if let Err(e) =
+                                stream.write(rx.recv().expect("control recv failed").as_bytes())
+                            {
+                                println!("{}: write fail: {}", addr, e);
+                                break;
+                            }
+                        }
+
+                        println!("{}: dropping connection", addr);
+                    }));
+                }
+                Err(e) => {
+                    println!("Accept failed: {}", e);
+                }
+            }
+        }
+    });
+
+    // Start processing commands
+    println!("Starting command processing loop.");
+
+    loop {
+        control.lock().unwrap().process();
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+
+    listener_thread
+        .join()
+        .expect("failed joining listener thread");
     Ok(())
 }

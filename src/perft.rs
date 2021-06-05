@@ -1,7 +1,6 @@
 /**
  * Perft testing utility, for measuring performance of move-making and updating input layers
  */
-
 use crate::position::Position;
 use std::time::SystemTime;
 
@@ -23,7 +22,13 @@ pub fn perft(root: &mut Position, maxdepth: usize) {
 
         let total_ms = time_after.duration_since(time_before).unwrap().as_millis();
 
-        println!("Finished perft {}, {} nodes, {} ms, {} nps", depth, nodes, total_ms, (nodes as u128 * 1000) / (total_ms + 1));
+        println!(
+            "Finished perft {}, {} nodes, {} ms, {} nps",
+            depth,
+            nodes,
+            total_ms,
+            (nodes as u128 * 1000) / (total_ms + 1)
+        );
     }
 }
 
@@ -36,7 +41,7 @@ fn perft_sub(root: &mut Position, depth: usize) -> usize {
     let mut nodes = 0;
 
     for m in root.iterate_moves() {
-        root.make_move(m).expect("Make move failed.");
+        assert!(root.make_move(m));
         nodes += perft_sub(root, depth - 1);
         root.unmake_move();
     }
@@ -46,8 +51,8 @@ fn perft_sub(root: &mut Position, depth: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use crate::position::Position;
     use super::perft;
+    use crate::position::Position;
 
     #[test]
     fn perft_default_fen_nochange() {
