@@ -133,7 +133,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("Starting command processing loop.");
 
     loop {
-        control.lock().unwrap().process();
+        if control.lock().unwrap().process() {
+            break;
+        }
+        
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
 

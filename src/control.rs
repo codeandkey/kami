@@ -74,7 +74,7 @@ impl Control {
         rx
     }
 
-    pub fn process(&mut self) {
+    pub fn process(&mut self) -> bool {
         while !self.queue.is_empty() {
             // Pop next command from queue
             let (content, tx) = self.queue.pop_front().unwrap();
@@ -90,33 +90,45 @@ impl Control {
             };
 
             // execute the command and return the response
-            tx.send(serde_json::to_string(&self.do_command(cmd)).unwrap())
-                .expect("tx failed")
+            let (resp, should_quit) = self.do_command(cmd);
+
+            tx.send(serde_json::to_string(&resp).unwrap())
+                .expect("tx failed");
+
+            if should_quit {
+                return true;
+            }
         }
+
+        return false;
     }
 
-    pub fn do_command(&mut self, c: Message) -> Message {
+    pub fn do_command(&mut self, c: Message) -> (Message, bool) {
         if c.mtype == "search" {
-            return self.search(c);
+            return (self.search(c), false);
         }
 
         if c.mtype == "make_move" {
-            return self.make_move(c);
+            return (self.make_move(c), false);
         }
 
         if c.mtype == "reset" {
-            return self.reset();
+            return (self.reset(), false);
         }
 
         if c.mtype == "stop" {
-            return self.stop();
+            return (self.stop(), false);
         }
 
         if c.mtype == "status" {
-            return self.status();
+            return (self.status(), false);
         }
 
-        Message::error(format!("Unknown command '{}'", c.mtype))
+        if c.mtype == "quit" {
+            return (Message::simple("ok"), true);
+        }
+
+        (Message::error(format!("Unknown command '{}'", c.mtype)), false)
     }
 
     fn search(&mut self, c: Message) -> Message {
