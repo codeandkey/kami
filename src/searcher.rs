@@ -6,7 +6,7 @@ use crate::worker::{self, Worker};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread::{spawn, JoinHandle};
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Status {
