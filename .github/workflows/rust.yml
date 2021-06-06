@@ -20,7 +20,7 @@ jobs:
           sudo apt-get install unzip
           wget https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.8.1%2Bcpu.zip
           unzip libtorch-cxx11-abi-shared-with-deps-1.8.1+cpu.zip
-          cd libtorch-cxx11-abi-shared-with-deps-1.8.1+cpu
+          cd libtorch
           sudo cp -rv * /usr
       - name: Checkout repository
         uses: actions/checkout@v2
