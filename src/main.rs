@@ -1,9 +1,8 @@
-extern crate actix_web;
 extern crate clap;
 extern crate dirs;
 extern crate pretty_env_logger;
 extern crate serde;
-extern crate tensorflow;
+extern crate tch;
 
 #[macro_use]
 extern crate log;
@@ -27,7 +26,6 @@ use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::thread::{spawn, JoinHandle};
-use tensorflow::SessionOptions;
 
 /**
  * Server entry point
@@ -73,8 +71,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let model = Arc::new(net::Model::load(
         Path::new(&config.get_str("data_dir").unwrap())
             .join("model")
-            .as_path(),
-        SessionOptions::new(),
+            .as_path()
     )?);
 
     // Start control

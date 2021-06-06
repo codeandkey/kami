@@ -4,7 +4,7 @@ use std::convert::TryInto;
 use std::error::Error;
 use std::path::Path;
 
-use tensorflow::{Graph, Operation, SavedModelBundle, Session, SessionOptions, SessionRunArgs};
+use tch::{CModule, Device, Cuda};
 
 pub const PLY_FRAME_SIZE: usize = 14;
 pub const PLY_FRAME_COUNT: usize = 6;
@@ -20,8 +20,8 @@ impl Output {
         let mut policy = Vec::new();
         let mut value = Vec::new();
 
-        policy.resize_with(4096 * bsize, || 1.0 / 4096.0);
-        value.resize_with(bsize, || 0.0);
+        policy.resize(4096 * bsize, 1.0 / 4096.0);
+        value.resize(bsize, 0.0);
 
         Output {
             policy: policy,
@@ -39,50 +39,31 @@ impl Output {
 }
 
 pub struct Model {
-    session: Session,
-    graph: Graph,
-    op_serve: Operation,
+    module: CModule,
+    device: Device,
 }
 
 impl Model {
-    pub fn load(p: &Path, opts: SessionOptions) -> Result<Model, Box<dyn Error>> {
-        let mut g = Graph::new();
-
+    pub fn load(p: &Path) -> Result<Model, Box<dyn Error>> {
         debug!("Loading model from {}", p.display());
 
-        let session = SavedModelBundle::load(&opts, &["serve"], &mut g, p)?.session;
+        let module = CModule::load(p)?;
 
         debug!("Model ready.");
 
-        debug!("Available operations:");
-        for op in g.operation_iter() {
-            debug!("> {}", op.name()?);
+        let device = Device::cuda_if_available();
+
+        if device.is_cuda() {
+            println!("CUDA support enabled.");
+            println!("Using {} GPUs for computing.", Cuda::device_count());
+            println!("CUDNN support: {}", if Cuda::cudnn_is_available() { "yes" } else { "no" });
+        } else {
+            println!("CUDA not available, running on CPU.");
         }
-
-        debug!(
-            "Using tensorflow version {}",
-            tensorflow::version().unwrap()
-        );
-
-        debug!("Enumerating devices:");
-
-        let devices = session.device_list()?;
-
-        for c in &devices {
-            debug!(
-                ">> {} {}: {:.1}GB",
-                c.device_type,
-                c.name,
-                c.memory_bytes as f64 / ((1u64 << 30) as f64)
-            );
-        }
-
-        debug!("{} total devices available", devices.len());
 
         Ok(Model {
-            session: session,
-            op_serve: g.operation_by_name_required("serving_default_input_1")?,
-            graph: g,
+            module: module,
+            device: device,
         })
     }
 
@@ -91,7 +72,10 @@ impl Model {
         let lmm_tensor = b.get_lmm_tensor();
         let frames_tensor = b.get_frames_tensor();
 
-        let mut args = SessionRunArgs::new();
+        // TODO: implement network evaluation
+        return Ok(Output::dummy(b.get_size()));
+
+        /*let mut args = SessionRunArgs::new();
 
         args.add_feed(&self.op_serve, 0, &header_tensor);
         args.add_feed(&self.op_serve, 1, &frames_tensor);
@@ -108,6 +92,6 @@ impl Model {
         Ok(Output {
             policy: policy_tensor.to_vec(),
             value: value_tensor.to_vec(),
-        })
+        })*/
     }
 }

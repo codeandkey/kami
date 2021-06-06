@@ -7,7 +7,7 @@ use crate::position::Position;
 use crate::tree::Tree;
 
 use chess::ChessMove;
-use tensorflow::Tensor;
+use tch::Tensor;
 
 pub struct Batch {
     headers: Vec<f32>,
@@ -69,15 +69,15 @@ impl Batch {
         &self.moves[idx]
     }
 
-    pub fn get_frames_tensor(&self) -> Tensor<f32> {
-        Tensor::from(self.frames.as_slice())
+    pub fn get_frames_tensor(&self) -> Tensor {
+        Tensor::of_slice(self.frames.as_slice())
     }
 
-    pub fn get_lmm_tensor(&self) -> Tensor<f32> {
-        Tensor::from(self.lmm.as_slice())
+    pub fn get_lmm_tensor(&self) -> Tensor {
+        Tensor::of_slice(self.lmm.as_slice())
     }
 
-    pub fn get_header_tensor(&self) -> Tensor<f32> {
-        Tensor::from(self.headers.as_slice())
+    pub fn get_header_tensor(&self) -> Tensor {
+        Tensor::of_slice(self.headers.as_slice())
     }
 }

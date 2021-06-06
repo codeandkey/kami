@@ -5,15 +5,13 @@ authors = ["Justin Stanley"]
 edition = "2018"
 
 [dependencies]
-actix-web = "3"
 chess = "3.2.0"
 clap = "2.33.3"
 config = "0.11.0"
 dirs = "3.0.1"
-futures = "0.3.14"
 log = "0.4"
 num_cpus = "1.13.0"
 pretty_env_logger = "0.3"
-serde = "1.0.125"
-serde_json = "1.0.64" 
-tensorflow = { version = "0.16.1", features = ["tensorflow_gpu"] }
+serde = { version = "1.0.125", features = ["derive"] }
+serde_json = "1.0.64"
+tch = "0.4.1"
