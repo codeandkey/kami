@@ -1,18 +1,12 @@
 /**
  * Search worker.
  */
-use crate::batch::Batch;
 use crate::net::Model;
-use crate::position::Position;
 use crate::tree::TreeReq;
 
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc, RwLock,
-};
-
 use serde::{Deserialize, Serialize};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::{Arc, RwLock};
+use std::sync::mpsc::{channel, Sender};
 use std::thread::{spawn, JoinHandle};
 
 #[derive(Deserialize, Serialize, Clone)]
