@@ -7,6 +7,7 @@ use crate::position::Position;
 use chess::ChessMove;
 use tch::Tensor;
 
+/// Manages a batch of inputs to the model.
 pub struct Batch {
     headers: Vec<f32>,
     frames: Vec<f32>,
@@ -17,6 +18,7 @@ pub struct Batch {
 }
 
 impl Batch {
+    /// Returns a new batch instance with <max_batch_size> preallocated space.
     pub fn new(max_batch_size: usize) -> Self {
         let mut headers = Vec::new();
         let mut frames = Vec::new();
@@ -34,6 +36,7 @@ impl Batch {
         }
     }
 
+    /// Adds a position snapshot to the batch.
     pub fn add(&mut self, p: &Position, idx: usize) {
         // Store position network inputs
         self.headers.extend_from_slice(p.get_headers());
@@ -55,27 +58,114 @@ impl Batch {
         self.current_size += 1;
     }
 
+    /// Gets the number of positions in this batch.
     pub fn get_size(&self) -> usize {
         self.current_size
     }
 
+    /// Gets the node index for the <idx>-th position in this batch.
     pub fn get_selected(&self, idx: usize) -> usize {
         self.selected[idx]
     }
 
+    /// Gets the legal moves for the <idx>-th position in this batch.
     pub fn get_moves(&self, idx: usize) -> &[ChessMove] {
         &self.moves[idx]
     }
 
+    /// Returns the batch frames input tensor.
     pub fn get_frames_tensor(&self) -> Tensor {
         Tensor::of_slice(self.frames.as_slice())
     }
 
+    /// Returns the batch legal move mask input tensor.
     pub fn get_lmm_tensor(&self) -> Tensor {
         Tensor::of_slice(self.lmm.as_slice())
     }
 
+    /// Returns the batch headers input tensor.
     pub fn get_header_tensor(&self) -> Tensor {
         Tensor::of_slice(self.headers.as_slice())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    /// Tests the batch can be initialized.
+    #[test]
+    fn batch_can_initialize() {
+        Batch::new(16);
+    }
+
+    /// Tests the batch can be added to.
+    #[test]
+    fn batch_can_add() {
+        let mut b = Batch::new(16);
+        b.add(&Position::new(), 0);
+    }
+
+    /// Tests the batch size is correctly updated.
+    #[test]
+    fn batch_can_get_size() {
+        let mut b = Batch::new(16);
+
+        b.add(&Position::new(), 0);
+        assert_eq!(b.get_size(), 1);
+        b.add(&Position::new(), 0);
+        assert_eq!(b.get_size(), 2);
+        b.add(&Position::new(), 0);
+        assert_eq!(b.get_size(), 3);
+    }
+
+    /// Tests the selected nodes can be returned.
+    #[test]
+    fn batch_can_get_selected() {
+        let mut b = Batch::new(16);
+
+        b.add(&Position::new(), 0);
+        b.add(&Position::new(), 1);
+        b.add(&Position::new(), 2);
+
+        assert_eq!(b.get_selected(0), 0);
+        assert_eq!(b.get_selected(1), 1);
+        assert_eq!(b.get_selected(2), 2);
+    }
+
+    /// Tests the selected moves are correctly generated.
+    #[test]
+    fn batch_can_get_moves() {
+        let p = Position::new();
+        let moves = p.generate_moves();
+
+        let mut b = Batch::new(4);
+        b.add(&p, 0);
+
+        let batch_moves = b.get_moves(0);
+
+        assert_eq!(moves.len(), batch_moves.len());
+
+        for i in 0..moves.len() {
+            assert_eq!(moves[i], batch_moves[i]);
+        }
+    }
+
+    /// Tests the batch can return a frames tensor.
+    #[test]
+    fn batch_can_get_frames_tensor() {
+        let mut b = Batch::new(16);
+        b.add(&Position::new(), 0);
+
+        b.get_frames_tensor().data_ptr();
+    }
+
+    /// Tests the batch can return a header tensor.
+    #[test]
+    fn batch_can_get_header_tensor() {
+        let mut b = Batch::new(16);
+        b.add(&Position::new(), 0);
+
+        b.get_header_tensor().data_ptr();
     }
 }
