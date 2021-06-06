@@ -1,20 +1,15 @@
 use crate::net::Model;
 use crate::position::Position;
 use crate::searcher::{self, Searcher};
-use crate::tree::{Tree, TreeReq};
 
 use chess::ChessMove;
 use config::Config;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::str::FromStr;
-use std::thread::{spawn, JoinHandle};
-use std::time::{Duration, SystemTime};
 
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    mpsc::{channel, Receiver, Sender},
-    Arc, RwLock,
+    mpsc::{channel, Receiver, Sender}, Arc
 };
 
 #[derive(Serialize, Deserialize)]
@@ -58,17 +53,15 @@ impl Message {
 
 pub struct Control {
     model: Arc<Model>,
-    state: RwLock<String>,
     pos: Position,
     searcher: Searcher,
     queue: VecDeque<(String, Sender<String>)>,
 }
 
 impl Control {
-    pub fn new(model: Arc<Model>, config: &Config) -> Control {
+    pub fn new(model: Arc<Model>, _: &Config) -> Control {
         Control {
             model: model,
-            state: RwLock::new("idle".to_string()),
             queue: VecDeque::new(),
             pos: Position::new(),
             searcher: Searcher::new(),
@@ -116,7 +109,7 @@ impl Control {
         }
 
         if c.mtype == "stop" {
-            return self.stop(c);
+            return self.stop();
         }
 
         if c.mtype == "status" {
@@ -137,7 +130,7 @@ impl Control {
         }
     }
 
-    fn stop(&mut self, c: Message) -> Message {
+    fn stop(&mut self) -> Message {
         if self.searcher.stop() {
             Message::simple("ok")
         } else {

@@ -22,7 +22,7 @@ use config::Config;
 
 use std::error::Error;
 use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::TcpListener;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::thread::{spawn, JoinHandle};

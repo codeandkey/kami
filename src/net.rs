@@ -1,6 +1,5 @@
 use crate::batch::Batch;
 
-use std::convert::TryInto;
 use std::error::Error;
 use std::path::Path;
 

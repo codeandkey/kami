@@ -2,9 +2,7 @@
  * Manages a single batch of positions.
  */
 use crate::net;
-use crate::node::Node;
 use crate::position::Position;
-use crate::tree::Tree;
 
 use chess::ChessMove;
 use tch::Tensor;
