@@ -1,6 +1,5 @@
 use crate::net;
-use chess::{Board, ChessMove, Color, File, MoveGen, Piece, Rank, Square};
-use std::str::FromStr;
+use chess::{Board, ChessMove, Color, File, MoveGen, Piece, Rank};
 
 #[derive(Clone)]
 struct State {
@@ -135,7 +134,7 @@ impl Position {
     /// Returns true if the move was sucessfully performed.
     /// Returns false if the move is illegal and no move was made.
     pub fn make_move(&mut self, mv: ChessMove) -> bool {
-        let mut current_hash: u64;
+        let current_hash: u64;
 
         if let Some(next) = State::next(self.top(), mv) {
             current_hash = next.hash;
@@ -221,6 +220,7 @@ impl Position {
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::str::FromStr;
 
     /// Tests a position can be initialized.
     #[test]
