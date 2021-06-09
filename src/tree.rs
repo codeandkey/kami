@@ -1,5 +1,5 @@
 use crate::batch::Batch;
-use crate::net::Output;
+use crate::model::Output;
 use crate::node::Node;
 use crate::position::Position;
 
@@ -242,7 +242,8 @@ impl Serialize for Tree {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::net;
+    use crate::model::Model;
+    use crate::models::mock::MockModel;
 
     /// Tests the tree can be initialized without crashing.
     #[test]
@@ -294,7 +295,7 @@ mod test {
         assert_eq!(new_batch.get_size(), 1);
 
         // Generate dummy network output and send it to the service.
-        let output = net::Output::dummy(new_batch.get_size());
+        let output = MockModel::new(None).execute(&new_batch);
 
         tx.send(TreeReq::Expand(Box::new(output), new_batch))
             .expect("Failed to write to tree tx.");

@@ -9,11 +9,13 @@ extern crate log;
 
 mod batch;
 mod control;
-mod net;
+mod model;
+mod models;
 mod node;
 mod perft;
 mod position;
 mod searcher;
+mod train;
 mod tree;
 mod worker;
 
@@ -26,6 +28,8 @@ use std::net::TcpListener;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::thread::{spawn, JoinHandle};
+
+use model::Model;
 
 /**
  * Server entry point
@@ -68,11 +72,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     pretty_env_logger::init();
 
     // Initialize model
-    let model = Arc::new(net::Model::load(
+    let model = models::mock::MockModel::new(None);
+
+    /*
         Path::new(&config.get_str("data_dir").unwrap())
             .join("model")
             .as_path()
-    )?);
+    )?);*/
 
     // Start control
     let control = Arc::new(Mutex::new(control::Control::new(model.clone(), &config)));

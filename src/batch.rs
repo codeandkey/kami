@@ -1,11 +1,10 @@
 /**
  * Manages a single batch of positions.
  */
-use crate::net;
-use crate::position::Position;
 
+use crate::model;
+use crate::position::Position;
 use chess::ChessMove;
-use tch::Tensor;
 
 /// Manages a batch of inputs to the model.
 pub struct Batch {
@@ -24,7 +23,7 @@ impl Batch {
         let mut frames = Vec::new();
 
         headers.reserve(max_batch_size * 24);
-        frames.reserve(max_batch_size * net::PLY_FRAME_COUNT * net::PLY_FRAME_SIZE * 64);
+        frames.reserve(max_batch_size * model::PLY_FRAME_COUNT * model::PLY_FRAME_SIZE * 64);
 
         Batch {
             headers: headers,
@@ -74,18 +73,18 @@ impl Batch {
     }
 
     /// Returns the batch frames input tensor.
-    pub fn get_frames_tensor(&self) -> Tensor {
-        Tensor::of_slice(self.frames.as_slice())
+    pub fn get_frames(&self) -> &[f32] {
+        &self.frames
     }
 
     /// Returns the batch legal move mask input tensor.
-    pub fn get_lmm_tensor(&self) -> Tensor {
-        Tensor::of_slice(self.lmm.as_slice())
+    pub fn get_lmm(&self) -> &[f32] {
+        &self.lmm
     }
 
     /// Returns the batch headers input tensor.
-    pub fn get_header_tensor(&self) -> Tensor {
-        Tensor::of_slice(self.headers.as_slice())
+    pub fn get_headers(&self) -> &[f32] {
+        &self.headers
     }
 }
 
@@ -157,7 +156,7 @@ mod test {
         let mut b = Batch::new(16);
         b.add(&Position::new(), 0);
 
-        b.get_frames_tensor().data_ptr();
+        assert_eq!(b.get_frames().len(), model::PLY_FRAME_COUNT * model::PLY_FRAME_SIZE * 64);
     }
 
     /// Tests the batch can return a header tensor.
@@ -166,6 +165,6 @@ mod test {
         let mut b = Batch::new(16);
         b.add(&Position::new(), 0);
 
-        b.get_header_tensor().data_ptr();
+        assert_eq!(b.get_headers().len(), model::SQUARE_HEADER_SIZE);
     }
 }

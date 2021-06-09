@@ -1,5 +1,5 @@
-use crate::net;
-use chess::{Board, ChessMove, Color, File, MoveGen, Piece, Rank};
+use chess::{Board, ChessMove, Color, File, MoveGen, Piece, Square, Rank};
+use crate::model;
 
 #[derive(Clone)]
 struct State {
@@ -7,7 +7,7 @@ struct State {
     pub halfmove_clock: u8,
     pub move_number: u8,
     pub hash: u64,
-    header: [f32; net::SQUARE_HEADER_SIZE],
+    header: [f32; model::SQUARE_HEADER_SIZE],
 }
 
 impl State {
@@ -59,13 +59,13 @@ impl State {
         })
     }
 
-    pub fn get_header(&self) -> &[f32; net::SQUARE_HEADER_SIZE] {
+    pub fn get_header(&self) -> &[f32; model::SQUARE_HEADER_SIZE] {
         &self.header
     }
 
     /// Generates an input header given a move number, halfmove clock and board (castle rights).
-    fn gen_headers(halfmove_clock: u8, move_number: u8, b: &Board) -> [f32; net::SQUARE_HEADER_SIZE] {
-        let mut hdr = [0.0; net::SQUARE_HEADER_SIZE];
+    fn gen_headers(halfmove_clock: u8, move_number: u8, b: &Board) -> [f32; model::SQUARE_HEADER_SIZE] {
+        let mut hdr = [0.0; model::SQUARE_HEADER_SIZE];
 
         // Write full move number
         for i in 0..8 {
@@ -102,7 +102,7 @@ impl Position {
     pub fn new() -> Self {
         // Fill initial frames with 0s to ensure the get_frames() slice is always the same
         let mut initial_frames = Vec::new();
-        initial_frames.resize(net::PLY_FRAME_SIZE * 64 * net::PLY_FRAME_COUNT, 0.0);
+        initial_frames.resize(model::PLY_FRAME_SIZE * 64 * model::PLY_FRAME_COUNT, 0.0);
 
         let mut p = Position {
             states: vec![State::initial()],
@@ -165,18 +165,18 @@ impl Position {
         self.states.pop();
 
         // Shorten frame vector
-        self.frames.drain(self.frames.len() - (net::PLY_FRAME_SIZE * 64)..);
+        self.frames.drain(self.frames.len() - (model::PLY_FRAME_SIZE * 64)..);
     }
 
     /// Returns a reference to the per-square input layer data.
     /// Gets up to 
     pub fn get_frames(&self) -> &[f32] {
         let current_len = self.frames.len();
-        &self.frames[current_len - net::PLY_FRAME_COUNT * net::PLY_FRAME_SIZE * 64 ..]
+        &self.frames[current_len - model::PLY_FRAME_COUNT * model::PLY_FRAME_SIZE * 64 ..]
     }
 
     /// Returns a reference to the per-move input layer headers.
-    pub fn get_headers(&self) -> &[f32; net::SQUARE_HEADER_SIZE] {
+    pub fn get_headers(&self) -> &[f32; model::SQUARE_HEADER_SIZE] {
         self.top().get_header()
     }
 
@@ -189,7 +189,7 @@ impl Position {
     fn push(&mut self, reps: usize) {
         let b = self.top().b;
         let last_len = self.frames.len();
-        self.frames.resize(last_len + net::PLY_FRAME_SIZE * 64, 0.0);
+        self.frames.resize(last_len + model::PLY_FRAME_SIZE * 64, 0.0);
         let dst = &mut self.frames[last_len..];
 
         let rbitlow = (reps & 1) as f32;
@@ -200,8 +200,8 @@ impl Position {
             for f in 0..8 {
                 let sq = Square::make_square(Rank::from_index(r), File::from_index(f));
                 let p = b.piece_on(sq);
-                let offset = r * (net::PLY_FRAME_SIZE * 8) + f * net::PLY_FRAME_SIZE;
-                let dst_square_frame = &mut dst[offset..offset+net::PLY_FRAME_SIZE];
+                let offset = r * (model::PLY_FRAME_SIZE * 8) + f * model::PLY_FRAME_SIZE;
+                let dst_square_frame = &mut dst[offset..offset+model::PLY_FRAME_SIZE];
 
                 dst_square_frame[12] = rbitlow;
                 dst_square_frame[13] = rbithigh;
@@ -315,13 +315,13 @@ mod test {
 
         // First (n-1) frames should be 0.
         assert_eq!(
-            frames[0..(net::PLY_FRAME_SIZE * 64 * (net::PLY_FRAME_COUNT - 1))],
-            [0.0; (net::PLY_FRAME_SIZE * 64 * (net::PLY_FRAME_COUNT - 1))]
+            frames[0..(model::PLY_FRAME_SIZE * 64 * (model::PLY_FRAME_COUNT - 1))],
+            [0.0; (model::PLY_FRAME_SIZE * 64 * (model::PLY_FRAME_COUNT - 1))]
         );
 
         // Last frame should represent the starting board.
         assert_eq!(
-            &frames[(net::PLY_FRAME_SIZE * 64 * (net::PLY_FRAME_COUNT - 1))..],
+            &frames[(model::PLY_FRAME_SIZE * 64 * (model::PLY_FRAME_COUNT - 1))..],
             [
                 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
                 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,

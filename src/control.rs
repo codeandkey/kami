@@ -1,4 +1,4 @@
-use crate::net::Model;
+use crate::model::{Model, ModelPtr};
 use crate::position::Position;
 use crate::searcher::{self, Searcher};
 
@@ -12,6 +12,7 @@ use std::sync::{
     mpsc::{channel, Receiver, Sender}, Arc
 };
 
+/// Incoming or outgoing message to the control interface.
 #[derive(Serialize, Deserialize)]
 pub struct Message {
     mtype: String,
@@ -51,15 +52,17 @@ impl Message {
     }
 }
 
+/// Manages the state of the application. Recieves control messages in JSON format and responds to each message through mpsc channels.
 pub struct Control {
-    model: Arc<Model>,
+    model: ModelPtr,
     pos: Position,
     searcher: Searcher,
     queue: VecDeque<(String, Sender<String>)>,
 }
 
 impl Control {
-    pub fn new(model: Arc<Model>, _: &Config) -> Control {
+    /// Returns a new control instance.
+    pub fn new(model: ModelPtr, _: &Config) -> Control {
         Control {
             model: model,
             queue: VecDeque::new(),
@@ -68,12 +71,16 @@ impl Control {
         }
     }
 
+    /// Adds a command to the queue. 
+    /// Returns a channel which the response will be sent to.
     pub fn execute(&mut self, json: String) -> Receiver<String> {
         let (tx, rx) = channel();
         self.queue.push_back((json, tx));
         rx
     }
 
+    /// Processes all pending commands.
+    /// Returns true if the application should exit, or false if more commands may be received.
     pub fn process(&mut self) -> bool {
         while !self.queue.is_empty() {
             // Pop next command from queue
@@ -103,7 +110,9 @@ impl Control {
         return false;
     }
 
-    pub fn do_command(&mut self, c: Message) -> (Message, bool) {
+    /// Executes a single command in Message format.
+    /// Returns the reponse along with a flag indicating whether the program should exit.
+    fn do_command(&mut self, c: Message) -> (Message, bool) {
         if c.mtype == "search" {
             return (self.search(c), false);
         }
@@ -131,6 +140,7 @@ impl Control {
         (Message::error(format!("Unknown command '{}'", c.mtype)), false)
     }
 
+    /// Handles a search command.
     fn search(&mut self, c: Message) -> Message {
         if self
             .searcher
@@ -142,6 +152,7 @@ impl Control {
         }
     }
 
+    /// Handles a stop command.
     fn stop(&mut self) -> Message {
         if self.searcher.stop() {
             Message::simple("ok")
@@ -150,6 +161,7 @@ impl Control {
         }
     }
 
+    /// Handles a status command.
     fn status(&self) -> Message {
         Message {
             mtype: "status".to_string(),
@@ -160,6 +172,7 @@ impl Control {
         }
     }
 
+    /// Handles a make_move command.
     fn make_move(&mut self, c: Message) -> Message {
         if c.cmove.is_none() {
             return Message::error("Missing cmove");
@@ -176,8 +189,20 @@ impl Control {
         }
     }
 
+    /// Handles a reset command.
     fn reset(&mut self) -> Message {
         self.pos = Position::new();
         Message::simple("ok")
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    /// Tests the control can be initialized.
+    #[test]
+    fn control_can_initialize() {
+        
     }
 }

@@ -1,7 +1,7 @@
 /**
  * Search worker.
  */
-use crate::net::Model;
+use crate::model::ModelPtr;
 use crate::tree::TreeReq;
 
 use serde::{Deserialize, Serialize};
@@ -37,14 +37,14 @@ pub struct Worker {
     status: Arc<RwLock<Status>>,
     stopflag: Arc<RwLock<bool>>,
     tree_tx: Sender<TreeReq>,
-    network: Arc<Model>,
+    network: ModelPtr,
 }
 
 impl Worker {
     pub fn new(
         stopflag: Arc<RwLock<bool>>,
         tree_tx: Sender<TreeReq>,
-        network: Arc<Model>,
+        network: ModelPtr,
     ) -> Worker {
         Worker {
             thr: None,
@@ -92,8 +92,7 @@ impl Worker {
                     .unwrap()
                     .set_state("executing".to_string());
                 let results = thr_network
-                    .execute(&next_batch)
-                    .expect("Network execute failed!");
+                    .execute(&next_batch);
 
                 // (4) Backpropagation - send results back to tree
                 thr_status

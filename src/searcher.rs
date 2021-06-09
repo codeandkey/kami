@@ -1,4 +1,4 @@
-use crate::net::Model;
+use crate::model::{Model, ModelPtr};
 use crate::position::Position;
 use crate::tree::{Tree, TreeReq};
 use crate::worker::{self, Worker};
@@ -34,7 +34,7 @@ impl Searcher {
     pub fn start(
         &mut self,
         thr_stime: Option<usize>,
-        model: Arc<Model>,
+        model: ModelPtr,
         thr_pos: Position,
     ) -> bool {
         if self.handle.is_some() {
