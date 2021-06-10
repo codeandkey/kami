@@ -12,8 +12,8 @@ mod searcher;
 mod tree;
 mod worker;
 
-use chess::{ChessMove, Color};
-use clap::{App, Arg};
+use chess::ChessMove;
+use clap::App;
 
 use std::error::Error;
 use std::fs::{self, File};
