@@ -215,3 +215,41 @@ impl Searcher {
         return Some(ret);
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::model::{
+        Model,
+        mock::MockModel
+    };
+    use std::path::PathBuf;
+
+    /// Tests that a search can be initialized.
+    #[test]
+    fn search_can_initialize() {
+        Searcher::new();
+    }
+
+    /// Tests that a search can be started and immediately stopped.
+    #[test]
+    fn search_can_run_short() {
+        let mut search = Searcher::new();
+        let rx = search.start(
+            Some(500),
+            MockModel::new(&PathBuf::from(".")),
+            Position::new(),
+            1.0,
+            4
+        ).unwrap();
+
+        loop {
+            match rx.recv().expect("rx failed") {
+                SearchStatus::Done => break,
+                _ => (),
+            }
+        }
+
+        search.wait();
+    }
+}
