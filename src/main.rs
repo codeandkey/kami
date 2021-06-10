@@ -7,7 +7,6 @@ mod input;
 mod listener;
 mod model;
 mod node;
-mod perft;
 mod position;
 mod searcher;
 mod tree;
