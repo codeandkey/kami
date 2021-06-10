@@ -61,10 +61,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Initialize model
     let model_path = data_dir.join("model");
-    let mut model = MockModel::new(&model_path);
+    let model = MockModel::new(&model_path);
 
     // Start status listener
-    let mut listener = Arc::new(Mutex::new(listener::Listener::new(PORT)));
+    let listener = Arc::new(Mutex::new(listener::Listener::new(PORT)));
     listener
         .lock()
         .unwrap()
@@ -174,7 +174,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                     match status {
                         SearchStatus::Searching(status) => {
-                            let mut hist_string = hist_moves
+                            let hist_string = hist_moves
                                 .iter()
                                 .map(|x| x.to_string())
                                 .collect::<Vec<String>>()
