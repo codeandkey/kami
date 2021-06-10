@@ -327,6 +327,8 @@ impl Tree {
         let mut new_p_total = 0.0;
         let mut new_children: Vec<usize> = Vec::new();
 
+        assert_ne!(moves.len(), 0);
+
         for mv in moves {
             let p = policy[mv.get_source().to_index() * 64 + mv.get_dest().to_index()].exp();
 
@@ -336,10 +338,9 @@ impl Tree {
             self.nodes.push(Node::child(idx, p, *mv));
         }
 
+        assert_ne!(new_p_total, 0.0);
+
         self[idx].p_total = new_p_total;
-
-        assert_ne!(self[idx].p_total, 0.0);
-
         self[idx].children = Some(new_children);
         self[idx].claim = false;
     }
