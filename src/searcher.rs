@@ -246,6 +246,7 @@ mod test {
         loop {
             match rx.recv().expect("rx failed") {
                 SearchStatus::Done => break,
+                SearchStatus::Searching(stat) => stat.print(),
                 _ => (),
             }
         }
