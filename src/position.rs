@@ -240,6 +240,16 @@ impl Position {
         self.top().b.to_string()
     }
 
+    /// Returns the current POV in float format.
+    /// 0: White to move
+    /// 1: Black to move
+    pub fn get_pov(&self) -> f32 {
+        match self.top().b.side_to_move() {
+            Color::White => 0.0,
+            Color::Black => 1.0,
+        }
+    }
+
     /// Pushes the current board/rep state onto the frames layer.
     fn push(&mut self, reps: usize) {
         let b = self.top().b;

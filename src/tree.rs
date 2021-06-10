@@ -1,12 +1,13 @@
 use crate::batch::Batch;
 use crate::model::Output;
-use crate::node::Node;
+use crate::node::{Node, TerminalStatus};
 use crate::position::Position;
 
 use chess::ChessMove;
-use rand::prelude::*;
 use rand::distributions::WeightedIndex;
-use serde::ser::{Serialize, SerializeSeq, Serializer};
+use rand::prelude::*;
+use serde::ser::{SerializeSeq, Serializer};
+use serde::{Deserialize, Serialize};
 use std::ops::{Index, IndexMut};
 use std::sync::mpsc::{channel, Sender};
 use std::thread::{spawn, JoinHandle};
@@ -14,8 +15,54 @@ use std::thread::{spawn, JoinHandle};
 const EXPLORATION: f32 = 1.414; // MCTS exploration parameter - theoretically sqrt(2)
 const POLICY_SCALE: f32 = 1.0; // MCTS parameter ; how important is policy in UCT calculation
 
+/// Status of a single node.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct StatusNode {
+    pub action: String,
+    pub n: u32,
+    pub nn: f32,
+    pub p_pct: f32,
+    pub w: f32,
+    pub q: f32,
+}
+
+/// Status of the first level of children.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Status {
+    pub nodes: Vec<StatusNode>,
+    pub total_n: u32,
+    pub total_nn: f32,
+    pub temperature: f32,
+}
+
+impl Status {
+    pub fn print(&self) {
+        println!("+=> Tree status: {} nodes searched, current score {:3.2}, temperature {}", self.total_n, self.nodes[0].q, self.temperature);
+        for nd in &self.nodes {
+            println!(
+                "|=> {:>5} | N: {:4.1}% [{:>4}] | P: {:3.1}% | Q: {:3.2}",
+                nd.action,
+                nd.nn * 100.0 / self.total_nn,
+                nd.n,
+                nd.p_pct * 100.0,
+                nd.q
+            );
+        }
+        println!("+=> End tree status, deterministic bestmove {:>5}", self.nodes[0].action);
+    }
+}
+
+/// Response to tree batch requests.
+/// Can contain either a new batch or a request to stop.
 pub enum BatchResponse {
     NextBatch(Box<Batch>),
+    Stop,
+}
+
+/// Response to a tree status requests.
+/// Can contain either a serializable tree status or a request to stop.
+pub enum StatusResponse {
+    NextStatus(Option<Status>),
     Stop,
 }
 
@@ -23,11 +70,13 @@ pub enum BatchResponse {
 ///
 /// BuildBatch(tx) requests a new batch of nodes from the tree. The generated batch is sent back through tx.
 /// Expand(out, batch) applies network results <output> over nodes in <batch>.
+/// RequestStop requests the tree service to stop sending batches or status to any pending receivers.
 /// Done requests the tree service to stop.
 pub enum TreeReq {
     BuildBatch(Sender<BatchResponse>),
     Expand(Box<Output>, Box<Batch>),
     RequestStop,
+    GetStatus(Sender<StatusResponse>),
     Done,
 }
 
@@ -36,15 +85,19 @@ pub enum TreeReq {
 pub struct Tree {
     nodes: Vec<Node>,
     pos: Position,
+    temperature: f32,
+    batch_size: usize,
 }
 
 impl Tree {
     /// Creates a new tree service with an initial position.
-    /// The initial tree hjas a single root node with no action.
-    pub fn new(rootpos: Position) -> Self {
+    /// The initial tree has a single root node with no action.
+    pub fn new(rootpos: Position, temp: f32, batch_size: usize) -> Self {
         Tree {
             nodes: vec![Node::root()],
             pos: rootpos,
+            temperature: temp,
+            batch_size: batch_size,
         }
     }
 
@@ -69,9 +122,23 @@ impl Tree {
                             resp_tx.send(BatchResponse::Stop).expect("tree send failed");
                         } else {
                             // Build batch and send it
-                            let next_batch = Box::new(self.make_batch(16));
+                            let next_batch = Box::new(self.make_batch(self.batch_size));
 
-                            resp_tx.send(BatchResponse::NextBatch(next_batch)).expect("tree send failed");
+                            resp_tx
+                                .send(BatchResponse::NextBatch(next_batch))
+                                .expect("tree send failed");
+                        }
+                    }
+                    TreeReq::GetStatus(resp_tx) => {
+                        if stop_requested {
+                            resp_tx
+                                .send(StatusResponse::Stop)
+                                .expect("tree send failed");
+                        } else {
+                            // Get status and send it over
+                            resp_tx
+                                .send(StatusResponse::NextStatus(self.get_status()))
+                                .expect("tree send failed");
                         }
                     }
                     TreeReq::Expand(output, batch) => {
@@ -99,6 +166,41 @@ impl Tree {
         (inp, handle)
     }
 
+    /// Gets a serializable tree status object.
+    /// Returns None if there are no root children.
+    pub fn get_status(&self) -> Option<Status> {
+        if self[0].children.is_none() {
+            return None;
+        }
+
+        let children = self[0].children.as_ref().unwrap().clone();
+        let p_total = self[0].p_total;
+        let mut nodes = children
+            .iter()
+            .map(|&c| StatusNode {
+                action: self[c].action.unwrap().to_string(), // action string
+                n: self[c].n,                                // visit count
+                nn: (self[c].n as f32).powf(1.0 / self.temperature), // normalized visit count
+                w: self[c].w,                                // total value
+                p_pct: self[c].p / p_total,                  // normalized policy
+                q: self[c].q(),                              // average value
+            })
+            .collect::<Vec<StatusNode>>();
+
+        let total_nn: f32 = nodes.iter().map(|x| x.nn).sum();
+        let total_n: u32 = nodes.iter().map(|x| x.n).sum();
+
+        // Reorder children by N
+        nodes.sort_unstable_by(|a, b| b.n.cmp(&a.n));
+
+        Some(Status {
+            nodes: nodes,
+            total_n: total_n,
+            total_nn: total_nn,
+            temperature: self.temperature,
+        })
+    }
+
     /// Generates a single batch with maximum size <bsize>.
     /// Returns the generated batch.
     fn make_batch(&mut self, bsize: usize) -> Batch {
@@ -121,12 +223,38 @@ impl Tree {
                 return 0;
             }
 
-            self[this].claim = true;
+            // Check if this node is terminal. If so, immediately backprop the value.
+            let terminal = match self[this].terminal {
+                TerminalStatus::Terminal(r) => Some(r),
+                TerminalStatus::NotTerminal => None,
+                TerminalStatus::Unknown => {
+                    match self.pos.is_game_over() {
+                        Some(res) => {
+                            self[this].terminal = TerminalStatus::Terminal(res);
+                            Some(res)
+                        },
+                        None => {
+                            self[this].terminal = TerminalStatus::NotTerminal;
+                            None
+                        }
+                    }
+                }
+            };
 
-            // Node is now claimed, add it to the batch.
-            b.add(&self.pos, this);
+            if let Some(mut res) = terminal {
+                if res == 1.0 {
+                    res = -1.0; // If the position is checkmate, it is always a loss from this POV
+                }
 
-            return 1;
+                self.backprop(this, res);
+                return 0;
+            } else {
+                // Nonterminal, claim the node and add to the batch.
+                self[this].claim = true;
+                b.add(&self.pos, this);
+    
+                return 1;
+            }
         }
 
         // Node has children, so we walk through them in the proper order and allocate batches accordingly.
@@ -141,7 +269,7 @@ impl Tree {
             .iter()
             .map(|&cidx| {
                 let child = &mut self[cidx];
-                let uct = (child.w / (child.n as f32))
+                let uct = child.q()
                     + (child.p / cur_ptotal) * POLICY_SCALE
                     + EXPLORATION * ((cur_n as f32).ln() / (child.n as f32 + 1.0)).sqrt();
 
@@ -209,7 +337,11 @@ impl Tree {
         }
 
         self[idx].p_total = new_p_total;
+
+        assert_ne!(self[idx].p_total, 0.0);
+
         self[idx].children = Some(new_children);
+        self[idx].claim = false;
     }
 
     /// Gets the number of nodes in the tree.
@@ -218,14 +350,14 @@ impl Tree {
     }
 
     /// Selects an action randomly from the tree given an MCTS temperature.
-    pub fn select(&self, temp: f32) -> chess::ChessMove {
+    pub fn select(&self) -> chess::ChessMove {
         let child_nodes = self.nodes[0].children.as_ref().unwrap().clone();
         let mut actions = Vec::new();
         let mut probs = Vec::new();
 
         for &nd in child_nodes.iter() {
             actions.push(self[nd].action.unwrap());
-            probs.push((self[nd].n as f32).powf(1.0 / temp));
+            probs.push((self[nd].n as f32).powf(1.0 / self.temperature));
         }
 
         let index = WeightedIndex::new(probs).expect("failed to initialize rand index");
@@ -249,7 +381,8 @@ impl Tree {
         let mut out = [0.0; 4096];
 
         for i in 0..probs.len() {
-            out[actions[i].get_source().to_index() * 64 + actions[i].get_dest().to_index()] = probs[i];
+            out[actions[i].get_source().to_index() * 64 + actions[i].get_dest().to_index()] =
+                probs[i];
         }
 
         let sum: f32 = out.iter().map(|x| x.exp()).sum();
@@ -281,17 +414,10 @@ impl Serialize for Tree {
         S: Serializer,
     {
         let mut state = serializer.serialize_seq(None)?;
+        let children = self[0].children.as_ref().unwrap().clone();
 
-        let results: Vec<Result<(), S::Error>> = self[0]
-            .children
-            .as_ref()
-            .unwrap()
-            .iter()
-            .map(|x| state.serialize_element(x))
-            .collect();
-
-        for res in results {
-            res?;
+        for &nd in children.iter() {
+            state.serialize_element(&self[nd])?;
         }
 
         state.end()
@@ -308,13 +434,13 @@ mod test {
     /// Tests the tree can be initialized without crashing.
     #[test]
     fn tree_can_init() {
-        Tree::new(Position::new());
+        Tree::new(Position::new(), 1.0, 16);
     }
 
     /// Tests the tree service can be started and stopped without crashing.
     #[test]
     fn tree_can_start_stop() {
-        let (tx, handle) = Tree::new(Position::new()).run();
+        let (tx, handle) = Tree::new(Position::new(), 1.0, 16).run();
 
         tx.send(TreeReq::Done).expect("Failed to write to tree tx.");
 
@@ -324,7 +450,7 @@ mod test {
     /// Tests the tree service can build a batch.
     #[test]
     fn tree_can_build_batch() {
-        let (tx, handle) = Tree::new(Position::new()).run();
+        let (tx, handle) = Tree::new(Position::new(), 1.0, 16).run();
         let (btx, brx) = channel();
 
         tx.send(TreeReq::BuildBatch(btx))
@@ -346,7 +472,7 @@ mod test {
     /// Tests the tree service can expand a node with dummy network results.
     #[test]
     fn tree_can_expand_node() {
-        let (tx, handle) = Tree::new(Position::new()).run();
+        let (tx, handle) = Tree::new(Position::new(), 1.0, 16).run();
         let (btx, brx) = channel();
 
         tx.send(TreeReq::BuildBatch(btx))
@@ -361,7 +487,10 @@ mod test {
         assert_eq!(new_batch.get_size(), 1);
 
         // Generate dummy network output and send it to the service.
-        let output = MockModel::new(&PathBuf::from(".")).read().unwrap().execute(&new_batch);
+        let output = MockModel::new(&PathBuf::from("."))
+            .read()
+            .unwrap()
+            .execute(&new_batch);
 
         tx.send(TreeReq::Expand(Box::new(output), new_batch))
             .expect("Failed to write to tree tx.");

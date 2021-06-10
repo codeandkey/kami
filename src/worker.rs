@@ -2,7 +2,7 @@
  * Search worker.
  */
 use crate::model::ModelPtr;
-use crate::tree::{TreeReq, BatchResponse};
+use crate::tree::{BatchResponse, TreeReq};
 
 use serde::{Deserialize, Serialize};
 use std::sync::mpsc::{channel, Sender};
@@ -11,9 +11,9 @@ use std::thread::{spawn, JoinHandle};
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct Status {
-    total_nodes: usize,
-    batch_sizes: Vec<usize>,
-    state: String,
+    pub total_nodes: usize,
+    pub batch_sizes: Vec<usize>,
+    pub state: String,
 }
 
 impl Status {
@@ -35,17 +35,15 @@ impl Status {
 pub struct Worker {
     thr: Option<JoinHandle<()>>,
     status: Arc<RwLock<Status>>,
-    stopflag: Arc<RwLock<bool>>,
     tree_tx: Sender<TreeReq>,
     network: ModelPtr,
 }
 
 impl Worker {
-    pub fn new(stopflag: Arc<RwLock<bool>>, tree_tx: Sender<TreeReq>, network: ModelPtr) -> Worker {
+    pub fn new(tree_tx: Sender<TreeReq>, network: ModelPtr) -> Worker {
         Worker {
             thr: None,
             status: Arc::new(RwLock::new(Status::new())),
-            stopflag: stopflag,
             tree_tx: tree_tx,
             network: network,
         }
@@ -54,13 +52,12 @@ impl Worker {
     pub fn start(&mut self) {
         let thr_tree_tx = self.tree_tx.clone();
         let thr_status = self.status.clone();
-        let thr_stopflag = self.stopflag.clone();
         let thr_network = self.network.clone();
 
         self.thr = Some(spawn(move || {
             let (tmp_tree_tx, tmp_tree_rx) = channel();
 
-            while !*thr_stopflag.read().unwrap() {
+            loop {
                 // Continue working.
 
                 // (1) Request batch from tree thread

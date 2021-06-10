@@ -10,6 +10,7 @@ pub struct Batch {
     headers: Vec<f32>,
     frames: Vec<f32>,
     lmm: Vec<f32>,
+    pov: Vec<f32>,
     selected: Vec<usize>,
     moves: Vec<Vec<ChessMove>>,
     current_size: usize,
@@ -31,6 +32,7 @@ impl Batch {
             lmm: Vec::new(),
             selected: Vec::new(),
             moves: Vec::new(),
+            pov: Vec::new(),
         }
     }
 
@@ -39,6 +41,7 @@ impl Batch {
         // Store position network inputs
         self.headers.extend_from_slice(p.get_headers());
         self.frames.extend_from_slice(p.get_frames());
+        self.pov.push(p.get_pov());
 
         // Store node identifier
         self.selected.push(idx);

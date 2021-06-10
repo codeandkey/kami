@@ -1,5 +1,13 @@
 use chess::ChessMove;
 use serde::ser::{Serialize, SerializeStruct, Serializer};
+use crate::position::Position;
+
+/// Node terminal cache enum.
+pub enum TerminalStatus {
+    Unknown,
+    NotTerminal,
+    Terminal(f32),
+}
 
 pub struct Node {
     pub p: f32,
@@ -10,6 +18,7 @@ pub struct Node {
     pub parent: Option<usize>,
     pub action: Option<chess::ChessMove>,
     pub claim: bool,
+    pub terminal: TerminalStatus,
 }
 
 impl Node {
@@ -26,6 +35,7 @@ impl Node {
             claim: false,
             parent: None,
             action: None,
+            terminal: TerminalStatus::Unknown,
         }
     }
 
@@ -42,6 +52,7 @@ impl Node {
             claim: false,
             parent: Some(parent),
             action: Some(action),
+            terminal: TerminalStatus::Unknown,
         }
     }
 

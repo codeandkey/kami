@@ -4,13 +4,14 @@ pub mod mock;
 use crate::batch::Batch;
 use crate::train::TrainBatch;
 
-use std::error::Error;
+use std::io;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
 pub const PLY_FRAME_SIZE: usize = 14;
 pub const PLY_FRAME_COUNT: usize = 6;
 pub const SQUARE_HEADER_SIZE: usize = 18; // 8 bits move number, 6 bits halfmove clock, 4 bits castling rights
+pub const FRAMES_SIZE: usize = 64 * PLY_FRAME_SIZE * PLY_FRAME_COUNT;
 
 /// Stores outputs from a model.
 pub struct Output {
@@ -48,11 +49,11 @@ pub trait Model {
     /// Evaluates a batch of inputs and produces a batch of outputs.
     fn execute(&self, b: &Batch) -> Output;
 
-    /// Trains the model on a training batch.
-    fn train(&mut self, b: &TrainBatch);
+    /// Trains the model on a set of training batches.
+    fn train(&mut self, batches: Vec<TrainBatch>);
 
     /// Writes a model to a path.
-    fn write(&self, p: &Path);
+    fn write(&self, p: &Path) -> Result<(), io::Error>;
 }
 
 pub type ModelPtr = Arc<RwLock<dyn Model + Send + Sync>>;
