@@ -87,7 +87,7 @@ impl Worker {
                     .write()
                     .unwrap()
                     .set_state("executing".to_string());
-                let results = thr_network.read().unwrap().execute(&next_batch);
+                let results = thr_network.read().unwrap().execute(next_batch.get_inner());
 
                 // (4) Backpropagation - send results back to tree
                 thr_status
@@ -96,12 +96,12 @@ impl Worker {
                     .set_state("backprop".to_string());
 
                 // (5) Update status fields
-                thr_status.write().unwrap().total_nodes += next_batch.get_size();
+                thr_status.write().unwrap().total_nodes += next_batch.get_inner().get_size();
                 thr_status
                     .write()
                     .unwrap()
                     .batch_sizes
-                    .push(next_batch.get_size());
+                    .push(next_batch.get_inner().get_size());
 
                 if thr_tree_tx
                     .send(TreeReq::Expand(Box::new(results), next_batch))

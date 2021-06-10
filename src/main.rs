@@ -3,14 +3,13 @@ extern crate dirs;
 extern crate serde;
 extern crate tch;
 
-mod batch;
+mod input;
 mod listener;
 mod model;
 mod node;
 mod perft;
 mod position;
 mod searcher;
-mod train;
 mod tree;
 mod worker;
 
@@ -21,6 +20,7 @@ use std::error::Error;
 use std::fs::{self, File};
 use std::io::{Write, BufRead, BufReader};
 use std::sync::{Arc, Mutex};
+use std::str::FromStr;
 
 use model::mock::MockModel;
 use model::Model;
@@ -28,7 +28,7 @@ use position::Position;
 use rand::prelude::*;
 use rand::thread_rng;
 use searcher::{Searcher, SearchStatus};
-use train::TrainBatch;
+use input::trainbatch::TrainBatch;
 
 const PORT: u16 = 2961; // port for status clients
 const TRAINING_SET_SIZE: u8 = 1; // number of games per generation
@@ -192,39 +192,15 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // Write some tree data to stdout
                 final_tree.get_status().unwrap().print();
 
-                // Before making the move, write the input and search snapshots to the training output.
-                let frames_data = current_position.get_frames();
-                let headers_data = current_position.get_headers();
-                let lmm_data = current_position.get_lmm();
+                // Before making the move, write the MCTS snapshot and decision to the training output.
                 let mcts_data = final_tree.get_mcts_data();
 
                 // Write selected move
                 fd.write(format!("{}", selected_move.to_string()).as_bytes()).expect("file write fail");
 
-                // Write LMM
-                for i in 0..4096 {
-                    fd.write(format!(" {}", lmm_data[i]).as_bytes()).expect("file write fail");
-                }
-
                 // Write MCTS
                 for i in 0..4096 {
                     fd.write(format!(" {}", mcts_data[i]).as_bytes()).expect("file write fail");
-                }
-
-                // Write frames
-                let frames_size = model::PLY_FRAME_COUNT * model::PLY_FRAME_SIZE * 64;
-                assert_eq!(frames_size, frames_data.len());
-
-                for i in 0..frames_size {
-                    fd.write(format!(" {}", frames_data[i]).as_bytes()).expect("file write fail");
-                }
-
-                // Write header
-                let headers_size = model::SQUARE_HEADER_SIZE;
-                assert_eq!(headers_size, headers_data.len());
-
-                for i in 0..headers_size {
-                    fd.write(format!(" {}", headers_data[i]).as_bytes()).expect("file write fail");
                 }
 
                 fd.write(b"\n").expect("file write fail");
@@ -244,7 +220,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut training_batches: Vec<TrainBatch> = Vec::new();
 
         for _ in 0..TRAINING_BATCH_COUNT {
-            let mut next_batch = TrainBatch::new();
+            let mut next_batch = TrainBatch::new(TRAINING_BATCH_SIZE);
 
             for _ in 0..TRAINING_BATCH_SIZE {
                 // Load a random position from a random game.
@@ -256,11 +232,19 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let reader = BufReader::new(game_file);
                 let lines = reader.lines().map(Result::unwrap).collect::<Vec<String>>();
                 let pos_idx = rng.next_u32() as usize % (lines.len() - 1);
-                let pos_pov = (pos_idx % 2) as f32;
                 let pos_line = &lines[pos_idx];
                 let result = lines.last().unwrap().split(' ').map(|x| x.to_string()).collect::<Vec<String>>()[1].parse::<f32>().unwrap();
 
-                next_batch.add_from_line(pos_line.clone(), result, pos_pov);
+                // Fast-forward a game to this position
+                let mut pos = Position::new();
+                for i in 0..pos_idx {
+                    assert!(pos.make_move(ChessMove::from_str(lines[i].split(' ').next().unwrap()).unwrap()));
+                }
+
+                // Grab MCTS data from this line
+                let mcts_data = pos_line.split(' ').skip(1).map(|x| x.parse::<f32>().unwrap()).collect::<Vec<f32>>();
+
+                next_batch.add(&pos, &mcts_data, result);
             }
 
             training_batches.push(next_batch);

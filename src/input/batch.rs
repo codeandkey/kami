@@ -1,6 +1,4 @@
-/**
- * Manages a single batch of positions.
- */
+/// Manages multiple inputs to the network.
 use crate::model;
 use crate::position::Position;
 use chess::ChessMove;
@@ -11,48 +9,44 @@ pub struct Batch {
     frames: Vec<f32>,
     lmm: Vec<f32>,
     pov: Vec<f32>,
-    selected: Vec<usize>,
     moves: Vec<Vec<ChessMove>>,
     current_size: usize,
 }
 
 impl Batch {
-    /// Returns a new batch instance with <max_batch_size> preallocated space.
-    pub fn new(max_batch_size: usize) -> Self {
+    /// Returns a new batch instance with <reserve_size> preallocated space.
+    pub fn new(reserve_size: usize) -> Self {
         let mut headers = Vec::new();
         let mut frames = Vec::new();
+        let mut povs = Vec::new();
+        let mut moves = Vec::new();
+        let mut lmm = Vec::new();
 
-        headers.reserve(max_batch_size * 24);
-        frames.reserve(max_batch_size * model::PLY_FRAME_COUNT * model::PLY_FRAME_SIZE * 64);
+        headers.reserve(reserve_size * 24);
+        povs.reserve(reserve_size);
+        frames.reserve(reserve_size * model::FRAMES_SIZE);
+        moves.reserve(reserve_size);
+        lmm.reserve(4096 * reserve_size);
 
         Batch {
             headers: headers,
             frames: frames,
             current_size: 0,
-            lmm: Vec::new(),
-            selected: Vec::new(),
-            moves: Vec::new(),
-            pov: Vec::new(),
+            lmm: lmm,
+            moves: moves,
+            pov: povs,
         }
     }
 
     /// Adds a position snapshot to the batch.
-    pub fn add(&mut self, p: &Position, idx: usize) {
+    pub fn add(&mut self, p: &Position) {
         // Store position network inputs
         self.headers.extend_from_slice(p.get_headers());
         self.frames.extend_from_slice(p.get_frames());
         self.pov.push(p.get_pov());
 
-        // Store node identifier
-        self.selected.push(idx);
-
         // Generate moves and LMM
-        let moves = p.generate_moves();
-
-        let mut lmm = [0.0; 4096];
-        for mv in &moves {
-            lmm[mv.get_source().to_index() * 64 + mv.get_dest().to_index()] = 1.0;
-        }
+        let (lmm, moves) = p.get_lmm();
 
         self.moves.push(moves);
         self.lmm.extend_from_slice(&lmm);
@@ -64,24 +58,24 @@ impl Batch {
         self.current_size
     }
 
-    /// Gets the node index for the <idx>-th position in this batch.
-    pub fn get_selected(&self, idx: usize) -> usize {
-        self.selected[idx]
-    }
-
     /// Gets the legal moves for the <idx>-th position in this batch.
     pub fn get_moves(&self, idx: usize) -> &[ChessMove] {
         &self.moves[idx]
     }
 
-    /// Returns the batch frames input tensor.
+    /// Returns the batch frames input data.
     pub fn get_frames(&self) -> &[f32] {
         &self.frames
     }
 
-    /// Returns the batch legal move mask input tensor.
+    /// Returns the batch legal move mask input data.
     pub fn get_lmm(&self) -> &[f32] {
         &self.lmm
+    }
+
+    /// Returns the batch POV data.
+    pub fn get_pov(&self) -> &[f32] {
+        &self.pov
     }
 
     /// Returns the batch headers input tensor.
@@ -104,7 +98,7 @@ mod test {
     #[test]
     fn batch_can_add() {
         let mut b = Batch::new(16);
-        b.add(&Position::new(), 0);
+        b.add(&Position::new());
     }
 
     /// Tests the batch size is correctly updated.
@@ -112,26 +106,12 @@ mod test {
     fn batch_can_get_size() {
         let mut b = Batch::new(16);
 
-        b.add(&Position::new(), 0);
+        b.add(&Position::new());
         assert_eq!(b.get_size(), 1);
-        b.add(&Position::new(), 0);
+        b.add(&Position::new());
         assert_eq!(b.get_size(), 2);
-        b.add(&Position::new(), 0);
+        b.add(&Position::new());
         assert_eq!(b.get_size(), 3);
-    }
-
-    /// Tests the selected nodes can be returned.
-    #[test]
-    fn batch_can_get_selected() {
-        let mut b = Batch::new(16);
-
-        b.add(&Position::new(), 0);
-        b.add(&Position::new(), 1);
-        b.add(&Position::new(), 2);
-
-        assert_eq!(b.get_selected(0), 0);
-        assert_eq!(b.get_selected(1), 1);
-        assert_eq!(b.get_selected(2), 2);
     }
 
     /// Tests the selected moves are correctly generated.
@@ -141,7 +121,7 @@ mod test {
         let moves = p.generate_moves();
 
         let mut b = Batch::new(4);
-        b.add(&p, 0);
+        b.add(&p);
 
         let batch_moves = b.get_moves(0);
 
@@ -152,23 +132,31 @@ mod test {
         }
     }
 
-    /// Tests the batch can return a frames tensor.
+    /// Tests the batch can return frames data.
     #[test]
-    fn batch_can_get_frames_tensor() {
+    fn batch_can_get_frames() {
         let mut b = Batch::new(16);
-        b.add(&Position::new(), 0);
+        b.add(&Position::new());
 
         assert_eq!(
             b.get_frames().len(),
-            model::PLY_FRAME_COUNT * model::PLY_FRAME_SIZE * 64
+            model::FRAMES_SIZE
         );
     }
 
-    /// Tests the batch can return a header tensor.
+    /// Tests the batch can return header data.
     #[test]
-    fn batch_can_get_header_tensor() {
+    fn batch_can_get_headers() {
         let mut b = Batch::new(16);
-        b.add(&Position::new(), 0);
+        b.add(&Position::new());
+
+        assert_eq!(b.get_headers().len(), model::SQUARE_HEADER_SIZE);
+    }
+
+    /// Tests the batch can return pov data.
+    fn batch_can_get_pov() {
+        let mut b = Batch::new(16);
+        b.add(&Position::new());
 
         assert_eq!(b.get_headers().len(), model::SQUARE_HEADER_SIZE);
     }

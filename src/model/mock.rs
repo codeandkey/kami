@@ -1,6 +1,8 @@
-use crate::batch::Batch;
 use crate::model::{Model, ModelPtr, Output};
-use crate::train::TrainBatch;
+use crate::input::{
+    trainbatch::TrainBatch,
+    batch::Batch,
+};
 use std::io::{self, Write};
 use std::fs::File;
 use std::path::Path;
@@ -27,7 +29,7 @@ impl Model for MockModel {
     }
 
     fn train(&mut self, _: Vec<TrainBatch>) {}
-    
+
     fn write(&self, p: &Path) -> Result<(), io::Error> {
         File::open(p)?.write(b"mock")?;
         Ok(())
@@ -52,7 +54,7 @@ mod test {
         let m = MockModel::new(&PathBuf::from("."));
         let mut b = Batch::new(4);
 
-        b.add(&Position::new(), 0);
+        b.add(&Position::new());
 
         let output = m.read().unwrap().execute(&b);
 

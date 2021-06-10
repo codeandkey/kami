@@ -224,15 +224,16 @@ impl Position {
         self.top().get_header()
     }
 
-    /// Returns a slice with the legal move mask for this position.
-    pub fn get_lmm(&self) -> [f32; 4096] {
+    /// Returns a slice with the legal move mask for this position as well as a list of legal moves.
+    pub fn get_lmm(&self) -> ([f32; 4096], Vec<ChessMove>) {
         let mut lmm = [0.0; 4096];
+        let moves = self.generate_moves();
 
-        for mv in &self.generate_moves() {
+        for mv in &moves {
             lmm[mv.get_source().to_index() * 64 + mv.get_dest().to_index()] = 1.0;
         }
 
-        lmm
+        (lmm, moves)
     }
 
     /// Returns the current position FEN.

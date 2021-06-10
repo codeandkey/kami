@@ -1,8 +1,10 @@
 /// Interface for NN model generation, execution, and training.
 pub mod mock;
 
-use crate::batch::Batch;
-use crate::train::TrainBatch;
+use crate::input::{
+    batch::Batch,
+    trainbatch::TrainBatch,
+};
 
 use std::io;
 use std::path::Path;

@@ -1,4 +1,4 @@
-use crate::batch::Batch;
+use crate::input::treebatch::TreeBatch;
 use crate::model::Output;
 use crate::node::{Node, TerminalStatus};
 use crate::position::Position;
@@ -55,7 +55,7 @@ impl Status {
 /// Response to tree batch requests.
 /// Can contain either a new batch or a request to stop.
 pub enum BatchResponse {
-    NextBatch(Box<Batch>),
+    NextBatch(Box<TreeBatch>),
     Stop,
 }
 
@@ -74,7 +74,7 @@ pub enum StatusResponse {
 /// Done requests the tree service to stop.
 pub enum TreeReq {
     BuildBatch(Sender<BatchResponse>),
-    Expand(Box<Output>, Box<Batch>),
+    Expand(Box<Output>, Box<TreeBatch>),
     RequestStop,
     GetStatus(Sender<StatusResponse>),
     Done,
@@ -142,11 +142,11 @@ impl Tree {
                         }
                     }
                     TreeReq::Expand(output, batch) => {
-                        for i in 0..batch.get_size() {
+                        for i in 0..batch.get_inner().get_size() {
                             self.expand(
                                 batch.get_selected(i),
                                 output.get_policy(i),
-                                batch.get_moves(i),
+                                batch.get_inner().get_moves(i),
                             );
                             self.backprop(batch.get_selected(i), output.get_value(i));
                         }
@@ -203,15 +203,15 @@ impl Tree {
 
     /// Generates a single batch with maximum size <bsize>.
     /// Returns the generated batch.
-    fn make_batch(&mut self, bsize: usize) -> Batch {
-        let mut b = Batch::new(bsize);
+    fn make_batch(&mut self, bsize: usize) -> TreeBatch {
+        let mut b = TreeBatch::new(bsize);
         self.build_batch(&mut b, 0, bsize);
         b
     }
 
     /// Selects nodes for a batch.
     /// Returns the number of positions in the new Batch.
-    fn build_batch(&mut self, b: &mut Batch, this: usize, allocated: usize) -> usize {
+    fn build_batch(&mut self, b: &mut TreeBatch, this: usize, allocated: usize) -> usize {
         // Is this node claimed? If so, stop here.
         if self[this].claim {
             return 0;
@@ -463,7 +463,7 @@ mod test {
         };
 
         // The first batch should always be of size 1.
-        assert_eq!(new_batch.get_size(), 1);
+        assert_eq!(new_batch.get_inner().get_size(), 1);
 
         tx.send(TreeReq::Done).expect("Failed to write to tree tx.");
 
@@ -485,13 +485,13 @@ mod test {
         };
 
         // The first batch should always be of size 1.
-        assert_eq!(new_batch.get_size(), 1);
+        assert_eq!(new_batch.get_inner().get_size(), 1);
 
         // Generate dummy network output and send it to the service.
         let output = MockModel::new(&PathBuf::from("."))
             .read()
             .unwrap()
-            .execute(&new_batch);
+            .execute(new_batch.get_inner());
 
         tx.send(TreeReq::Expand(Box::new(output), new_batch))
             .expect("Failed to write to tree tx.");
