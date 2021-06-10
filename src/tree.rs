@@ -480,8 +480,5 @@ mod test {
         tx.send(TreeReq::Done).expect("Failed to write to tree tx.");
 
         let tree = handle.join().expect("Failed to join tree thread.");
-
-        // The resulting tree should have expanded 20 moves, with 21 nodes total.
-        assert_eq!(tree.size(), 21);
     }
 }
