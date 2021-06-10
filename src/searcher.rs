@@ -1,4 +1,3 @@
-use crate::listener::Listener;
 use crate::model::ModelPtr;
 use crate::position::Position;
 use crate::tree::{self, StatusResponse, Tree, TreeReq};
@@ -82,7 +81,6 @@ impl Searcher {
         thr_stime: Option<usize>,
         model: ModelPtr,
         thr_pos: Position,
-        clients: Arc<Mutex<Listener>>,
         temp: f32,
         batch_size: usize,
     ) -> Option<Receiver<SearchStatus>> {

@@ -153,7 +153,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                         Some(SEARCH_TIME),
                         model.clone(),
                         current_position.clone(),
-                        listener.clone(),
                         temperature,
                         SEARCH_BATCH_SIZE,
                     )
@@ -315,6 +314,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             // Make new games dir for new generation.
             fs::create_dir_all(&games_dir).expect("failed initializing games dir");
+            break;
         }
 
         println!("Training current model.");
