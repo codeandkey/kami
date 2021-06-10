@@ -2,11 +2,11 @@
  * Search worker.
  */
 use crate::model::ModelPtr;
-use crate::tree::TreeReq;
+use crate::tree::{TreeReq, BatchResponse};
 
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, RwLock};
 use std::sync::mpsc::{channel, Sender};
+use std::sync::{Arc, RwLock};
 use std::thread::{spawn, JoinHandle};
 
 #[derive(Deserialize, Serialize, Clone)]
@@ -41,11 +41,7 @@ pub struct Worker {
 }
 
 impl Worker {
-    pub fn new(
-        stopflag: Arc<RwLock<bool>>,
-        tree_tx: Sender<TreeReq>,
-        network: ModelPtr,
-    ) -> Worker {
+    pub fn new(stopflag: Arc<RwLock<bool>>, tree_tx: Sender<TreeReq>, network: ModelPtr) -> Worker {
         Worker {
             thr: None,
             status: Arc::new(RwLock::new(Status::new())),
@@ -82,7 +78,10 @@ impl Worker {
 
                 // (2) Wait for batch response
                 let next_batch = match tmp_tree_rx.recv() {
-                    Ok(b) => b,
+                    Ok(resp) => match resp {
+                        BatchResponse::NextBatch(b) => b,
+                        BatchResponse::Stop => break,
+                    },
                     Err(_) => break,
                 };
 
@@ -91,8 +90,7 @@ impl Worker {
                     .write()
                     .unwrap()
                     .set_state("executing".to_string());
-                let results = thr_network
-                    .execute(&next_batch);
+                let results = thr_network.read().unwrap().execute(&next_batch);
 
                 // (4) Backpropagation - send results back to tree
                 thr_status

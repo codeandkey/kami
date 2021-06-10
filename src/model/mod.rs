@@ -1,11 +1,12 @@
 /// Interface for NN model generation, execution, and training.
+pub mod mock;
 
 use crate::batch::Batch;
 use crate::train::TrainBatch;
 
 use std::error::Error;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 pub const PLY_FRAME_SIZE: usize = 14;
 pub const PLY_FRAME_COUNT: usize = 6;
@@ -20,19 +21,7 @@ pub struct Output {
 impl Output {
     pub fn new(policy: Vec<f32>, value: Vec<f32>) -> Self {
         assert_eq!(policy.len() / 4096, value.len());
-
-        Output {
-            policy: policy,
-            value: value,
-        }
-    }
-
-    pub fn dummy(bsize: usize) -> Self {
-        let mut policy = Vec::new();
-        let mut value = Vec::new();
-
-        policy.resize(4096 * bsize, 1.0 / 4096.0);
-        value.resize(bsize, 0.0);
+        assert_eq!(policy.len() % 4096, 0);
 
         Output {
             policy: policy,
@@ -49,10 +38,12 @@ impl Output {
     }
 }
 
-/// Generic model trait. 
+/// Generic model trait.
 pub trait Model {
     /// Returns a threadsafe instance of this model.
-    fn new(p: Option<&Path>) -> ModelPtr where Self: Sized;
+    fn new(p: &Path) -> ModelPtr
+    where
+        Self: Sized;
 
     /// Evaluates a batch of inputs and produces a batch of outputs.
     fn execute(&self, b: &Batch) -> Output;
@@ -64,4 +55,35 @@ pub trait Model {
     fn write(&self, p: &Path);
 }
 
-pub type ModelPtr = Arc<dyn Model + Send + Sync>;
+pub type ModelPtr = Arc<RwLock<dyn Model + Send + Sync>>;
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    /// Tests that a blank output can be initialized
+    #[test]
+    fn output_can_initialize_empty() {
+        Output::new(Vec::new(), Vec::new());
+    }
+
+    /// Tests that an output with 1 frame can be initialized
+    #[test]
+    fn output_can_initialize_single() {
+        Output::new(vec![1.0 / 4096.0; 4096], vec![1.0]);
+    }
+
+    /// Tests that an output with an invalid frame cannot be initialized
+    #[test]
+    #[should_panic]
+    fn output_invalid_initialize() {
+        Output::new(vec![1.0 / 4096.0; 4098], vec![1.0, 2.0]);
+    }
+
+    /// Tests that an output with an invalid frame cannot be initialized (when integer truncation applies)
+    #[test]
+    #[should_panic]
+    fn output_invalid_initialize_second() {
+        Output::new(vec![1.0 / 4096.0; 4098], vec![1.0]);
+    }
+}

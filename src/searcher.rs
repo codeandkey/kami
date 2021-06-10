@@ -1,3 +1,4 @@
+use crate::listener::Listener;
 use crate::model::{Model, ModelPtr};
 use crate::position::Position;
 use crate::tree::{Tree, TreeReq};
@@ -18,7 +19,7 @@ pub struct Searcher {
     workers: Arc<Mutex<Vec<Worker>>>,
     stopflag: Arc<RwLock<bool>>,
     status_string: Arc<RwLock<String>>,
-    handle: Option<JoinHandle<()>>,
+    handle: Option<JoinHandle<Tree>>,
 }
 
 impl Searcher {
@@ -36,6 +37,7 @@ impl Searcher {
         thr_stime: Option<usize>,
         model: ModelPtr,
         thr_pos: Position,
+        clients: Arc<Mutex<Listener>>,
     ) -> bool {
         if self.handle.is_some() {
             println!("Search is already running!");
@@ -49,7 +51,11 @@ impl Searcher {
         let thr_status_string = self.status_string.clone();
         let thr_workers = self.workers.clone();
 
-        println!("Starting search on {}", thr_pos.get_fen());
+        println!(
+            "Searching `{}` for {}ms.",
+            thr_pos.get_fen(),
+            thr_stime.unwrap_or(0),
+        );
 
         self.handle = Some(spawn(move || {
             let (thr_tree_tx, thr_tree_handle) = Tree::new(thr_pos).run();
@@ -63,24 +69,23 @@ impl Searcher {
 
             *thr_status_string.write().unwrap() = "searching".to_string();
 
-            // Sleep if on timer, otherwise wait for manual stop
-            match thr_stime {
-                Some(t) => {
-                    std::thread::sleep(Duration::from_millis(t as u64));
-                }
-                None => {
-                    while !*thr_stopflag.read().unwrap() {
-                        std::thread::sleep(Duration::from_millis(25));
-                    }
-                }
-            }
-
-            const TIMESTEP: u64 = 25;
+            const TIMESTEP: u64 = 100;
             let mut elapsed: u64 = 0;
 
             while !*thr_stopflag.read().unwrap() {
                 std::thread::sleep(Duration::from_millis(TIMESTEP));
                 elapsed += TIMESTEP;
+
+                // Send status to clients
+                clients.lock().unwrap().broadcast(&serde_json::to_string(&Status {
+                    status: thr_status_string.read().unwrap().clone(),
+                    workers: thr_workers
+                        .lock()
+                        .unwrap()
+                        .iter()
+                        .map(|w| w.get_status())
+                        .collect(),
+                }).expect("serialize failed").as_bytes());
 
                 if let Some(t) = thr_stime {
                     if elapsed >= t as u64 {
@@ -90,13 +95,13 @@ impl Searcher {
             }
 
             // Send stop request to tree
+            println!("Sending prestop to tree.");
+
             thr_tree_tx
-                .send(TreeReq::Done)
+                .send(TreeReq::RequestStop)
                 .expect("failed to send stopreq to tree");
 
-            // Join tree thread
-            thr_tree_handle.join().expect("failed to join tree");
-
+            println!("Waiting for workers.");
             // Join workers
             {
                 let mut w_lock = thr_workers.lock().unwrap();
@@ -105,42 +110,50 @@ impl Searcher {
                     w_lock.pop().unwrap().join();
                 }
             }
+
+            thr_tree_tx
+                .send(TreeReq::Done)
+                .expect("failed to send stopreq to tree");
+            println!("Waiting for tree.");
+
+            // Join tree thread
+            let tree_ret = thr_tree_handle.join().expect("failed to join tree");
+
+            return tree_ret;
         }));
 
         return true;
     }
 
-    pub fn stop(&mut self) -> bool {
+    pub fn stop(&mut self) -> Option<Tree> {
         if !self.handle.is_some() {
-            return false;
+            return None;
         }
 
         println!("Stopping search.");
+        *self.stopflag.write().unwrap() = true;
+
+        let ret = self.wait();
+        
+        *self.stopflag.write().unwrap() = false;
+        println!("Stopped.");
+        return ret;
+    }
+
+    pub fn wait(&mut self) -> Option<Tree> {
+        if !self.handle.is_some() {
+            return None;
+        }
 
         *self.status_string.write().unwrap() = "stopping".to_string();
-        *self.stopflag.write().unwrap() = true;
-        self.handle
+
+        let ret = self.handle
             .take()
             .unwrap()
             .join()
             .expect("failed joining search thread");
-        *self.stopflag.write().unwrap() = false;
+
         *self.status_string.write().unwrap() = "idle".to_string();
-
-        println!("Stopped.");
-        return true;
-    }
-
-    pub fn status(&self) -> Status {
-        Status {
-            status: self.status_string.read().unwrap().clone(),
-            workers: self
-                .workers
-                .lock()
-                .unwrap()
-                .iter()
-                .map(|w| w.get_status())
-                .collect(),
-        }
+        return Some(ret);
     }
 }

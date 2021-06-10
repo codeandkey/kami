@@ -44,6 +44,15 @@ impl Node {
             action: Some(action),
         }
     }
+
+    /// Gets the Q-value at this node. (average node score)
+    pub fn q(&self) -> f32 {
+        if self.n == 0 {
+            0.0
+        } else {
+            self.w / self.n as f32
+        }
+    }
 }
 
 impl Serialize for Node {

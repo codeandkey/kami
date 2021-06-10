@@ -1,13 +1,15 @@
-use crate::model::{Model, Output, ModelPtr};
 use crate::batch::Batch;
-use std::sync::Arc;
+use crate::model::{Model, ModelPtr, Output};
+use crate::train::TrainBatch;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, RwLock};
 
 /// Mock model for testing, produces dummy outputs.
 pub struct MockModel {}
 
 impl Model for MockModel {
-    fn new(p: Option<&std::path::Path>) -> ModelPtr {
-        Arc::new(MockModel {})
+    fn new(p: &Path) -> ModelPtr {
+        Arc::new(RwLock::new(MockModel {}))
     }
 
     fn execute(&self, b: &Batch) -> Output {
@@ -20,8 +22,8 @@ impl Model for MockModel {
         Output::new(policy, value)
     }
 
-    fn train(&mut self, b: &crate::train::TrainBatch) {}
-    fn write(&self, p: &std::path::Path) {}
+    fn train(&mut self, b: &TrainBatch) {}
+    fn write(&self, p: &Path) {}
 }
 
 #[cfg(test)]
@@ -32,18 +34,18 @@ mod test {
     /// Tests the mock model can be initialized.
     #[test]
     fn mock_model_can_init() {
-        MockModel::new(None);
+        MockModel::new(&PathBuf::from("."));
     }
 
     /// Tests the mock model produces mock outputs.
     #[test]
     fn mock_model_can_execute() {
-        let m = MockModel::new(None);
+        let m = MockModel::new(&PathBuf::from("."));
         let mut b = Batch::new(4);
 
         b.add(&Position::new(), 0);
 
-        let output = m.execute(&b);
+        let output = m.read().unwrap().execute(&b);
 
         assert_eq!(output.get_policy(0), &[1.0 / 4096.0; 4096]);
         assert_eq!(output.get_value(0), 0.0);

@@ -1,7 +1,6 @@
 /**
  * Manages a single batch of positions.
  */
-
 use crate::model;
 use crate::position::Position;
 use chess::ChessMove;
@@ -156,7 +155,10 @@ mod test {
         let mut b = Batch::new(16);
         b.add(&Position::new(), 0);
 
-        assert_eq!(b.get_frames().len(), model::PLY_FRAME_COUNT * model::PLY_FRAME_SIZE * 64);
+        assert_eq!(
+            b.get_frames().len(),
+            model::PLY_FRAME_COUNT * model::PLY_FRAME_SIZE * 64
+        );
     }
 
     /// Tests the batch can return a header tensor.

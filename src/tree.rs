@@ -4,6 +4,8 @@ use crate::node::Node;
 use crate::position::Position;
 
 use chess::ChessMove;
+use rand::prelude::*;
+use rand::distributions::WeightedIndex;
 use serde::ser::{Serialize, SerializeSeq, Serializer};
 use std::ops::{Index, IndexMut};
 use std::sync::mpsc::{channel, Sender};
@@ -12,14 +14,20 @@ use std::thread::{spawn, JoinHandle};
 const EXPLORATION: f32 = 1.414; // MCTS exploration parameter - theoretically sqrt(2)
 const POLICY_SCALE: f32 = 1.0; // MCTS parameter ; how important is policy in UCT calculation
 
+pub enum BatchResponse {
+    NextBatch(Box<Batch>),
+    Stop,
+}
+
 /// Request to the tree service.
 ///
 /// BuildBatch(tx) requests a new batch of nodes from the tree. The generated batch is sent back through tx.
 /// Expand(out, batch) applies network results <output> over nodes in <batch>.
 /// Done requests the tree service to stop.
 pub enum TreeReq {
-    BuildBatch(Sender<Box<Batch>>),
+    BuildBatch(Sender<BatchResponse>),
     Expand(Box<Output>, Box<Batch>),
+    RequestStop,
     Done,
 }
 
@@ -51,14 +59,20 @@ impl Tree {
         let (inp, rx) = channel();
 
         let handle = spawn(move || {
+            let mut stop_requested = false;
+
             loop {
                 // Wait for batch request
                 match rx.recv().expect("tree recv failed") {
                     TreeReq::BuildBatch(resp_tx) => {
-                        // Build batch and send it
-                        let next_batch = Box::new(self.make_batch(16));
+                        if stop_requested {
+                            resp_tx.send(BatchResponse::Stop).expect("tree send failed");
+                        } else {
+                            // Build batch and send it
+                            let next_batch = Box::new(self.make_batch(16));
 
-                        resp_tx.send(next_batch).expect("tree send failed");
+                            resp_tx.send(BatchResponse::NextBatch(next_batch)).expect("tree send failed");
+                        }
                     }
                     TreeReq::Expand(output, batch) => {
                         for i in 0..batch.get_size() {
@@ -70,12 +84,17 @@ impl Tree {
                             self.backprop(batch.get_selected(i), output.get_value(i));
                         }
                     }
+                    TreeReq::RequestStop => stop_requested = true,
                     TreeReq::Done => break,
                 }
             }
 
+            println!("Tree thread stopped.");
+
             self
         });
+
+        println!("Started tree.");
 
         (inp, handle)
     }
@@ -197,6 +216,46 @@ impl Tree {
     pub fn size(&self) -> usize {
         self.nodes.len()
     }
+
+    /// Selects an action randomly from the tree given an MCTS temperature.
+    pub fn select(&self, temp: f32) -> chess::ChessMove {
+        let child_nodes = self.nodes[0].children.as_ref().unwrap().clone();
+        let mut actions = Vec::new();
+        let mut probs = Vec::new();
+
+        for &nd in child_nodes.iter() {
+            actions.push(self[nd].action.unwrap());
+            probs.push((self[nd].n as f32).powf(1.0 / temp));
+        }
+
+        let index = WeightedIndex::new(probs).expect("failed to initialize rand index");
+        let mut rng = thread_rng();
+
+        return actions[index.sample(&mut rng)];
+    }
+
+    /// Gets MCTS visit counts for the root children (in LMM format)
+    /// Output is softmax normalized.
+    pub fn get_mcts_data(&self) -> Vec<f32> {
+        let child_nodes = self.nodes[0].children.as_ref().unwrap().clone();
+        let mut actions = Vec::new();
+        let mut probs = Vec::new();
+
+        for &nd in child_nodes.iter() {
+            actions.push(self[nd].action.unwrap());
+            probs.push(self[nd].n as f32);
+        }
+
+        let mut out = [0.0; 4096];
+
+        for i in 0..probs.len() {
+            out[actions[i].get_source().to_index() * 64 + actions[i].get_dest().to_index()] = probs[i];
+        }
+
+        let sum: f32 = out.iter().map(|x| x.exp()).sum();
+
+        return out.iter().map(|x| x.exp() / sum).collect::<Vec<f32>>();
+    }
 }
 
 impl Index<usize> for Tree {
@@ -242,8 +301,9 @@ impl Serialize for Tree {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::model::mock::MockModel;
     use crate::model::Model;
-    use crate::models::mock::MockModel;
+    use std::path::PathBuf;
 
     /// Tests the tree can be initialized without crashing.
     #[test]
@@ -270,7 +330,10 @@ mod test {
         tx.send(TreeReq::BuildBatch(btx))
             .expect("Failed to write to tree tx.");
 
-        let new_batch = brx.recv().expect("Failed to receive from request rx.");
+        let new_batch = match brx.recv().expect("Failed to receive from request rx.") {
+            BatchResponse::NextBatch(b) => b,
+            BatchResponse::Stop => panic!("Unexpected early tree stop!"),
+        };
 
         // The first batch should always be of size 1.
         assert_eq!(new_batch.get_size(), 1);
@@ -289,13 +352,16 @@ mod test {
         tx.send(TreeReq::BuildBatch(btx))
             .expect("Failed to write to tree tx.");
 
-        let new_batch = brx.recv().expect("Failed to receive from request rx.");
+        let new_batch = match brx.recv().expect("Failed to receive from request rx.") {
+            BatchResponse::NextBatch(b) => b,
+            BatchResponse::Stop => panic!("Unexpected early tree stop!"),
+        };
 
         // The first batch should always be of size 1.
         assert_eq!(new_batch.get_size(), 1);
 
         // Generate dummy network output and send it to the service.
-        let output = MockModel::new(None).execute(&new_batch);
+        let output = MockModel::new(&PathBuf::from(".")).read().unwrap().execute(&new_batch);
 
         tx.send(TreeReq::Expand(Box::new(output), new_batch))
             .expect("Failed to write to tree tx.");
