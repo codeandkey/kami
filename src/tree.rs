@@ -349,11 +349,6 @@ impl Tree {
         self[idx].claim = false;
     }
 
-    /// Gets the number of nodes in the tree.
-    pub fn size(&self) -> usize {
-        self.nodes.len()
-    }
-
     /// Selects an action randomly from the tree given an MCTS temperature.
     pub fn select(&self) -> chess::ChessMove {
         let child_nodes = self.nodes[0].children.as_ref().unwrap().clone();
