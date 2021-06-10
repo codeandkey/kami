@@ -412,23 +412,6 @@ impl IndexMut<usize> for Tree {
     }
 }
 
-impl Serialize for Tree {
-    /// Serializes the tree.
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_seq(None)?;
-        let children = self[0].children.as_ref().unwrap().clone();
-
-        for &nd in children.iter() {
-            state.serialize_element(&self[nd])?;
-        }
-
-        state.end()
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;

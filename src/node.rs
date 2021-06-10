@@ -1,6 +1,4 @@
-use crate::position::Position;
 use chess::ChessMove;
-use serde::ser::{Serialize, SerializeStruct, Serializer};
 
 /// Node terminal cache enum.
 pub enum TerminalStatus {
@@ -63,32 +61,5 @@ impl Node {
         } else {
             self.w / self.n as f32
         }
-    }
-}
-
-impl Serialize for Node {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("Node", 5)?;
-
-        state.serialize_field("n", &self.n)?;
-        state.serialize_field("w", &self.w)?;
-        state.serialize_field("p", &self.p)?;
-
-        if self.n > 0 {
-            state.serialize_field("q", &(self.w / (self.n as f32)))?;
-        } else {
-            state.serialize_field("q", &0)?;
-        }
-
-        if let Some(mv) = self.action {
-            state.serialize_field("action", &mv.to_string())?;
-        } else {
-            state.serialize_field("action", "0000")?;
-        }
-
-        state.end()
     }
 }

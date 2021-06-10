@@ -1,12 +1,12 @@
 use crate::listener::Listener;
-use crate::model::{Model, ModelPtr};
+use crate::model::ModelPtr;
 use crate::position::Position;
 use crate::tree::{self, StatusResponse, Tree, TreeReq};
 use crate::worker::{self, Worker};
 
 use serde::Serialize;
-use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::mpsc::{channel, Receiver};
+use std::sync::{Arc, Mutex};
 use std::thread::{spawn, JoinHandle};
 use std::time::Duration;
 
