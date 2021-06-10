@@ -13,22 +13,22 @@ mod searcher;
 mod tree;
 mod worker;
 
-use clap::{App, Arg};
 use chess::{ChessMove, Color};
+use clap::{App, Arg};
 
 use std::error::Error;
 use std::fs::{self, File};
-use std::io::{Write, BufRead, BufReader};
-use std::sync::{Arc, Mutex};
+use std::io::{BufRead, BufReader, Write};
 use std::str::FromStr;
+use std::sync::{Arc, Mutex};
 
+use input::trainbatch::TrainBatch;
 use model::mock::MockModel;
 use model::Model;
 use position::Position;
 use rand::prelude::*;
 use rand::thread_rng;
-use searcher::{Searcher, SearchStatus};
-use input::trainbatch::TrainBatch;
+use searcher::{SearchStatus, Searcher};
 
 const PORT: u16 = 2961; // port for status clients
 const TRAINING_SET_SIZE: u8 = 1; // number of games per generation
@@ -110,7 +110,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 } else {
                     println!("{} incomplete, starting over..", game_path.display());
                     fs::remove_file(&game_path).expect("failed to delete incomplete game");
-                }       
+                }
             }
 
             // Game will be generated!
@@ -149,29 +149,46 @@ fn main() -> Result<(), Box<dyn Error>> {
                     temperature = TEMPERATURE_DROPOFF;
                 }
 
-                let search_rx = search.start(
-                    Some(SEARCH_TIME),
-                    model.clone(),
-                    current_position.clone(),
-                    listener.clone(),
-                    temperature,
-                    SEARCH_BATCH_SIZE,
-                ).unwrap();
+                let search_rx = search
+                    .start(
+                        Some(SEARCH_TIME),
+                        model.clone(),
+                        current_position.clone(),
+                        listener.clone(),
+                        temperature,
+                        SEARCH_BATCH_SIZE,
+                    )
+                    .unwrap();
 
                 // Display search status until the search is done.
                 loop {
-                    let status = search_rx.recv().expect("unexpected recv fail from search status rx");
+                    let status = search_rx
+                        .recv()
+                        .expect("unexpected recv fail from search status rx");
 
                     // Send status to any TCP clients
-                    listener.lock().unwrap().broadcast(serde_json::to_string(&status).expect("serialize failed").as_bytes());
-                    
+                    listener.lock().unwrap().broadcast(
+                        serde_json::to_string(&status)
+                            .expect("serialize failed")
+                            .as_bytes(),
+                    );
+
                     match status {
                         SearchStatus::Searching(status) => {
-                            let mut hist_string = hist_moves.iter().map(|x| x.to_string()).collect::<Vec<String>>().join(" ");
+                            let mut hist_string = hist_moves
+                                .iter()
+                                .map(|x| x.to_string())
+                                .collect::<Vec<String>>()
+                                .join(" ");
 
-                            println!("==> Game {} of {}, hist {}", game_id + 1, TRAINING_SET_SIZE, hist_string);
+                            println!(
+                                "==> Game {} of {}, hist {}",
+                                game_id + 1,
+                                TRAINING_SET_SIZE,
+                                hist_string
+                            );
                             status.print();
-                        },
+                        }
                         SearchStatus::Stopping => println!("Stopping search.."),
                         SearchStatus::Done => {
                             println!("Stopped search.");
@@ -196,11 +213,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let mcts_data = final_tree.get_mcts_data();
 
                 // Write selected move
-                fd.write(format!("{}", selected_move.to_string()).as_bytes()).expect("file write fail");
+                fd.write(format!("{}", selected_move.to_string()).as_bytes())
+                    .expect("file write fail");
 
                 // Write MCTS
                 for i in 0..4096 {
-                    fd.write(format!(" {}", mcts_data[i]).as_bytes()).expect("file write fail");
+                    fd.write(format!(" {}", mcts_data[i]).as_bytes())
+                        .expect("file write fail");
                 }
 
                 fd.write(b"\n").expect("file write fail");
@@ -211,11 +230,15 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
 
             // Game is over! Write final result to file.
-            fd.write(format!("result {}\n", result).as_bytes()).expect("file write fail");
+            fd.write(format!("result {}\n", result).as_bytes())
+                .expect("file write fail");
         }
 
         println!("All games have been generated. Starting training phase.");
-        println!("Selecting {} batches of {} positions each from training set..", TRAINING_BATCH_COUNT, TRAINING_BATCH_SIZE);
+        println!(
+            "Selecting {} batches of {} positions each from training set..",
+            TRAINING_BATCH_COUNT, TRAINING_BATCH_SIZE
+        );
 
         let mut training_batches: Vec<TrainBatch> = Vec::new();
 
@@ -233,16 +256,29 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let lines = reader.lines().map(Result::unwrap).collect::<Vec<String>>();
                 let pos_idx = rng.next_u32() as usize % (lines.len() - 1);
                 let pos_line = &lines[pos_idx];
-                let result = lines.last().unwrap().split(' ').map(|x| x.to_string()).collect::<Vec<String>>()[1].parse::<f32>().unwrap();
+                let result = lines
+                    .last()
+                    .unwrap()
+                    .split(' ')
+                    .map(|x| x.to_string())
+                    .collect::<Vec<String>>()[1]
+                    .parse::<f32>()
+                    .unwrap();
 
                 // Fast-forward a game to this position
                 let mut pos = Position::new();
                 for i in 0..pos_idx {
-                    assert!(pos.make_move(ChessMove::from_str(lines[i].split(' ').next().unwrap()).unwrap()));
+                    assert!(pos.make_move(
+                        ChessMove::from_str(lines[i].split(' ').next().unwrap()).unwrap()
+                    ));
                 }
 
                 // Grab MCTS data from this line
-                let mcts_data = pos_line.split(' ').skip(1).map(|x| x.parse::<f32>().unwrap()).collect::<Vec<f32>>();
+                let mcts_data = pos_line
+                    .split(' ')
+                    .skip(1)
+                    .map(|x| x.parse::<f32>().unwrap())
+                    .collect::<Vec<f32>>();
 
                 next_batch.add(&pos, &mcts_data, result);
             }
@@ -270,7 +306,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
 
             println!("Archiving model as generation {}.", cur);
-            fs_extra::move_items(&[&model_path, &games_dir], gen_path, &fs_extra::dir::CopyOptions::new()).expect("failed to archive generation");
+            fs_extra::move_items(
+                &[&model_path, &games_dir],
+                gen_path,
+                &fs_extra::dir::CopyOptions::new(),
+            )
+            .expect("failed to archive generation");
             println!("Archived model. ");
 
             // Make new games dir for new generation.
@@ -282,7 +323,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("Finished training model. ");
 
         println!("Writing new model to disk.");
-        model.read().unwrap().write(&model_path).expect("failed writing new model");
+        model
+            .read()
+            .unwrap()
+            .write(&model_path)
+            .expect("failed writing new model");
         println!("Finished training iteration! Building new training set.");
     }
 }

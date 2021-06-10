@@ -37,7 +37,10 @@ pub struct Status {
 
 impl Status {
     pub fn print(&self) {
-        println!("+=> Tree status: {} nodes searched, current score {:3.2}, temperature {}", self.total_n, self.nodes[0].q, self.temperature);
+        println!(
+            "+=> Tree status: {} nodes searched, current score {:3.2}, temperature {}",
+            self.total_n, self.nodes[0].q, self.temperature
+        );
         for nd in &self.nodes {
             println!(
                 "|=> {:>5} | N: {:4.1}% [{:>4}] | P: {:3.1}% | Q: {:3.2}",
@@ -48,7 +51,10 @@ impl Status {
                 nd.q
             );
         }
-        println!("+=> End tree status, deterministic bestmove {:>5}", self.nodes[0].action);
+        println!(
+            "+=> End tree status, deterministic bestmove {:>5}",
+            self.nodes[0].action
+        );
     }
 }
 
@@ -227,18 +233,16 @@ impl Tree {
             let terminal = match self[this].terminal {
                 TerminalStatus::Terminal(r) => Some(r),
                 TerminalStatus::NotTerminal => None,
-                TerminalStatus::Unknown => {
-                    match self.pos.is_game_over() {
-                        Some(res) => {
-                            self[this].terminal = TerminalStatus::Terminal(res);
-                            Some(res)
-                        },
-                        None => {
-                            self[this].terminal = TerminalStatus::NotTerminal;
-                            None
-                        }
+                TerminalStatus::Unknown => match self.pos.is_game_over() {
+                    Some(res) => {
+                        self[this].terminal = TerminalStatus::Terminal(res);
+                        Some(res)
                     }
-                }
+                    None => {
+                        self[this].terminal = TerminalStatus::NotTerminal;
+                        None
+                    }
+                },
             };
 
             if let Some(mut res) = terminal {
@@ -252,7 +256,7 @@ impl Tree {
                 // Nonterminal, claim the node and add to the batch.
                 self[this].claim = true;
                 b.add(&self.pos, this);
-    
+
                 return 1;
             }
         }

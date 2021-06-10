@@ -1,7 +1,6 @@
 /// Represents a batch for training the network.
 /// This batch contains normal inputs to the network,
 /// as well as the actual MCTS counts from the search and the results of the games.
-
 use crate::input::batch::Batch;
 use crate::position::Position;
 

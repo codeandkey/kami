@@ -1,13 +1,10 @@
+use crate::input::{batch::Batch, trainbatch::TrainBatch};
 use crate::model::{Model, ModelPtr, Output};
-use crate::input::{
-    trainbatch::TrainBatch,
-    batch::Batch,
-};
-use std::io::{self, Write};
+use rand::prelude::*;
 use std::fs::File;
+use std::io::{self, Write};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
-use rand::prelude::*;
 
 /// Mock model for testing, produces dummy outputs.
 pub struct MockModel {}
@@ -20,10 +17,14 @@ impl Model for MockModel {
     fn execute(&self, b: &Batch) -> Output {
         let mut policy = Vec::new();
         let mut rng = rand::thread_rng();
-        policy.resize_with(b.get_size() * 4096, || rng.next_u32() as f32 / u32::MAX as f32);
+        policy.resize_with(b.get_size() * 4096, || {
+            rng.next_u32() as f32 / u32::MAX as f32
+        });
 
         let mut value = Vec::new();
-        value.resize_with(b.get_size(), || (rng.next_u32() as f32 / u32::MAX as f32) * 2.0 - 1.0);
+        value.resize_with(b.get_size(), || {
+            (rng.next_u32() as f32 / u32::MAX as f32) * 2.0 - 1.0
+        });
 
         Output::new(policy, value)
     }

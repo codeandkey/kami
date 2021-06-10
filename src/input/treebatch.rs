@@ -1,6 +1,5 @@
 /// Represents a batch for expanding nodes on the tree.
 /// This batch tracks multiple inputs like a normal batch but also includes node IDs to expand at.
-
 use crate::input::batch::Batch;
 use crate::position::Position;
 

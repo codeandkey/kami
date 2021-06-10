@@ -1,6 +1,6 @@
+use crate::position::Position;
 use chess::ChessMove;
 use serde::ser::{Serialize, SerializeStruct, Serializer};
-use crate::position::Position;
 
 /// Node terminal cache enum.
 pub enum TerminalStatus {

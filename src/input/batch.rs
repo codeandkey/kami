@@ -138,10 +138,7 @@ mod test {
         let mut b = Batch::new(16);
         b.add(&Position::new());
 
-        assert_eq!(
-            b.get_frames().len(),
-            model::FRAMES_SIZE
-        );
+        assert_eq!(b.get_frames().len(), model::FRAMES_SIZE);
     }
 
     /// Tests the batch can return header data.

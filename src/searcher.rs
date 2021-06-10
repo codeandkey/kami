@@ -5,8 +5,8 @@ use crate::tree::{self, StatusResponse, Tree, TreeReq};
 use crate::worker::{self, Worker};
 
 use serde::Serialize;
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex, RwLock};
-use std::sync::mpsc::{channel, Sender, Receiver};
 use std::thread::{spawn, JoinHandle};
 use std::time::Duration;
 
@@ -84,7 +84,7 @@ impl Searcher {
         thr_pos: Position,
         clients: Arc<Mutex<Listener>>,
         temp: f32,
-        batch_size: usize
+        batch_size: usize,
     ) -> Option<Receiver<SearchStatus>> {
         if self.handle.is_some() {
             println!("Search is already running!");
@@ -107,8 +107,7 @@ impl Searcher {
             let (thr_tree_tx, thr_tree_handle) = Tree::new(thr_pos, temp, batch_size).run();
 
             for _ in 0..num_cpus::get() {
-                let mut new_worker =
-                    Worker::new(thr_tree_tx.clone(), thr_model.clone());
+                let mut new_worker = Worker::new(thr_tree_tx.clone(), thr_model.clone());
                 new_worker.start();
                 thr_workers.lock().unwrap().push(new_worker);
             }
@@ -137,17 +136,19 @@ impl Searcher {
                 };
 
                 // Send status to clients
-                search_status_tx.send(SearchStatus::Searching(Status {
-                    elapsed_ms: elapsed,
-                    tree: tree_status,
-                    rootfen: thr_rootfen.clone(),
-                    workers: thr_workers
-                        .lock()
-                        .unwrap()
-                        .iter()
-                        .map(|w| w.get_status())
-                        .collect(),
-                })).expect("search status tx failed");
+                search_status_tx
+                    .send(SearchStatus::Searching(Status {
+                        elapsed_ms: elapsed,
+                        tree: tree_status,
+                        rootfen: thr_rootfen.clone(),
+                        workers: thr_workers
+                            .lock()
+                            .unwrap()
+                            .iter()
+                            .map(|w| w.get_status())
+                            .collect(),
+                    }))
+                    .expect("search status tx failed");
 
                 if let Some(t) = thr_stime {
                     if elapsed >= t as u64 {
@@ -157,7 +158,9 @@ impl Searcher {
             }
 
             // Send search stopping signal
-            search_status_tx.send(SearchStatus::Stopping).expect("search status tx failed");
+            search_status_tx
+                .send(SearchStatus::Stopping)
+                .expect("search status tx failed");
 
             // Send stop request to tree
             println!("Sending prestop to tree.");
@@ -185,7 +188,9 @@ impl Searcher {
             let tree_ret = thr_tree_handle.join().expect("failed to join tree");
 
             // Send search stop signal
-            search_status_tx.send(SearchStatus::Done).expect("search status tx failed");
+            search_status_tx
+                .send(SearchStatus::Done)
+                .expect("search status tx failed");
 
             return tree_ret;
         }));
