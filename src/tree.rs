@@ -6,7 +6,6 @@ use crate::position::Position;
 use chess::ChessMove;
 use rand::distributions::WeightedIndex;
 use rand::prelude::*;
-use serde::ser::{SerializeSeq, Serializer};
 use serde::{Deserialize, Serialize};
 use std::ops::{Index, IndexMut};
 use std::sync::mpsc::{channel, Sender};
@@ -479,6 +478,6 @@ mod test {
             .expect("Failed to write to tree tx.");
         tx.send(TreeReq::Done).expect("Failed to write to tree tx.");
 
-        let tree = handle.join().expect("Failed to join tree thread.");
+        handle.join().expect("Failed to join tree thread.");
     }
 }
