@@ -245,8 +245,8 @@ impl Tree {
             };
 
             if let Some(mut res) = terminal {
-                if res == 1.0 {
-                    res = -1.0; // If the position is checkmate, it is always a loss from this POV
+                if res == -1.0 {
+                    res = 1.0; // If the position is checkmate, then this node (decision) has a high value.
                 }
 
                 self.backprop(this, res);
@@ -292,7 +292,7 @@ impl Tree {
                 break;
             }
 
-            let child_alloc = (remaining as f32 * (uct / uct_total)).round() as usize;
+            let child_alloc = (remaining as f32 * (uct / uct_total)).ceil() as usize;
             uct_total -= uct;
 
             if child_alloc == 0 {
@@ -356,7 +356,7 @@ impl Tree {
 
         for &nd in child_nodes.iter() {
             actions.push(self[nd].action.unwrap());
-            probs.push((self[nd].n as f32).powf(1.0 / self.temperature));
+            probs.push((self[nd].n as f64).powf(1.0 / self.temperature as f64));
         }
 
         let index = WeightedIndex::new(probs).expect("failed to initialize rand index");

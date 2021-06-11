@@ -223,6 +223,8 @@ mod test {
         Model,
         mock::MockModel
     };
+    use chess::ChessMove;
+    use std::str::FromStr;
     use std::path::PathBuf;
 
     /// Tests that a search can be initialized.
@@ -252,5 +254,37 @@ mod test {
         }
 
         search.wait();
+    }
+
+    /// Tests that a short search will select a mate in 1 (with low temperature)
+    #[test]
+    fn search_sees_mate_in_one() {
+        let mut pos = Position::new();
+
+        pos.make_move(ChessMove::from_str("e2e4").expect("move parse fail"));
+        pos.make_move(ChessMove::from_str("f7f6").expect("move parse fail"));
+        pos.make_move(ChessMove::from_str("a2a4").expect("move parse fail"));
+        pos.make_move(ChessMove::from_str("g7g5").expect("move parse fail"));
+
+        let mut search = Searcher::new();
+        let rx = search.start(
+            Some(500),
+            MockModel::new(&PathBuf::from(".")),
+            pos,
+            0.1,
+            4
+        ).unwrap();
+
+        loop {
+            match rx.recv().expect("rx failed") {
+                SearchStatus::Done => break,
+                SearchStatus::Searching(stat) => stat.print(),
+                _ => (),
+            }
+        }
+
+        let final_tree = search.wait().expect("no tree returned");
+
+        assert_eq!(final_tree.select(), ChessMove::from_str("d1h5").expect("move parse fail"));
     }
 }
