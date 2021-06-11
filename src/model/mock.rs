@@ -32,7 +32,7 @@ impl Model for MockModel {
     fn train(&mut self, _: Vec<TrainBatch>) {}
 
     fn write(&self, p: &Path) -> Result<(), io::Error> {
-        File::open(p)?.write(b"mock")?;
+        File::create(p)?.write(b"mock")?;
         Ok(())
     }
 }
@@ -60,5 +60,26 @@ mod test {
         let output = m.read().unwrap().execute(&b);
 
         assert_eq!(output.get_policy(0).len(), 4096);
+    }
+
+    /// Tests the mock model can write. (to nothing)
+    #[test]
+    fn mock_model_can_write() {
+        let path = tempfile::tempdir().expect("failed to gen tempdir");
+
+        MockModel::new(&PathBuf::from("."))
+            .read()
+            .unwrap()
+            .write(&path.path().join("mock_model_test"))
+            .expect("write failed");
+    }
+
+    /// Tests the mock model can write. (to nothing)
+    #[test]
+    fn mock_model_can_train() {
+        MockModel::new(&PathBuf::from("."))
+            .write()
+            .unwrap()
+            .train(vec![TrainBatch::new(1)]);
     }
 }

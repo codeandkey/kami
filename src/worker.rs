@@ -76,10 +76,7 @@ impl Worker {
                 };
 
                 // (3) Execution - Inputs fed to model and processed
-                thr_status
-                    .write()
-                    .unwrap()
-                    .state = "executing".to_string();
+                thr_status.write().unwrap().state = "executing".to_string();
                 let results = thr_network.read().unwrap().execute(next_batch.get_inner());
 
                 // Update status fields
@@ -91,10 +88,7 @@ impl Worker {
                     .push(next_batch.get_inner().get_size());
 
                 // (4) Backpropagation - send results back to tree
-                thr_status
-                    .write()
-                    .unwrap()
-                    .state = "backprop".to_string();
+                thr_status.write().unwrap().state = "backprop".to_string();
 
                 if thr_tree_tx
                     .send(TreeReq::Expand(Box::new(results), next_batch))

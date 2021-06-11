@@ -134,18 +134,17 @@ impl Searcher {
                 };
 
                 // Send status to clients
-                let _ = search_status_tx
-                    .send(SearchStatus::Searching(Status {
-                        elapsed_ms: elapsed,
-                        tree: tree_status,
-                        rootfen: thr_rootfen.clone(),
-                        workers: thr_workers
-                            .lock()
-                            .unwrap()
-                            .iter()
-                            .map(|w| w.get_status())
-                            .collect(),
-                    }));
+                let _ = search_status_tx.send(SearchStatus::Searching(Status {
+                    elapsed_ms: elapsed,
+                    tree: tree_status,
+                    rootfen: thr_rootfen.clone(),
+                    workers: thr_workers
+                        .lock()
+                        .unwrap()
+                        .iter()
+                        .map(|w| w.get_status())
+                        .collect(),
+                }));
 
                 if let Some(t) = thr_stime {
                     if elapsed >= t as u64 {
@@ -214,13 +213,10 @@ impl Searcher {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::model::{
-        Model,
-        mock::MockModel
-    };
+    use crate::model::{mock::MockModel, Model};
     use chess::ChessMove;
-    use std::str::FromStr;
     use std::path::PathBuf;
+    use std::str::FromStr;
 
     /// Tests that a search can be initialized.
     #[test]
@@ -232,13 +228,15 @@ mod test {
     #[test]
     fn search_can_run_short() {
         let mut search = Searcher::new();
-        let rx = search.start(
-            Some(500),
-            MockModel::new(&PathBuf::from(".")),
-            Position::new(),
-            1.0,
-            4
-        ).unwrap();
+        let rx = search
+            .start(
+                Some(500),
+                MockModel::new(&PathBuf::from(".")),
+                Position::new(),
+                1.0,
+                4,
+            )
+            .unwrap();
 
         loop {
             match rx.recv().expect("rx failed") {
@@ -262,13 +260,9 @@ mod test {
         pos.make_move(ChessMove::from_str("g7g5").expect("move parse fail"));
 
         let mut search = Searcher::new();
-        let rx = search.start(
-            Some(500),
-            MockModel::new(&PathBuf::from(".")),
-            pos,
-            0.1,
-            4
-        ).unwrap();
+        let rx = search
+            .start(Some(500), MockModel::new(&PathBuf::from(".")), pos, 0.1, 4)
+            .unwrap();
 
         loop {
             match rx.recv().expect("rx failed") {
@@ -280,7 +274,10 @@ mod test {
 
         let final_tree = search.wait().expect("no tree returned");
 
-        assert_eq!(final_tree.select(), ChessMove::from_str("d1h5").expect("move parse fail"));
+        assert_eq!(
+            final_tree.select(),
+            ChessMove::from_str("d1h5").expect("move parse fail")
+        );
     }
 
     /// Tests that a stopped search cannot stop again.
@@ -295,22 +292,20 @@ mod test {
     fn search_start_already_started() {
         let mut search = Searcher::new();
         let pos = Position::new();
-        
-        search.start(
-            Some(200),
-            MockModel::new(&PathBuf::from(".")),
-            pos.clone(),
-            1.0,
-            4
-        ).unwrap();
 
-        assert!(search.start(
-            Some(200),
-            MockModel::new(&PathBuf::from(".")),
-            pos,
-            1.0,
-            4
-        ).is_none());
+        search
+            .start(
+                Some(200),
+                MockModel::new(&PathBuf::from(".")),
+                pos.clone(),
+                1.0,
+                4,
+            )
+            .unwrap();
+
+        assert!(search
+            .start(Some(200), MockModel::new(&PathBuf::from(".")), pos, 1.0, 4)
+            .is_none());
 
         search.wait().expect("no tree returned");
     }
@@ -321,18 +316,17 @@ mod test {
         let pos = Position::new();
 
         let mut search = Searcher::new();
-        let rx = search.start(
-            Some(200),
-            MockModel::new(&PathBuf::from(".")),
-            pos,
-            1.0,
-            4
-        ).unwrap();
+        let rx = search
+            .start(Some(200), MockModel::new(&PathBuf::from(".")), pos, 1.0, 4)
+            .unwrap();
 
         loop {
             match rx.recv().expect("rx failed") {
                 SearchStatus::Done => break,
-                SearchStatus::Searching(stat) => print!("{}", serde_json::to_string_pretty(&stat).expect("serialize failed")),
+                SearchStatus::Searching(stat) => print!(
+                    "{}",
+                    serde_json::to_string_pretty(&stat).expect("serialize failed")
+                ),
                 _ => (),
             }
         }
