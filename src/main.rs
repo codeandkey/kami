@@ -64,12 +64,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let model = MockModel::new(&model_path);
 
     // Start status listener
-    let listener = Arc::new(Mutex::new(listener::Listener::new(PORT)));
-    listener
-        .lock()
-        .unwrap()
-        .start()
-        .expect("failed to start status listener");
+    let listener = Arc::new(
+        Mutex::new(
+            listener::Listener::new(PORT)
+                .start()
+                .expect("failed to start status listener")
+    ));
 
     // Initialize games dir
     let games_dir = data_dir.join("games");
