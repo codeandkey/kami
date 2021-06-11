@@ -287,4 +287,36 @@ mod test {
 
         assert_eq!(final_tree.select(), ChessMove::from_str("d1h5").expect("move parse fail"));
     }
+
+    /// Tests that a stopped search cannot stop again.
+    #[test]
+    fn search_stop_already_stopped() {
+        let mut search = Searcher::new();
+        assert!(search.wait().is_none());
+    }
+
+    /// Tests that a searcher status can serialize.
+    #[test]
+    fn search_status_can_serialize() {
+        let pos = Position::new();
+
+        let mut search = Searcher::new();
+        let rx = search.start(
+            Some(200),
+            MockModel::new(&PathBuf::from(".")),
+            pos,
+            1.0,
+            4
+        ).unwrap();
+
+        loop {
+            match rx.recv().expect("rx failed") {
+                SearchStatus::Done => break,
+                SearchStatus::Searching(stat) => print!("{}", serde_json::to_string_pretty(&stat).expect("serialize failed")),
+                _ => (),
+            }
+        }
+
+        search.wait().expect("no tree returned");
+    }
 }
