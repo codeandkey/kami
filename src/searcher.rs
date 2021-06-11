@@ -134,7 +134,7 @@ impl Searcher {
                 };
 
                 // Send status to clients
-                search_status_tx
+                let _ = search_status_tx
                     .send(SearchStatus::Searching(Status {
                         elapsed_ms: elapsed,
                         tree: tree_status,
@@ -145,8 +145,7 @@ impl Searcher {
                             .iter()
                             .map(|w| w.get_status())
                             .collect(),
-                    }))
-                    .expect("search status tx failed");
+                    }));
 
                 if let Some(t) = thr_stime {
                     if elapsed >= t as u64 {
@@ -156,9 +155,7 @@ impl Searcher {
             }
 
             // Send search stopping signal
-            search_status_tx
-                .send(SearchStatus::Stopping)
-                .expect("search status tx failed");
+            let _ = search_status_tx.send(SearchStatus::Stopping);
 
             // Send stop request to tree
             println!("Sending prestop to tree.");
@@ -186,9 +183,7 @@ impl Searcher {
             let tree_ret = thr_tree_handle.join().expect("failed to join tree");
 
             // Send search stop signal
-            search_status_tx
-                .send(SearchStatus::Done)
-                .expect("search status tx failed");
+            let _ = search_status_tx.send(SearchStatus::Done);
 
             return tree_ret;
         }));
@@ -293,6 +288,31 @@ mod test {
     fn search_stop_already_stopped() {
         let mut search = Searcher::new();
         assert!(search.wait().is_none());
+    }
+
+    /// Tests that a started search cannot start again.
+    #[test]
+    fn search_start_already_started() {
+        let mut search = Searcher::new();
+        let pos = Position::new();
+        
+        search.start(
+            Some(200),
+            MockModel::new(&PathBuf::from(".")),
+            pos.clone(),
+            1.0,
+            4
+        ).unwrap();
+
+        assert!(search.start(
+            Some(200),
+            MockModel::new(&PathBuf::from(".")),
+            pos,
+            1.0,
+            4
+        ).is_none());
+
+        search.wait().expect("no tree returned");
     }
 
     /// Tests that a searcher status can serialize.
