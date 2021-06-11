@@ -1,9 +1,13 @@
 /// Interface for NN model generation, execution, and training.
+
 pub mod mock;
 
 use crate::input::{batch::Batch, trainbatch::TrainBatch};
+use mock::MockModel;
 
 use std::io;
+use std::error::Error;
+use std::fs::{self, File};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
@@ -39,23 +43,76 @@ impl Output {
 }
 
 /// Generic model trait.
-pub trait Model {
-    /// Returns a threadsafe instance of this model.
-    fn new(p: &Path) -> ModelPtr
+pub trait Model : Send + Sync + 'static {
+    /// Reads an existing model from a directory on the disk.
+    fn read(p: &Path) -> Result<Self, Box<dyn Error>>
     where
         Self: Sized;
 
     /// Evaluates a batch of inputs and produces a batch of outputs.
     fn execute(&self, b: &Batch) -> Output;
 
+    /// Generates a new model.
+    fn generate() -> Result<Self, Box<dyn Error>>
+    where
+        Self: Sized;
+
     /// Trains the model on a set of training batches.
     fn train(&mut self, batches: Vec<TrainBatch>);
 
-    /// Writes a model to a path.
-    fn write(&self, p: &Path) -> Result<(), io::Error>;
+    /// Saves the model data to a directory.
+    fn write(&self, p: &Path) -> Result<(), Box<dyn Error>>;
+
+    /// Gets the type of model in string format.
+    fn get_type(&self) -> &'static str;
 }
 
-pub type ModelPtr = Arc<RwLock<dyn Model + Send + Sync>>;
+/// Threadsafe pointer to a model.
+pub type ModelPtr = Arc<RwLock<dyn Model + Send + Sync + 'static>>;
+
+/// Creates a threadsafe model pointer.
+pub fn make_ptr<T: Model + Send + Sync + 'static>(m: T) -> ModelPtr {
+    Arc::new(RwLock::new(m))
+}
+
+/// Loads a generic model from the disk.
+/// Tries to figure out the type of the saved model,
+/// and returns a threadsafe pointer to the loaded model.
+pub fn load(p: &Path) -> Result<Option<ModelPtr>, Box<dyn Error>>
+{
+    if !p.exists() {
+        return Ok(None);
+    }
+
+    let mut out = None;
+
+    // Check for mock model type.
+    if p.join("mock.type").exists() {
+        out = Some(make_ptr(MockModel::read(p)?));
+    } else {
+        return Err("Couldn't detect model type!".into());
+    }
+
+    println!("Loaded [{}] model from {}", out.as_ref().unwrap().read().unwrap().get_type(), p.display());
+    Ok(out)
+}
+
+/// Writes a model to a directory.
+/// Creates the destination directory if it does not exist.
+/// Creates a type marker to indicate the type of model that is saved.
+pub fn save(md: &ModelPtr, p: &Path) -> Result<(), Box<dyn Error>> {
+    if p.exists() && !p.is_dir() {
+        return Err(format!("Refusing to destroy non-directory model {}", p.display()).into());
+    }
+
+    fs::create_dir_all(p)?;
+    File::create(p.join(format!("{}.type", md.read().unwrap().get_type())))?;
+    md.read().unwrap().write(p)?;
+
+    println!("Wrote [{}] model to {}", md.read().unwrap().get_type(), p.display());
+
+    Ok(())
+}
 
 #[cfg(test)]
 mod test {
@@ -85,5 +142,17 @@ mod test {
     #[should_panic]
     fn output_invalid_initialize_second() {
         Output::new(vec![1.0 / 4096.0; 4098], vec![1.0]);
+    }
+
+    /// Tests that the mock model type can be loaded.
+    #[test]
+    fn mock_model_can_load() {
+        let path = tempfile::tempdir().expect("failed to gen tempdir").into_path();
+
+        save(&make_ptr(MockModel::generate().expect("model gen failed")), &path).expect("write failed");
+
+        let loaded = load(&path).expect("load failed").expect("missing model");
+
+        assert_eq!(loaded.read().unwrap().get_type(), "mock".to_string());
     }
 }

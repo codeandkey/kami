@@ -408,8 +408,7 @@ impl IndexMut<usize> for Tree {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::model::mock::MockModel;
-    use crate::model::Model;
+    use crate::model::{Model, mock::MockModel};
     use std::path::PathBuf;
 
     /// Tests the tree can be initialized without crashing.
@@ -468,9 +467,8 @@ mod test {
         assert_eq!(new_batch.get_inner().get_size(), 1);
 
         // Generate dummy network output and send it to the service.
-        let output = MockModel::new(&PathBuf::from("."))
-            .read()
-            .unwrap()
+        let output = MockModel::generate()
+            .expect("model gen failed")
             .execute(new_batch.get_inner());
 
         tx.send(TreeReq::Expand(Box::new(output), new_batch))
@@ -498,9 +496,8 @@ mod test {
         assert_eq!(new_batch.get_inner().get_size(), 1);
 
         // Generate dummy network output and send it to the service.
-        let output = MockModel::new(&PathBuf::from("."))
-            .read()
-            .unwrap()
+        let output = MockModel::generate()
+            .expect("model gen failed")
             .execute(new_batch.get_inner());
 
         tx.send(TreeReq::Expand(Box::new(output), new_batch))

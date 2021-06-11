@@ -213,9 +213,8 @@ impl Searcher {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::model::{mock::MockModel, Model};
+    use crate::model::{self, mock::MockModel, Model};
     use chess::ChessMove;
-    use std::path::PathBuf;
     use std::str::FromStr;
 
     /// Tests that a search can be initialized.
@@ -231,7 +230,7 @@ mod test {
         let rx = search
             .start(
                 Some(500),
-                MockModel::new(&PathBuf::from(".")),
+                model::make_ptr(MockModel::generate().expect("model gen failed")),
                 Position::new(),
                 1.0,
                 4,
@@ -261,7 +260,7 @@ mod test {
 
         let mut search = Searcher::new();
         let rx = search
-            .start(Some(500), MockModel::new(&PathBuf::from(".")), pos, 0.1, 4)
+            .start(Some(500), model::make_ptr(MockModel::generate().expect("model gen failed")), pos, 0.1, 4)
             .unwrap();
 
         loop {
@@ -296,7 +295,7 @@ mod test {
         search
             .start(
                 Some(200),
-                MockModel::new(&PathBuf::from(".")),
+                model::make_ptr(MockModel::generate().expect("model gen failed")),
                 pos.clone(),
                 1.0,
                 4,
@@ -304,7 +303,7 @@ mod test {
             .unwrap();
 
         assert!(search
-            .start(Some(200), MockModel::new(&PathBuf::from(".")), pos, 1.0, 4)
+            .start(Some(200), model::make_ptr(MockModel::generate().expect("model gen failed")), pos, 1.0, 4)
             .is_none());
 
         search.wait().expect("no tree returned");
@@ -317,7 +316,7 @@ mod test {
 
         let mut search = Searcher::new();
         let rx = search
-            .start(Some(200), MockModel::new(&PathBuf::from(".")), pos, 1.0, 4)
+            .start(Some(200), model::make_ptr(MockModel::generate().expect("model gen failed")), pos, 1.0, 4)
             .unwrap();
 
         loop {

@@ -3,6 +3,7 @@ extern crate dirs;
 extern crate serde;
 extern crate tch;
 
+mod disk;
 mod input;
 mod model;
 mod node;
@@ -19,6 +20,7 @@ use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Write};
 use std::str::FromStr;
 
+use disk::Disk;
 use input::trainbatch::TrainBatch;
 use model::mock::MockModel;
 use model::Model;
@@ -27,7 +29,7 @@ use rand::prelude::*;
 use rand::thread_rng;
 use searcher::{SearchStatus, Searcher};
 
-const TRAINING_SET_SIZE: u8 = 1; // number of games per generation
+const TRAINING_SET_SIZE: usize = 1; // number of games per generation
 const SEARCH_TIME: usize = 2500; // milliseconds per move
 const TEMPERATURE: f32 = 1.0; // MCTS initial temperature
 const TEMPERATURE_DROPOFF: f32 = 0.1; // MCTS final temperature
@@ -56,9 +58,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         fs::create_dir_all(&data_dir).expect("failed initializing data dir");
     }
 
-    // Initialize model
-    let model_path = data_dir.join("model");
-    let model = MockModel::new(&model_path);
+    // Initialize disk manager
+    let mut diskmgr = Disk::new(&data_dir)?;
+
+    // Load model, generate one if doesn't exist.
+    if !diskmgr.load()? {
+        diskmgr.generate(model::make_ptr(MockModel::generate()?))?;
+    }
 
     // Initialize games dir
     let games_dir = data_dir.join("games");
@@ -72,44 +78,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("Starting games!");
 
     loop {
-        // Play n games to complete training set.
-        for game_id in 0..TRAINING_SET_SIZE {
-            // Check if the game has already been generated
-            let game_path = games_dir.join(format!("{}.game", game_id));
-
-            if game_path.exists() {
-                // If the game path isn't a file, something is very wrong
-                if !game_path.is_file() {
-                    panic!(
-                        "{} exists but is not a game file, refusing to proceed!",
-                        game_path.display()
-                    );
-                }
-
-                // Check the game has a result at the end
-                let fd = File::open(&game_path).expect("failed opening existing game");
-                let reader = BufReader::new(fd);
-
-                let last_line = reader.lines().last().unwrap_or(Ok("".to_string())).unwrap();
-
-                if last_line.starts_with("result") {
-                    println!("{} already generated, skipping", game_path.display());
-                    continue;
-                } else {
-                    println!("{} incomplete, starting over..", game_path.display());
-                    fs::remove_file(&game_path).expect("failed to delete incomplete game");
-                }
-            }
-
-            // Game will be generated!
+        while let Some(game_path) = diskmgr.next_game_path(TRAINING_SET_SIZE)? {
             println!(
-                "Generating game {} of {} ({})",
-                game_id + 1,
-                TRAINING_SET_SIZE,
+                "Generating game {}",
                 game_path.display()
             );
 
-            let mut fd = File::create(game_path).expect("failed to open game output");
+            let mut fd = File::create(&game_path).expect("failed to open game output");
 
             // Setup a position and start making moves.
             let mut current_position = Position::new();
@@ -140,7 +115,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let search_rx = search
                     .start(
                         Some(SEARCH_TIME),
-                        model.clone(),
+                        diskmgr.get_model().unwrap(),
                         current_position.clone(),
                         temperature,
                         SEARCH_BATCH_SIZE,
@@ -162,9 +137,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 .join(" ");
 
                             println!(
-                                "==> Game {} of {}, hist {}",
-                                game_id + 1,
-                                TRAINING_SET_SIZE,
+                                "==> Game {}, hist {}",
+                                game_path.display(),
                                 hist_string
                             );
                             status.print();
@@ -220,95 +194,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             TRAINING_BATCH_COUNT, TRAINING_BATCH_SIZE
         );
 
-        let mut training_batches: Vec<TrainBatch> = Vec::new();
+        let batches = diskmgr.get_training_batch(TRAINING_BATCH_COUNT, TRAINING_BATCH_SIZE)?;
 
-        for _ in 0..TRAINING_BATCH_COUNT {
-            let mut next_batch = TrainBatch::new(TRAINING_BATCH_SIZE);
-
-            for _ in 0..TRAINING_BATCH_SIZE {
-                // Load a random position from a random game.
-                // Holy declarations batman!
-                let mut rng = thread_rng();
-                let game_id = rng.next_u32() as u8 % TRAINING_SET_SIZE;
-                let game_path = games_dir.join(format!("{}.game", game_id));
-                let game_file = File::open(&game_path).expect("failed to open game file");
-                let reader = BufReader::new(game_file);
-                let lines = reader.lines().map(Result::unwrap).collect::<Vec<String>>();
-                let pos_idx = rng.next_u32() as usize % (lines.len() - 1);
-                let pos_line = &lines[pos_idx];
-                let result = lines
-                    .last()
-                    .unwrap()
-                    .split(' ')
-                    .map(|x| x.to_string())
-                    .collect::<Vec<String>>()[1]
-                    .parse::<f32>()
-                    .unwrap();
-
-                // Fast-forward a game to this position
-                let mut pos = Position::new();
-                for i in 0..pos_idx {
-                    assert!(pos.make_move(
-                        ChessMove::from_str(lines[i].split(' ').next().unwrap()).unwrap()
-                    ));
-                }
-
-                // Grab MCTS data from this line
-                let mcts_data = pos_line
-                    .split(' ')
-                    .skip(1)
-                    .map(|x| x.parse::<f32>().unwrap())
-                    .collect::<Vec<f32>>();
-
-                next_batch.add(&pos, &mcts_data, result);
-            }
-
-            training_batches.push(next_batch);
-        }
-
-        println!("Finished building training batches. Archiving previous model and games.");
-
-        let archive_path = data_dir.join("archive");
-
-        if !archive_path.is_dir() {
-            fs::create_dir_all(&archive_path).expect("failed to initialize archive dir");
-        }
-
-        // Walk through archive generations to find the lowest available slot.
-        let mut cur: usize = 0;
-
-        loop {
-            let gen_path = archive_path.join(format!("generation_{}", cur));
-
-            if gen_path.exists() {
-                cur += 1;
-                continue;
-            }
-
-            println!("Archiving model as generation {}.", cur);
-            fs_extra::move_items(
-                &[&model_path, &games_dir],
-                gen_path,
-                &fs_extra::dir::CopyOptions::new(),
-            )
-            .expect("failed to archive generation");
-            println!("Archived model. ");
-
-            // Make new games dir for new generation.
-            fs::create_dir_all(&games_dir).expect("failed initializing games dir");
-            break;
-        }
-
-        println!("Training current model.");
-        model.write().unwrap().train(training_batches);
-        println!("Finished training model. ");
-
-        println!("Writing new model to disk.");
-        model
-            .read()
-            .unwrap()
-            .write(&model_path)
-            .expect("failed writing new model");
-        println!("Finished training iteration! Building new training set.");
+        println!("Finished building training batches.");
+        println!("Archived generation {}", diskmgr.train(batches)?);
     }
 }
