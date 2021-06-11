@@ -356,7 +356,7 @@ impl Tree {
 
         for &nd in child_nodes.iter() {
             actions.push(self[nd].action.unwrap());
-            probs.push((self[nd].n as f64).powf(1.0 / self.temperature as f64));
+            probs.push(((self[nd].n + 1) as f64).powf(1.0 / self.temperature as f64));
         }
 
         let index = WeightedIndex::new(probs).expect("failed to initialize rand index");
@@ -366,7 +366,7 @@ impl Tree {
     }
 
     /// Gets MCTS visit counts for the root children (in LMM format)
-    /// Output is softmax normalized.
+    /// Output is normalized with temperature + softmax function.
     pub fn get_mcts_data(&self) -> Vec<f32> {
         let child_nodes = self.nodes[0].children.as_ref().unwrap().clone();
         let mut actions = Vec::new();
@@ -374,7 +374,7 @@ impl Tree {
 
         for &nd in child_nodes.iter() {
             actions.push(self[nd].action.unwrap());
-            probs.push((self[nd].n as f32).exp());
+            probs.push(((self[nd].n + 1) as f32).powf(1.0 / self.temperature));
         }
 
         let sum: f32 = probs.iter().sum();
