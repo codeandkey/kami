@@ -46,4 +46,4 @@ jobs:
         uses: codecov/codecov-action@v1.0.2
         with:
           token: ${{secrets.CODECOV_TOKEN}}
-          files: ${{ steps.coverage.outputs.report }}
+          file: ${{ steps.coverage.outputs.report }}
