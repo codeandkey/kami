@@ -151,6 +151,7 @@ mod test {
     }
 
     /// Tests the batch can return pov data.
+    #[test]
     fn batch_can_get_pov() {
         let mut b = Batch::new(16);
         b.add(&Position::new());
