@@ -374,19 +374,18 @@ impl Tree {
 
         for &nd in child_nodes.iter() {
             actions.push(self[nd].action.unwrap());
-            probs.push(self[nd].n as f32);
+            probs.push((self[nd].n as f32).exp());
         }
 
+        let sum: f32 = probs.iter().sum();
         let mut out = [0.0; 4096];
 
         for i in 0..probs.len() {
             out[actions[i].get_source().to_index() * 64 + actions[i].get_dest().to_index()] =
-                probs[i];
+                probs[i] / sum;
         }
 
-        let sum: f32 = out.iter().map(|x| x.exp()).sum();
-
-        return out.iter().map(|x| x.exp() / sum).collect::<Vec<f32>>();
+        return out.to_vec();
     }
 }
 
@@ -479,5 +478,62 @@ mod test {
         tx.send(TreeReq::Done).expect("Failed to write to tree tx.");
 
         handle.join().expect("Failed to join tree thread.");
+    }
+
+    /// Checks the tree can return correct MCTS data.
+    #[test]
+    fn tree_can_get_mcts_data() {
+        let (tx, handle) = Tree::new(Position::new(), 1.0, 16).run();
+        let (btx, brx) = channel();
+
+        tx.send(TreeReq::BuildBatch(btx))
+            .expect("Failed to write to tree tx.");
+
+        let new_batch = match brx.recv().expect("Failed to receive from request rx.") {
+            BatchResponse::NextBatch(b) => b,
+            BatchResponse::Stop => panic!("Unexpected early tree stop!"),
+        };
+
+        // The first batch should always be of size 1.
+        assert_eq!(new_batch.get_inner().get_size(), 1);
+
+        // Generate dummy network output and send it to the service.
+        let output = MockModel::new(&PathBuf::from("."))
+            .read()
+            .unwrap()
+            .execute(new_batch.get_inner());
+
+        tx.send(TreeReq::Expand(Box::new(output), new_batch))
+            .expect("Failed to write to tree tx.");
+        tx.send(TreeReq::Done).expect("Failed to write to tree tx.");
+
+        let final_tree = handle.join().expect("Failed to join tree thread.");
+        let mcts_data = final_tree.get_mcts_data();
+
+        // MCTS data should be equal across all nodes.
+        // 20 legal first moves -> 1/20 expected value per legal move.
+
+        let children = final_tree[0].children.as_ref().unwrap().clone();
+        let mut action_indices = Vec::new();
+
+        for &nd in &children {
+            let action = final_tree[nd].action.unwrap();
+            let src = action.get_source().to_index();
+            let dst = action.get_dest().to_index();
+
+            let ind = src * 64 + dst;
+            action_indices.push(ind);
+
+            assert_eq!(mcts_data[ind], 1.0 / 20.0);
+        }
+
+        // Check the rest of the data is 0
+        for i in 0..4096 {
+            if action_indices.contains(&i) {
+                continue;
+            }
+
+            assert_eq!(mcts_data[i], 0.0);
+        }
     }
 }
