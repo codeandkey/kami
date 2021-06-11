@@ -4,7 +4,6 @@ extern crate serde;
 extern crate tch;
 
 mod input;
-mod listener;
 mod model;
 mod node;
 mod position;
@@ -19,7 +18,6 @@ use std::error::Error;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Write};
 use std::str::FromStr;
-use std::sync::{Arc, Mutex};
 
 use input::trainbatch::TrainBatch;
 use model::mock::MockModel;
@@ -29,7 +27,6 @@ use rand::prelude::*;
 use rand::thread_rng;
 use searcher::{SearchStatus, Searcher};
 
-const PORT: u16 = 2961; // port for status clients
 const TRAINING_SET_SIZE: u8 = 1; // number of games per generation
 const SEARCH_TIME: usize = 2500; // milliseconds per move
 const TEMPERATURE: f32 = 1.0; // MCTS initial temperature
@@ -62,14 +59,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Initialize model
     let model_path = data_dir.join("model");
     let model = MockModel::new(&model_path);
-
-    // Start status listener
-    let listener = Arc::new(
-        Mutex::new(
-            listener::Listener::new(PORT)
-                .start()
-                .expect("failed to start status listener")
-    ));
 
     // Initialize games dir
     let games_dir = data_dir.join("games");
@@ -163,13 +152,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                     let status = search_rx
                         .recv()
                         .expect("unexpected recv fail from search status rx");
-
-                    // Send status to any TCP clients
-                    listener.lock().unwrap().broadcast(
-                        serde_json::to_string(&status)
-                            .expect("serialize failed")
-                            .as_bytes(),
-                    );
 
                     match status {
                         SearchStatus::Searching(status) => {
