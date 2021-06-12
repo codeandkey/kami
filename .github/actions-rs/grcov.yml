@@ -1,1 +1,3 @@
 output-path: ./lcov.info
+ignore:
+  - "src/main.rs"
