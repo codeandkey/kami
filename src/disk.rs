@@ -267,6 +267,25 @@ mod test {
         );
     }
 
+    /// Tests the disk returns no next game path when the set is complete.
+    #[test]
+    fn disk_can_get_next_game_path_all_complete() {
+        let data_dir = mock_data_dir();
+        let d = Disk::new(&data_dir).expect("failed initializing disk");
+        let mut g = Game::new();
+
+        g.make_move(ChessMove::from_str("e2e4").unwrap(), &[0.0; 4096]);
+        g.finalize(1.0);
+
+        for gid in 0..constants::TRAINING_SET_SIZE {
+            // Write a completed game to n
+            g.save(&data_dir.join("games").join(format!("{}.game", gid))).expect("game write failed");
+        };
+
+        // No next game!
+        assert!(d.next_game_path().expect("failed getting next path").is_none());
+    }
+
     /// Tests the disk can return a valid training batch set.
     #[test]
     fn disk_can_get_training_batches() {

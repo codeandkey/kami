@@ -191,6 +191,8 @@ impl Trainer {
 #[cfg(test)]
 mod test {
     use super::*;
+    use chess::ChessMove;
+    use std::str::FromStr;
 
     /// Returns a Disk initialized on a tempdir for mocking.
     fn mock_disk() -> Arc<Mutex<Disk>> {
@@ -241,5 +243,33 @@ mod test {
         let mut t = Trainer::new(mock_disk()).expect("failed initializing trainer");
 
         assert!(t.wait().is_err());
+    }
+
+    /// Tests the trainer can train a model when the game set is complete.
+    #[test]
+    fn trainer_can_train_model() {
+        let data_dir = tempfile::tempdir().expect("failed creating data dir").into_path();
+        let d = Arc::new(Mutex::new(Disk::new(&data_dir).expect("failed initializing disk")));
+        let mut t = Trainer::new(d.clone()).expect("trainer init failed");
+
+        let mut g = Game::new();
+
+        g.make_move(ChessMove::from_str("e2e4").unwrap(), &[0.0; 4096]);
+        g.finalize(1.0);
+
+        // Build a completed set of "games" so the trainer immediately trains the model.
+        for gid in 0..constants::TRAINING_SET_SIZE {
+            // Write a completed game to n
+            g.save(&data_dir.join("games").join(format!("{}.game", gid))).expect("game write failed");
+        }
+
+        let stopflag = t.start_training();
+
+        std::thread::sleep(std::time::Duration::from_secs(3));
+        *stopflag.lock().unwrap() = true;
+        t.wait().expect("failed stopping trainer");
+
+        // Check the model was archived
+        assert!(data_dir.join("archive").join("generation_0").is_dir());
     }
 }
