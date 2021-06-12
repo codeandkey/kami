@@ -292,11 +292,15 @@ impl Tree {
                 break;
             }
 
-            let child_alloc = (remaining as f32 * (uct / uct_total)).ceil() as usize;
+            let mut child_alloc = (remaining as f32 * (uct / uct_total)).ceil() as usize;
             uct_total -= uct;
 
             if child_alloc == 0 {
                 continue;
+            }
+
+            if child_alloc > remaining {
+                child_alloc = remaining;
             }
 
             // Perform child action
@@ -365,27 +369,26 @@ impl Tree {
         return actions[index.sample(&mut rng)];
     }
 
-    /// Gets MCTS visit counts for the root children (in LMM format)
+    /// Gets MCTS visit counts for the root children in pair format.
     /// Output is normalized with temperature + softmax function.
-    pub fn get_mcts_data(&self) -> Vec<f32> {
+    pub fn get_mcts_data(&self) -> Vec<(ChessMove, f32)> {
         let child_nodes = self.nodes[0].children.as_ref().unwrap().clone();
-        let mut actions = Vec::new();
-        let mut probs = Vec::new();
+        let mut out = Vec::new();
 
         for &nd in child_nodes.iter() {
-            actions.push(self[nd].action.unwrap());
-            probs.push(((self[nd].n + 1) as f32).powf(1.0 / self.temperature));
+            out.push((
+                self[nd].action.unwrap(),
+                ((self[nd].n + 1) as f32).powf(1.0 / self.temperature),
+            ));
         }
 
-        let sum: f32 = probs.iter().sum();
-        let mut out = [0.0; 4096];
+        let sum: f32 = out.iter().map(|x| x.1).sum();
 
-        for i in 0..probs.len() {
-            out[actions[i].get_source().to_index() * 64 + actions[i].get_dest().to_index()] =
-                probs[i] / sum;
+        for mut nd in out.iter_mut() {
+            nd.1 /= sum;
         }
 
-        return out.to_vec();
+        return out;
     }
 }
 
@@ -408,9 +411,7 @@ impl IndexMut<usize> for Tree {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::model::mock::MockModel;
-    use crate::model::Model;
-    use std::path::PathBuf;
+    use crate::model::{mock::MockModel, Model};
 
     /// Tests the tree can be initialized without crashing.
     #[test]
@@ -468,9 +469,8 @@ mod test {
         assert_eq!(new_batch.get_inner().get_size(), 1);
 
         // Generate dummy network output and send it to the service.
-        let output = MockModel::new(&PathBuf::from("."))
-            .read()
-            .unwrap()
+        let output = MockModel::generate()
+            .expect("model gen failed")
             .execute(new_batch.get_inner());
 
         tx.send(TreeReq::Expand(Box::new(output), new_batch))
@@ -498,9 +498,8 @@ mod test {
         assert_eq!(new_batch.get_inner().get_size(), 1);
 
         // Generate dummy network output and send it to the service.
-        let output = MockModel::new(&PathBuf::from("."))
-            .read()
-            .unwrap()
+        let output = MockModel::generate()
+            .expect("model gen failed")
             .execute(new_batch.get_inner());
 
         tx.send(TreeReq::Expand(Box::new(output), new_batch))
@@ -510,30 +509,11 @@ mod test {
         let final_tree = handle.join().expect("Failed to join tree thread.");
         let mcts_data = final_tree.get_mcts_data();
 
-        // MCTS data should be equal across all nodes.
-        // 20 legal first moves -> 1/20 expected value per legal move.
+        assert_eq!(mcts_data.len(), 20);
 
-        let children = final_tree[0].children.as_ref().unwrap().clone();
-        let mut action_indices = Vec::new();
-
-        for &nd in &children {
-            let action = final_tree[nd].action.unwrap();
-            let src = action.get_source().to_index();
-            let dst = action.get_dest().to_index();
-
-            let ind = src * 64 + dst;
-            action_indices.push(ind);
-
-            assert_eq!(mcts_data[ind], 1.0 / 20.0);
-        }
-
-        // Check the rest of the data is 0
-        for i in 0..4096 {
-            if action_indices.contains(&i) {
-                continue;
-            }
-
-            assert_eq!(mcts_data[i], 0.0);
+        // In this case all probs should be equal.
+        for (_, val) in &mcts_data {
+            assert_eq!(*val, 1.0 / 20.0);
         }
     }
 }

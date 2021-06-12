@@ -1,17 +1,19 @@
 use crate::input::{batch::Batch, trainbatch::TrainBatch};
-use crate::model::{Model, ModelPtr, Output};
+use crate::model::{Model, Output};
 use rand::prelude::*;
-use std::fs::File;
-use std::io::{self, Write};
+use std::error::Error;
 use std::path::Path;
-use std::sync::{Arc, RwLock};
 
 /// Mock model for testing, produces dummy outputs.
 pub struct MockModel {}
 
 impl Model for MockModel {
-    fn new(_: &Path) -> ModelPtr {
-        Arc::new(RwLock::new(MockModel {}))
+    fn read(_: &Path) -> Result<Self, Box<dyn Error>> {
+        MockModel::generate()
+    }
+
+    fn generate() -> Result<Self, Box<dyn Error>> {
+        Ok(MockModel {})
     }
 
     fn execute(&self, b: &Batch) -> Output {
@@ -30,10 +32,11 @@ impl Model for MockModel {
     }
 
     fn train(&mut self, _: Vec<TrainBatch>) {}
-
-    fn write(&self, p: &Path) -> Result<(), io::Error> {
-        File::create(p)?.write(b"mock")?;
+    fn write(&self, _: &Path) -> Result<(), Box<dyn Error>> {
         Ok(())
+    }
+    fn get_type(&self) -> &'static str {
+        "mock"
     }
 }
 
@@ -41,23 +44,36 @@ impl Model for MockModel {
 mod test {
     use super::*;
     use crate::position::Position;
-    use std::path::PathBuf;
 
-    /// Tests the mock model can be initialized.
+    /// Tests the mock model can be generated.
     #[test]
-    fn mock_model_can_init() {
-        MockModel::new(&PathBuf::from("."));
+    fn mock_model_can_generate() {
+        MockModel::generate().expect("gen failed");
+    }
+
+    /// Tests the mock model can be loaded.
+    #[test]
+    fn mock_model_can_read() {
+        let path = tempfile::tempdir()
+            .expect("failed to gen tempdir")
+            .into_path();
+
+        MockModel::generate()
+            .expect("gen failed")
+            .write(&path)
+            .expect("write failed");
+        MockModel::read(&path).expect("load failed");
     }
 
     /// Tests the mock model produces mock outputs.
     #[test]
     fn mock_model_can_execute() {
-        let m = MockModel::new(&PathBuf::from("."));
+        let m = MockModel::generate().expect("model gen failed");
         let mut b = Batch::new(4);
 
         b.add(&Position::new());
 
-        let output = m.read().unwrap().execute(&b);
+        let output = m.execute(&b);
 
         assert_eq!(output.get_policy(0).len(), 4096);
     }
@@ -65,21 +81,30 @@ mod test {
     /// Tests the mock model can write. (to nothing)
     #[test]
     fn mock_model_can_write() {
-        let path = tempfile::tempdir().expect("failed to gen tempdir");
+        let path = tempfile::tempdir()
+            .expect("failed to gen tempdir")
+            .into_path();
 
-        MockModel::new(&PathBuf::from("."))
-            .read()
-            .unwrap()
-            .write(&path.path().join("mock_model_test"))
+        MockModel::generate()
+            .expect("model gen failed")
+            .write(&path.join("mock_model_test"))
             .expect("write failed");
     }
 
-    /// Tests the mock model can write. (to nothing)
+    /// Tests the mock model can write.
     #[test]
     fn mock_model_can_train() {
-        MockModel::new(&PathBuf::from("."))
-            .write()
-            .unwrap()
+        MockModel::generate()
+            .expect("model gen failed")
             .train(vec![TrainBatch::new(1)]);
+    }
+
+    /// Tests the mock model can return its type.
+    #[test]
+    fn mock_model_can_get_type() {
+        assert_eq!(
+            MockModel::generate().expect("model gen failed").get_type(),
+            "mock".to_string()
+        );
     }
 }
