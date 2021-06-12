@@ -7,7 +7,7 @@ use rand::thread_rng;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Read, Write};
+use std::io::{BufReader, BufWriter};
 use std::path::Path;
 use std::str::FromStr;
 

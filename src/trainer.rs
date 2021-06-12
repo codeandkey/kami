@@ -5,10 +5,10 @@ use crate::model::{self, Model, ModelPtr, mock::MockModel};
 use crate::position::Position;
 use crate::searcher::{Searcher, SearchStatus};
 
-use chess::ChessMove;
+
 use std::error::Error;
 use std::sync::{Arc, Mutex};
-use std::thread::{self, spawn, JoinHandle};
+use std::thread::{spawn, JoinHandle};
 
 /// Manages the model training lifecycle.
 pub struct Trainer {

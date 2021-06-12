@@ -413,7 +413,7 @@ impl IndexMut<usize> for Tree {
 mod test {
     use super::*;
     use crate::model::{mock::MockModel, Model};
-    use std::path::PathBuf;
+    
 
     /// Tests the tree can be initialized without crashing.
     #[test]

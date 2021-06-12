@@ -1,19 +1,19 @@
-use crate::model::{self, mock::MockModel, Model, ModelPtr};
+use crate::model::{self, ModelPtr};
 
 use crate::constants;
 use crate::game::Game;
 use crate::input::trainbatch::TrainBatch;
-use crate::position::Position;
 
-use chess::ChessMove;
+
+
 use rand::prelude::*;
 use rand::thread_rng;
 use std::error::Error;
-use std::fs::{self, File};
-use std::io::{self, BufRead, BufReader};
+use std::fs::{self};
+use std::io::{self};
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
-use std::sync::{Arc, RwLock};
+
+
 
 /// Performs all disk related options.
 pub struct Disk {

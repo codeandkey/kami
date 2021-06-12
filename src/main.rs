@@ -15,23 +15,23 @@ mod tree;
 mod trainer;
 mod worker;
 
-use chess::ChessMove;
+
 use clap::App;
 
 use std::error::Error;
-use std::fs::{self, File};
-use std::io::{BufRead, BufReader, Write};
-use std::str::FromStr;
+
+
+
 use std::sync::{Arc, Mutex};
 
 use disk::Disk;
-use input::trainbatch::TrainBatch;
-use model::mock::MockModel;
-use model::Model;
-use position::Position;
-use rand::prelude::*;
-use rand::thread_rng;
-use searcher::{SearchStatus, Searcher};
+
+
+
+
+
+
+
 use trainer::Trainer;
 
 /**

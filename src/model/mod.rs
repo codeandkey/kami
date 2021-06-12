@@ -6,7 +6,7 @@ use mock::MockModel;
 
 use std::error::Error;
 use std::fs::{self, File};
-use std::io;
+
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
