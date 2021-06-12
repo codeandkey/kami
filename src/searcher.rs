@@ -260,7 +260,13 @@ mod test {
 
         let mut search = Searcher::new();
         let rx = search
-            .start(Some(500), model::make_ptr(MockModel::generate().expect("model gen failed")), pos, 0.1, 4)
+            .start(
+                Some(500),
+                model::make_ptr(MockModel::generate().expect("model gen failed")),
+                pos,
+                0.1,
+                4,
+            )
             .unwrap();
 
         loop {
@@ -303,7 +309,13 @@ mod test {
             .unwrap();
 
         assert!(search
-            .start(Some(200), model::make_ptr(MockModel::generate().expect("model gen failed")), pos, 1.0, 4)
+            .start(
+                Some(200),
+                model::make_ptr(MockModel::generate().expect("model gen failed")),
+                pos,
+                1.0,
+                4
+            )
             .is_none());
 
         search.wait().expect("no tree returned");
@@ -316,7 +328,13 @@ mod test {
 
         let mut search = Searcher::new();
         let rx = search
-            .start(Some(200), model::make_ptr(MockModel::generate().expect("model gen failed")), pos, 1.0, 4)
+            .start(
+                Some(200),
+                model::make_ptr(MockModel::generate().expect("model gen failed")),
+                pos,
+                1.0,
+                4,
+            )
             .unwrap();
 
         loop {

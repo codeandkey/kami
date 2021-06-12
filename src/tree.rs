@@ -292,11 +292,15 @@ impl Tree {
                 break;
             }
 
-            let child_alloc = (remaining as f32 * (uct / uct_total)).ceil() as usize;
+            let mut child_alloc = (remaining as f32 * (uct / uct_total)).ceil() as usize;
             uct_total -= uct;
 
             if child_alloc == 0 {
                 continue;
+            }
+
+            if child_alloc > remaining {
+                child_alloc = remaining;
             }
 
             // Perform child action
@@ -408,7 +412,7 @@ impl IndexMut<usize> for Tree {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::model::{Model, mock::MockModel};
+    use crate::model::{mock::MockModel, Model};
     use std::path::PathBuf;
 
     /// Tests the tree can be initialized without crashing.

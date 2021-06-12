@@ -32,8 +32,12 @@ impl Model for MockModel {
     }
 
     fn train(&mut self, _: Vec<TrainBatch>) {}
-    fn write(&self, p: &Path) -> Result<(), Box<dyn Error>> { Ok(()) }
-    fn get_type(&self) -> &'static str { "mock" }
+    fn write(&self, _: &Path) -> Result<(), Box<dyn Error>> {
+        Ok(())
+    }
+    fn get_type(&self) -> &'static str {
+        "mock"
+    }
 }
 
 #[cfg(test)]
@@ -51,9 +55,14 @@ mod test {
     /// Tests the mock model can be loaded.
     #[test]
     fn mock_model_can_read() {
-        let path = tempfile::tempdir().expect("failed to gen tempdir").into_path();
+        let path = tempfile::tempdir()
+            .expect("failed to gen tempdir")
+            .into_path();
 
-        MockModel::generate().expect("gen failed").write(&path).expect("write failed");
+        MockModel::generate()
+            .expect("gen failed")
+            .write(&path)
+            .expect("write failed");
         MockModel::read(&path).expect("load failed");
     }
 
@@ -73,7 +82,9 @@ mod test {
     /// Tests the mock model can write. (to nothing)
     #[test]
     fn mock_model_can_write() {
-        let path = tempfile::tempdir().expect("failed to gen tempdir").into_path();
+        let path = tempfile::tempdir()
+            .expect("failed to gen tempdir")
+            .into_path();
 
         MockModel::generate()
             .expect("model gen failed")
@@ -93,9 +104,7 @@ mod test {
     #[test]
     fn mock_model_can_get_type() {
         assert_eq!(
-            MockModel::generate()
-                .expect("model gen failed")
-                .get_type(),
+            MockModel::generate().expect("model gen failed").get_type(),
             "mock".to_string()
         );
     }

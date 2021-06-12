@@ -1,13 +1,12 @@
 /// Interface for NN model generation, execution, and training.
-
 pub mod mock;
 
 use crate::input::{batch::Batch, trainbatch::TrainBatch};
 use mock::MockModel;
 
-use std::io;
 use std::error::Error;
 use std::fs::{self, File};
+use std::io;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
@@ -43,7 +42,7 @@ impl Output {
 }
 
 /// Generic model trait.
-pub trait Model : Send + Sync + 'static {
+pub trait Model: Send + Sync + 'static {
     /// Reads an existing model from a directory on the disk.
     fn read(p: &Path) -> Result<Self, Box<dyn Error>>
     where
@@ -78,13 +77,12 @@ pub fn make_ptr<T: Model + Send + Sync + 'static>(m: T) -> ModelPtr {
 /// Loads a generic model from the disk.
 /// Tries to figure out the type of the saved model,
 /// and returns a threadsafe pointer to the loaded model.
-pub fn load(p: &Path) -> Result<Option<ModelPtr>, Box<dyn Error>>
-{
+pub fn load(p: &Path) -> Result<Option<ModelPtr>, Box<dyn Error>> {
     if !p.exists() {
         return Ok(None);
     }
 
-    let mut out = None;
+    let out;
 
     // Check for mock model type.
     if p.join("mock.type").exists() {
@@ -93,7 +91,11 @@ pub fn load(p: &Path) -> Result<Option<ModelPtr>, Box<dyn Error>>
         return Err("Couldn't detect model type!".into());
     }
 
-    println!("Loaded [{}] model from {}", out.as_ref().unwrap().read().unwrap().get_type(), p.display());
+    println!(
+        "Loaded [{}] model from {}",
+        out.as_ref().unwrap().read().unwrap().get_type(),
+        p.display()
+    );
     Ok(out)
 }
 
@@ -109,7 +111,11 @@ pub fn save(md: &ModelPtr, p: &Path) -> Result<(), Box<dyn Error>> {
     File::create(p.join(format!("{}.type", md.read().unwrap().get_type())))?;
     md.read().unwrap().write(p)?;
 
-    println!("Wrote [{}] model to {}", md.read().unwrap().get_type(), p.display());
+    println!(
+        "Wrote [{}] model to {}",
+        md.read().unwrap().get_type(),
+        p.display()
+    );
 
     Ok(())
 }
@@ -147,9 +153,15 @@ mod test {
     /// Tests that the mock model type can be loaded.
     #[test]
     fn mock_model_can_load() {
-        let path = tempfile::tempdir().expect("failed to gen tempdir").into_path();
+        let path = tempfile::tempdir()
+            .expect("failed to gen tempdir")
+            .into_path();
 
-        save(&make_ptr(MockModel::generate().expect("model gen failed")), &path).expect("write failed");
+        save(
+            &make_ptr(MockModel::generate().expect("model gen failed")),
+            &path,
+        )
+        .expect("write failed");
 
         let loaded = load(&path).expect("load failed").expect("missing model");
 
