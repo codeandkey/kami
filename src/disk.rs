@@ -4,8 +4,6 @@ use crate::constants;
 use crate::game::Game;
 use crate::input::trainbatch::TrainBatch;
 
-
-
 use rand::prelude::*;
 use rand::thread_rng;
 use std::error::Error;
@@ -141,8 +139,9 @@ impl Disk {
             let mut tb = TrainBatch::new(constants::TRAINING_BATCH_SIZE);
 
             for _ in 0..constants::TRAINING_BATCH_SIZE {
-                saved_games[rng.next_u32() as usize % constants::TRAINING_SET_SIZE].add_to_batch(&mut tb);
-            };
+                saved_games[rng.next_u32() as usize % constants::TRAINING_SET_SIZE]
+                    .add_to_batch(&mut tb);
+            }
 
             training_batches.push(tb);
         }
@@ -155,12 +154,14 @@ impl Disk {
 mod test {
     use super::*;
     use chess::ChessMove;
-    use model::{Model, mock::MockModel};
+    use model::{mock::MockModel, Model};
     use std::str::FromStr;
 
     /// Returns a tempdir for mocking.
     fn mock_data_dir() -> PathBuf {
-        tempfile::tempdir().expect("failed creating data dir").into_path()
+        tempfile::tempdir()
+            .expect("failed creating data dir")
+            .into_path()
     }
 
     /// Tests the disk can be initialized.
@@ -182,11 +183,17 @@ mod test {
         // Write a mock model to the latest path.
         model::save(
             &model::make_ptr(MockModel::generate().expect("model gen failed")),
-            &data_dir.join("model")
-        ).expect("model save failed");
+            &data_dir.join("model"),
+        )
+        .expect("model save failed");
 
         assert_eq!(
-            d.load_model().expect("failed loading model").unwrap().read().unwrap().get_type(),
+            d.load_model()
+                .expect("failed loading model")
+                .unwrap()
+                .read()
+                .unwrap()
+                .get_type(),
             "mock".to_string()
         );
     }
@@ -225,9 +232,22 @@ mod test {
         assert_eq!(d.archive_model().expect("archive model failed"), 0);
 
         assert!(data_dir.join("archive").join("generation_0").is_dir());
-        assert!(data_dir.join("archive").join("generation_0").join("model").is_dir());
-        assert!(data_dir.join("archive").join("generation_0").join("model").join("mock.type").is_file());
-        assert!(data_dir.join("archive").join("generation_0").join("games").is_dir());
+        assert!(data_dir
+            .join("archive")
+            .join("generation_0")
+            .join("model")
+            .is_dir());
+        assert!(data_dir
+            .join("archive")
+            .join("generation_0")
+            .join("model")
+            .join("mock.type")
+            .is_file());
+        assert!(data_dir
+            .join("archive")
+            .join("generation_0")
+            .join("games")
+            .is_dir());
     }
 
     /// Tests the disk can find the next game path when no games are generated.
@@ -237,7 +257,9 @@ mod test {
         let d = Disk::new(&data_dir).expect("failed initializing disk");
 
         assert_eq!(
-            d.next_game_path().expect("failed getting next game path").unwrap(),
+            d.next_game_path()
+                .expect("failed getting next game path")
+                .unwrap(),
             data_dir.join("games").join("0.game")
         );
     }
@@ -251,16 +273,20 @@ mod test {
         let mut g = Game::new();
 
         // Write an incomplete game to 1
-        g.make_move(ChessMove::from_str("e2e4").unwrap(), &[0.0; 4096]);
-        g.save(&data_dir.join("games").join("1.game")).expect("game write failed");
+        g.make_move(ChessMove::from_str("e2e4").unwrap(), Vec::new());
+        g.save(&data_dir.join("games").join("1.game"))
+            .expect("game write failed");
 
         // Write a completed game to 0
         g.finalize(1.0);
-        g.save(&data_dir.join("games").join("0.game")).expect("game write failed");
+        g.save(&data_dir.join("games").join("0.game"))
+            .expect("game write failed");
 
         // Next game should be 1
         assert_eq!(
-            d.next_game_path().expect("failed getting next game path").unwrap(),
+            d.next_game_path()
+                .expect("failed getting next game path")
+                .unwrap(),
             data_dir.join("games").join("1.game")
         );
     }
@@ -272,16 +298,20 @@ mod test {
         let d = Disk::new(&data_dir).expect("failed initializing disk");
         let mut g = Game::new();
 
-        g.make_move(ChessMove::from_str("e2e4").unwrap(), &[0.0; 4096]);
+        g.make_move(ChessMove::from_str("e2e4").unwrap(), Vec::new());
         g.finalize(1.0);
 
         for gid in 0..constants::TRAINING_SET_SIZE {
             // Write a completed game to n
-            g.save(&data_dir.join("games").join(format!("{}.game", gid))).expect("game write failed");
-        };
+            g.save(&data_dir.join("games").join(format!("{}.game", gid)))
+                .expect("game write failed");
+        }
 
         // No next game!
-        assert!(d.next_game_path().expect("failed getting next path").is_none());
+        assert!(d
+            .next_game_path()
+            .expect("failed getting next path")
+            .is_none());
     }
 
     /// Tests the disk can return a valid training batch set.
@@ -292,15 +322,18 @@ mod test {
 
         let mut g = Game::new();
 
-        g.make_move(ChessMove::from_str("e2e4").unwrap(), &[0.0; 4096]);
+        g.make_move(ChessMove::from_str("e2e4").unwrap(), Vec::new());
         g.finalize(1.0);
 
         for gid in 0..constants::TRAINING_SET_SIZE {
             // Write a completed game to n
-            g.save(&data_dir.join("games").join(format!("{}.game", gid))).expect("game write failed");
+            g.save(&data_dir.join("games").join(format!("{}.game", gid)))
+                .expect("game write failed");
         }
 
-        let batches = d.get_training_batches().expect("failed getting training batches");
+        let batches = d
+            .get_training_batches()
+            .expect("failed getting training batches");
 
         assert_eq!(batches.len(), constants::TRAINING_BATCH_COUNT);
 
@@ -319,11 +352,12 @@ mod test {
 
         let mut g = Game::new();
 
-        g.make_move(ChessMove::from_str("e2e4").unwrap(), &[0.0; 4096]);
+        g.make_move(ChessMove::from_str("e2e4").unwrap(), Vec::new());
 
         for gid in 0..constants::TRAINING_SET_SIZE {
             // Write a completed game to n
-            g.save(&data_dir.join("games").join(format!("{}.game", gid))).expect("game write failed");
+            g.save(&data_dir.join("games").join(format!("{}.game", gid)))
+                .expect("game write failed");
         }
 
         assert!(d.get_training_batches().is_err());
@@ -337,11 +371,12 @@ mod test {
 
         let mut g = Game::new();
 
-        g.make_move(ChessMove::from_str("e2e4").unwrap(), &[0.0; 4096]);
+        g.make_move(ChessMove::from_str("e2e4").unwrap(), Vec::new());
 
         for gid in 0..constants::TRAINING_SET_SIZE - 1 {
             // Write a completed game to n
-            g.save(&data_dir.join("games").join(format!("{}.game", gid))).expect("game write failed");
+            g.save(&data_dir.join("games").join(format!("{}.game", gid)))
+                .expect("game write failed");
         }
 
         assert!(d.get_training_batches().is_err());

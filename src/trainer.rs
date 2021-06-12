@@ -1,10 +1,9 @@
 use crate::constants;
 use crate::disk::Disk;
 use crate::game::Game;
-use crate::model::{self, Model, ModelPtr, mock::MockModel};
+use crate::model::{self, mock::MockModel, Model, ModelPtr};
 use crate::position::Position;
-use crate::searcher::{Searcher, SearchStatus};
-
+use crate::searcher::{SearchStatus, Searcher};
 
 use std::error::Error;
 use std::sync::{Arc, Mutex};
@@ -25,9 +24,12 @@ impl Trainer {
 
         if latest.is_none() {
             latest = Some(model::make_ptr(MockModel::generate()?));
-            diskmgr.lock().unwrap().save_model(latest.as_ref().unwrap().clone())?;
+            diskmgr
+                .lock()
+                .unwrap()
+                .save_model(latest.as_ref().unwrap().clone())?;
         }
-        
+
         Ok(Trainer {
             latest: latest.unwrap(),
             diskmgr: diskmgr,
@@ -59,7 +61,8 @@ impl Trainer {
 
                     if game_path.exists() {
                         println!("Resuming incomplete game {}", game_path.display());
-                        current_game = Game::load(&game_path).expect("failed loading incomplete game");
+                        current_game =
+                            Game::load(&game_path).expect("failed loading incomplete game");
 
                         for mv in current_game.get_actions() {
                             assert!(current_position.make_move(mv));
@@ -68,25 +71,25 @@ impl Trainer {
                         current_game = Game::new();
                         println!("Generating game {}", game_path.display());
                     }
-        
+
                     loop {
                         // Check if the game is over
                         if current_position.is_game_over().is_some() {
                             break;
                         }
-        
+
                         // Game is not over, we will search the position and make a move.
-        
+
                         // Initialize searcher
                         let mut search = Searcher::new();
-        
+
                         // Choose temperature for this search
                         let mut temperature = constants::TEMPERATURE;
-        
+
                         if current_position.ply() >= constants::TEMPERATURE_DROPOFF_PLY {
                             temperature = constants::TEMPERATURE_DROPOFF;
                         }
-        
+
                         let search_rx = search
                             .start(
                                 Some(constants::SEARCH_TIME),
@@ -96,16 +99,20 @@ impl Trainer {
                                 constants::SEARCH_BATCH_SIZE,
                             )
                             .unwrap();
-        
+
                         // Display search status until the search is done.
                         loop {
                             let status = search_rx
                                 .recv()
                                 .expect("unexpected recv fail from search status rx");
-        
+
                             match status {
                                 SearchStatus::Searching(status) => {
-                                    println!("==> Game {}, hist {}", game_path.display(), current_game.to_string());
+                                    println!(
+                                        "==> Game {}, hist {}",
+                                        game_path.display(),
+                                        current_game.to_string()
+                                    );
                                     status.print();
                                 }
                                 SearchStatus::Stopping => println!("Stopping search.."),
@@ -115,19 +122,19 @@ impl Trainer {
                                 }
                             }
                         }
-        
+
                         // Wait for search to stop and collect final tree.
                         let final_tree = search.wait().expect("search did not return tree");
-        
+
                         // Examine tree and perform move selection.
                         let selected_move = final_tree.select();
-        
+
                         // Write tree data to stdout
                         final_tree.get_status().unwrap().print();
-        
+
                         // Make the selected move.
                         current_position.make_move(selected_move);
-                        current_game.make_move(selected_move, &final_tree.get_mcts_data());
+                        current_game.make_move(selected_move, final_tree.get_mcts_data());
 
                         if *thr_stop.lock().unwrap() {
                             break;
@@ -139,32 +146,51 @@ impl Trainer {
                         current_game.finalize(current_position.is_game_over().unwrap());
                     }
 
-                    current_game.save(&game_path).expect("failed saving completed game");
+                    current_game
+                        .save(&game_path)
+                        .expect("failed saving completed game");
                     println!("Wrote game to {}", game_path.display());
 
                     if *thr_stop.lock().unwrap() {
                         break;
                     }
                 }
-                
+
                 if *thr_stop.lock().unwrap() {
                     break;
                 }
 
                 // If training set is complete, archive and train the model.
-                if thr_diskmgr.lock().unwrap().next_game_path().unwrap().is_none() {
+                if thr_diskmgr
+                    .lock()
+                    .unwrap()
+                    .next_game_path()
+                    .unwrap()
+                    .is_none()
+                {
                     // Build training batches.
                     println!("Training set complete, building training batches.");
 
-                    let batches = thr_diskmgr.lock().unwrap().get_training_batches().expect("failed getting training batches");
+                    let batches = thr_diskmgr
+                        .lock()
+                        .unwrap()
+                        .get_training_batches()
+                        .expect("failed getting training batches");
 
                     println!("Archiving model.");
-                    let gen = thr_diskmgr.lock().unwrap().archive_model().expect("failed archiving model");
+                    let gen = thr_diskmgr
+                        .lock()
+                        .unwrap()
+                        .archive_model()
+                        .expect("failed archiving model");
                     println!("Archived as generation {}.", gen);
 
                     println!("Training model.");
                     thr_model.write().unwrap().train(batches);
-                    println!("Finished training model! Starting training set for generation {}", gen + 1);
+                    println!(
+                        "Finished training model! Starting training set for generation {}",
+                        gen + 1
+                    );
                 }
 
                 if *thr_stop.lock().unwrap() {
@@ -182,7 +208,11 @@ impl Trainer {
             return Err("Trainer is not running!".into());
         }
 
-        self.handle.take().unwrap().join().expect("failed joining trainer thread");
+        self.handle
+            .take()
+            .unwrap()
+            .join()
+            .expect("failed joining trainer thread");
 
         Ok(())
     }
@@ -196,8 +226,12 @@ mod test {
 
     /// Returns a Disk initialized on a tempdir for mocking.
     fn mock_disk() -> Arc<Mutex<Disk>> {
-        let data_dir = tempfile::tempdir().expect("failed creating data dir").into_path();
-        Arc::new(Mutex::new(Disk::new(&data_dir).expect("failed initializing disk")))
+        let data_dir = tempfile::tempdir()
+            .expect("failed creating data dir")
+            .into_path();
+        Arc::new(Mutex::new(
+            Disk::new(&data_dir).expect("failed initializing disk"),
+        ))
     }
 
     /// Tests the trainer can be initialized.
@@ -248,19 +282,24 @@ mod test {
     /// Tests the trainer can train a model when the game set is complete.
     #[test]
     fn trainer_can_train_model() {
-        let data_dir = tempfile::tempdir().expect("failed creating data dir").into_path();
-        let d = Arc::new(Mutex::new(Disk::new(&data_dir).expect("failed initializing disk")));
+        let data_dir = tempfile::tempdir()
+            .expect("failed creating data dir")
+            .into_path();
+        let d = Arc::new(Mutex::new(
+            Disk::new(&data_dir).expect("failed initializing disk"),
+        ));
         let mut t = Trainer::new(d.clone()).expect("trainer init failed");
 
         let mut g = Game::new();
 
-        g.make_move(ChessMove::from_str("e2e4").unwrap(), &[0.0; 4096]);
+        g.make_move(ChessMove::from_str("e2e4").unwrap(), Vec::new());
         g.finalize(1.0);
 
         // Build a completed set of "games" so the trainer immediately trains the model.
         for gid in 0..constants::TRAINING_SET_SIZE {
             // Write a completed game to n
-            g.save(&data_dir.join("games").join(format!("{}.game", gid))).expect("game write failed");
+            g.save(&data_dir.join("games").join(format!("{}.game", gid)))
+                .expect("game write failed");
         }
 
         let stopflag = t.start_training();

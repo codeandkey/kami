@@ -44,7 +44,6 @@ impl Model for MockModel {
 mod test {
     use super::*;
     use crate::position::Position;
-    
 
     /// Tests the mock model can be generated.
     #[test]

@@ -11,26 +11,17 @@ mod model;
 mod node;
 mod position;
 mod searcher;
-mod tree;
 mod trainer;
+mod tree;
 mod worker;
-
 
 use clap::App;
 
 use std::error::Error;
 
-
-
 use std::sync::{Arc, Mutex};
 
 use disk::Disk;
-
-
-
-
-
-
 
 use trainer::Trainer;
 
