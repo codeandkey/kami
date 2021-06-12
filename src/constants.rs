@@ -1,6 +1,6 @@
 /// Several configuration constants for the search.
 
-pub const TRAINING_SET_SIZE: usize = 1; // number of games played per generation
+pub const TRAINING_SET_SIZE: usize = 8; // number of games played per generation
 pub const SEARCH_TIME: usize = 2500; // milliseconds per move
 pub const TEMPERATURE: f32 = 1.0; // MCTS initial temperature
 pub const TEMPERATURE_DROPOFF: f32 = 0.1; // MCTS final temperature

@@ -192,6 +192,7 @@ impl Trainer {
 mod test {
     use super::*;
 
+    /// Returns a Disk initialized on a tempdir for mocking.
     fn mock_disk() -> Arc<Mutex<Disk>> {
         let data_dir = tempfile::tempdir().expect("failed creating data dir").into_path();
         Arc::new(Mutex::new(Disk::new(&data_dir).expect("failed initializing disk")))
