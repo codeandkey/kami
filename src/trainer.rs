@@ -37,6 +37,8 @@ impl Trainer {
 
     /// Starts training the model.
     pub fn start_training(&mut self) -> Arc<Mutex<bool>> {
+        assert!(self.handle.is_none());
+
         let thr_diskmgr = self.diskmgr.clone();
         let thr_model = self.latest.clone();
         let stop = Arc::new(Mutex::new(false));
@@ -183,5 +185,60 @@ impl Trainer {
         self.handle.take().unwrap().join().expect("failed joining trainer thread");
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn mock_disk() -> Arc<Mutex<Disk>> {
+        let data_dir = tempfile::tempdir().expect("failed creating data dir").into_path();
+        Arc::new(Mutex::new(Disk::new(&data_dir).expect("failed initializing disk")))
+    }
+
+    /// Tests the trainer can be initialized.
+    #[test]
+    fn trainer_can_initialize() {
+        Trainer::new(mock_disk()).expect("failed initializing trainer");
+    }
+
+    /// Tests the trainer can start and shortly stop training.
+    #[test]
+    fn trainer_can_start_stop_training() {
+        let mut t = Trainer::new(mock_disk()).expect("failed initializing trainer");
+        let stopflag = t.start_training();
+
+        std::thread::sleep(std::time::Duration::from_secs(3));
+
+        *stopflag.lock().unwrap() = true;
+
+        t.wait().expect("failed stopping trainer");
+    }
+
+    /// Tests the trainer cannot start twice.
+    #[test]
+    #[should_panic]
+    fn trainer_no_start_twice() {
+        let mut t = Trainer::new(mock_disk()).expect("failed initializing trainer");
+
+        let sf1 = t.start_training();
+        let sf2 = t.start_training();
+
+        // this should never be reached anyway, but try to avoid hanging the tests
+        // if things get really broken
+
+        *sf1.lock().unwrap() = true;
+        *sf2.lock().unwrap() = true;
+
+        t.wait().expect("did not join trainer thread ??");
+    }
+
+    /// Tests the trainer cannot stop without starting.
+    #[test]
+    fn trainer_stop_without_start() {
+        let mut t = Trainer::new(mock_disk()).expect("failed initializing trainer");
+
+        assert!(t.wait().is_err());
     }
 }

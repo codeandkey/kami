@@ -13,8 +13,6 @@ use std::fs::{self};
 use std::io::{self};
 use std::path::{Path, PathBuf};
 
-
-
 /// Performs all disk related options.
 pub struct Disk {
     data_dir: PathBuf,
