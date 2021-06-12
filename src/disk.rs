@@ -15,7 +15,6 @@ use std::path::{Path, PathBuf};
 
 /// Performs all disk related options.
 pub struct Disk {
-    data_dir: PathBuf,
     games_dir: PathBuf,
     archive_dir: PathBuf,
     latest_path: PathBuf,
@@ -34,7 +33,6 @@ impl Disk {
         fs::create_dir_all(&archive_dir)?;
 
         Ok(Disk {
-            data_dir: data_dir.to_path_buf(),
             games_dir: games_dir,
             latest_path: data_dir.join("model"),
             archive_dir: archive_dir,
