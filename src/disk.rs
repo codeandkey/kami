@@ -161,6 +161,7 @@ mod test {
     use super::*;
     use chess::ChessMove;
     use std::str::FromStr;
+    use crate::model::Type;
 
     /// Returns a tempdir for mocking.
     fn mock_data_dir() -> PathBuf {

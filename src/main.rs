@@ -34,7 +34,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let diskmgr = Arc::new(Mutex::new(Disk::new(&data_dir)?));
 
     // Initialize trainer
-    let mut trainer = Trainer::new(diskmgr.clone())?;
+    let mut trainer = Trainer::new(diskmgr.clone(), None)?;
 
     trainer.start();
     trainer.wait()?;

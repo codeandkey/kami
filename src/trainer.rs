@@ -21,16 +21,18 @@ pub struct Trainer {
 
 impl Trainer {
     /// Creates a new trainer instance with the latest generation loaded.
-    pub fn new(diskmgr: Arc<Mutex<Disk>>) -> Result<Self, Box<dyn Error>> {
+    pub fn new(diskmgr: Arc<Mutex<Disk>>, mut latest: Option<Model>) -> Result<Self, Box<dyn Error>> {
         // Load model, generate one if doesn't exist.
         let model_path = diskmgr.lock().unwrap().get_model_path();
 
-        let mut latest = model::load(&model_path)?;
-
         if latest.is_none() {
-            let model_path = diskmgr.lock().unwrap().get_model_path();
-            model::generate(&model_path, Type::Torch)?;
-            latest = Some(model::load(&model_path)?.unwrap());
+            latest = model::load(&model_path)?;
+
+            if latest.is_none() {
+                let model_path = diskmgr.lock().unwrap().get_model_path();
+                model::generate(&model_path, Type::Torch)?;
+                latest = Some(model::load(&model_path)?.unwrap());
+            }
         }
 
         Ok(Trainer {
@@ -281,13 +283,13 @@ mod test {
     /// Tests the trainer can be initialized.
     #[test]
     fn trainer_can_initialize() {
-        Trainer::new(mock_disk()).expect("failed initializing trainer");
+        Trainer::new(mock_disk(), Some(Model::Mock)).expect("failed initializing trainer");
     }
 
     /// Tests the trainer can start and shortly stop training.
     #[test]
     fn trainer_can_start_stop_training() {
-        let mut t = Trainer::new(mock_disk()).expect("failed initializing trainer");
+        let mut t = Trainer::new(mock_disk(), Some(Model::Mock)).expect("failed initializing trainer");
 
         t.start();
         std::thread::sleep(std::time::Duration::from_secs(3));
@@ -298,7 +300,7 @@ mod test {
     #[test]
     #[should_panic]
     fn trainer_no_start_twice() {
-        let mut t = Trainer::new(mock_disk()).expect("failed initializing trainer");
+        let mut t = Trainer::new(mock_disk(), Some(Model::Mock)).expect("failed initializing trainer");
 
         t.start();
         t.start();
@@ -312,7 +314,7 @@ mod test {
     /// Tests the trainer cannot stop without starting.
     #[test]
     fn trainer_stop_without_start() {
-        let mut t = Trainer::new(mock_disk()).expect("failed initializing trainer");
+        let mut t = Trainer::new(mock_disk(), Some(Model::Mock)).expect("failed initializing trainer");
 
         assert!(t.wait().is_err());
     }
@@ -326,7 +328,9 @@ mod test {
         let d = Arc::new(Mutex::new(
             Disk::new(&data_dir).expect("failed initializing disk"),
         ));
-        let mut t = Trainer::new(d.clone()).expect("trainer init failed");
+
+        model::generate(&d.lock().unwrap().get_model_path(), Type::Mock).expect("model gen failed");
+        let mut t = Trainer::new(d.clone(), None).expect("trainer init failed");
 
         let mut g = Game::new();
 
