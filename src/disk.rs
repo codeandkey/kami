@@ -1,4 +1,4 @@
-use crate::model::{self, Model, Type};
+use crate::model::{self, Model};
 
 use crate::constants;
 use crate::game::Game;
@@ -141,7 +141,7 @@ impl Disk {
         let mut training_batches: Vec<TrainBatch> = Vec::new();
         let mut rng = thread_rng();
 
-        for i in 0..constants::TRAINING_BATCH_COUNT {
+        for _i in 0..constants::TRAINING_BATCH_COUNT {
             let mut tb = TrainBatch::new(constants::TRAINING_BATCH_SIZE);
 
             for _ in 0..constants::TRAINING_BATCH_SIZE {
@@ -198,7 +198,7 @@ mod test {
     #[test]
     fn disk_can_archive_model() {
         let data_dir = mock_data_dir();
-        let mut d = Disk::new(&data_dir).expect("failed initializing disk");
+        let d = Disk::new(&data_dir).expect("failed initializing disk");
 
         // Write a mock model to the latest path.
         model::generate(&d.get_model_path(), Type::Mock).expect("model gen failed");

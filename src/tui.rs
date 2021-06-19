@@ -1,11 +1,11 @@
 use crate::position::Position;
 use crate::searcher::SearchStatus;
 
-use std::error::Error;
-use std::io::{self, stdout, Write};
+
+use std::io::{stdout, Write};
 use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex};
-use std::thread::{sleep, spawn, JoinHandle};
+use std::thread::{spawn, JoinHandle};
 use std::time::{Duration, Instant};
 
 use crossterm::{

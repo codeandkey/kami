@@ -6,10 +6,10 @@ use std::error::Error;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 
 #[cfg(feature = "tch")]
-use tch::{CModule, Device, IValue, Tensor, TrainableCModule};
+use tch::{CModule, Device, IValue, Tensor};
 
 /// Model input layer constants (TODO move to input)
 pub const PLY_FRAME_SIZE: usize = 14;
