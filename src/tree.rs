@@ -14,6 +14,7 @@ use std::thread::{spawn, JoinHandle};
 
 const EXPLORATION: f64 = 1.414; // MCTS exploration parameter - theoretically sqrt(2)
 const POLICY_SCALE: f64 = 1.0; // MCTS parameter ; how important is policy in UCT calculation
+const Q_SCALE: f64 = 5.0; // MCTS parameter ; how important is avg. value
 
 /// Status of a single node.
 #[derive(Clone, Serialize, Deserialize)]
@@ -242,8 +243,11 @@ impl Tree {
                     res = 1.0; // If the position is checkmate, then this node (decision) has a high value.
                 }
 
-                self.backprop(this, res);
-                return 0;
+                for _ in 0..allocated {
+                    self.backprop(this, res);
+                }
+
+                return allocated;
             } else {
                 // Nonterminal, claim the node and add to the batch.
                 self[this].claim = true;
@@ -265,8 +269,8 @@ impl Tree {
             .iter()
             .map(|&cidx| {
                 let child = &mut self[cidx];
-                let uct = child.q()
-                    + (child.p / cur_ptotal * POLICY_SCALE)
+                let uct = child.q() * Q_SCALE
+                    + (child.p / cur_ptotal) * POLICY_SCALE
                     + EXPLORATION * ((cur_n as f64).ln() / (child.n as f64 + 1.0)).sqrt();
 
                 assert!(

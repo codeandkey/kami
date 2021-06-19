@@ -99,7 +99,12 @@ impl Game {
 
         for (mv_str, val) in &self.mcts[idx] {
             let mv = ChessMove::from_str(mv_str).expect("bad move");
-            mcts[mv.get_source().to_index() * 64 + mv.get_dest().to_index()] = *val;
+
+            match idx % 2 {
+                0 => mcts[mv.get_source().to_index() * 64 + mv.get_dest().to_index()] = *val,
+                1 => mcts[(63 - mv.get_source().to_index()) * 64 + (63 - mv.get_dest().to_index())] = *val,
+                _ => panic!("the universe broke"),
+            }
         }
 
         tb.add(&pos, &mcts, self.result.unwrap() * result_mod);

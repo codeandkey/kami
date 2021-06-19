@@ -2,6 +2,7 @@
 
 pub const TRAINING_SET_SIZE: usize = 8; // number of games played per generation
 pub const SEARCH_TIME: usize = 2500; // milliseconds per move
+pub const SEARCH_MAXNODES: usize = 12000; // maximum nodes searched per move
 pub const TEMPERATURE: f64 = 1.0; // MCTS initial temperature
 pub const TEMPERATURE_DROPOFF: f64 = 0.1; // MCTS final temperature
 pub const TEMPERATURE_DROPOFF_PLY: usize = 25; // ply to switch from initial to dropoff temperature

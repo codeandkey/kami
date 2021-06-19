@@ -46,7 +46,7 @@ module.train()
 # Define loss function
 def loss(policy, value, mcts, result):
     #print('loss: policy.shape={}, value.shape={}, mcts.shape={}, result.shape={}'.format(policy.shape, value.shape, mcts.shape, result.shape))
-    return nn.MSELoss()(value, result) - torch.dot(torch.flatten(mcts), torch.log(torch.flatten(policy)))
+    return nn.MSELoss()(value, result) - torch.log(torch.sum(mcts * policy))
 
 # Train model!
 
@@ -54,10 +54,19 @@ optimizer = torch.optim.SGD(module.parameters(), lr = LEARNING_RATE)
 first_avg_loss = None
 last_avg_loss = None
 
+torch.set_printoptions(edgeitems=4096)
+
 def train_loop():
     for b, ((headers, frames, lmm), (mcts, result)) in enumerate(batches):
         policy, value = module(headers, frames, lmm)
         current_loss = loss(policy, value, mcts, result)
+
+        print("BEGIN")
+        print("policy: {}", policy)
+        print("lmm: {}", lmm)
+        print("policy * lmm: {}", policy * lmm)
+        print("policy * lmm * mcts", policy * lmm * mcts)
+        print("END")
 
         optimizer.zero_grad()
         current_loss.backward()

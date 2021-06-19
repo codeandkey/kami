@@ -27,6 +27,12 @@ use trainer::Trainer;
  */
 
 fn main() -> Result<(), Box<dyn Error>> {
+    // Print program information
+    println!("========================== kami {} ==========================", env!("CARGO_PKG_VERSION"));
+    println!("\tA chess engine powered by reinforcement learning");
+    println!("\tJustin Stanley <jtst@iastate.edu>");
+    println!("================================================================");
+
     // Set data dir
     let data_dir = dirs::data_dir().unwrap().join("kami");
 

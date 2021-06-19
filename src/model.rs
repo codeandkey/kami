@@ -243,13 +243,15 @@ pub fn train(p: &Path, tb: Vec<TrainBatch>, mtype: Type) -> Result<(), Box<dyn E
 
         #[cfg(feature = "tch")]
         Type::Torch => {
-            let mut tdata = tempfile::NamedTempFile::new()?;
-            let tdata_path = tdata.path().to_path_buf();
+            let tdata_path = p.join("train_data.json");
+            let mut tdata = File::create(&tdata_path)?;
 
             tdata.write(serde_json::to_string(&tb)?.as_bytes())?;
             tdata.flush()?;
 
             let output = std::process::Command::new("python")
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
                 .args(&[
                     "scripts/train_torch.py",
                     p.join("model.pt").to_str().unwrap(),
@@ -260,7 +262,11 @@ pub fn train(p: &Path, tb: Vec<TrainBatch>, mtype: Type) -> Result<(), Box<dyn E
                 .spawn()?
                 .wait_with_output()?;
 
-            tdata.close()?;
+            let mut tlog = File::create(&p.join("train.stdout"))?;
+            tlog.write(&output.stdout)?;
+
+            let mut terr = File::create(&p.join("train.stderr"))?;
+            terr.write(&output.stderr)?;
 
             if !output.status.success() {
                 return Err("Torch init script returned failure status.".into());

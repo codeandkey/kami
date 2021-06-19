@@ -1,3 +1,4 @@
+use crate::constants;
 use crate::model::Model;
 use crate::position::Position;
 use crate::tree::{self, StatusResponse, Tree, TreeReq};
@@ -140,23 +141,31 @@ impl Searcher {
                     start_point = std::time::SystemTime::now();
                 }
 
+                let worker_status: Vec<worker::Status> = thr_workers
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .map(|w| w.get_status())
+                    .collect();
+
+                let total_nodes: usize = worker_status.iter().map(|w| w.total_nodes).sum();
+
                 // Send status to clients
                 let _ = search_status_tx.send(SearchStatus::Searching(Status {
                     elapsed_ms: elapsed,
                     tree: tree_status,
                     rootfen: thr_rootfen.clone(),
-                    workers: thr_workers
-                        .lock()
-                        .unwrap()
-                        .iter()
-                        .map(|w| w.get_status())
-                        .collect(),
+                    workers: worker_status,
                 }));
 
                 if let Some(t) = thr_stime {
                     if elapsed >= t as u64 {
                         break;
                     }
+                }
+
+                if total_nodes >= constants::SEARCH_MAXNODES {
+                    break;
                 }
             }
 

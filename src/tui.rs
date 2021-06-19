@@ -272,7 +272,7 @@ impl Tui {
                         f.render_widget(summary_widget, summary_rect);
 
                         // Render search perf stats
-                        let perf_header_cells = ["Worker", "Status", "NNodes", "NBatches"]
+                        let perf_header_cells = ["ID", "status", "nodes", "batches"]
                             .iter()
                             .map(|h| Cell::from(*h).style(Style::default().fg(Color::Red)));
 
@@ -337,7 +337,7 @@ impl Tui {
                             )
                             .x_axis(
                                 Axis::default()
-                                    .title("Ply")
+                                    .title("ply")
                                     .style(Style::default().fg(Color::Gray))
                                     .bounds([0.0, last_ply as f64])
                                     .labels(
@@ -350,7 +350,7 @@ impl Tui {
                             )
                             .y_axis(
                                 Axis::default()
-                                    .title("Value")
+                                    .title("value")
                                     .style(Style::default().fg(Color::Gray))
                                     .bounds([-1.0, 1.0])
                                     .labels(
