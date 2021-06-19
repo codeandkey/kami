@@ -54,7 +54,10 @@ impl Trainer {
             tui.start();
 
             loop {
-                tui.log(format!("Building training set of {} games.", constants::TRAINING_SET_SIZE));
+                tui.log(format!(
+                    "Building training set of {} games.",
+                    constants::TRAINING_SET_SIZE
+                ));
 
                 // Build training set.
                 while let Some(game_path) = thr_diskmgr.lock().unwrap().next_game_path().unwrap() {
@@ -147,7 +150,7 @@ impl Trainer {
                                 }
                             }
                         }
-                        
+
                         if let Some(s) = best_score {
                             let score_mul = match current_position.side_to_move() {
                                 chess::Color::White => 1.0,

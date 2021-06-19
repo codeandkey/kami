@@ -176,16 +176,14 @@ impl Position {
         let b = self.top().b;
 
         let status = match b.status() {
-            chess::BoardStatus::Checkmate => {
-                match b.side_to_move() {
-                    chess::Color::White => Some(-1.0),
-                    chess::Color::Black => Some(1.0),
-                }
+            chess::BoardStatus::Checkmate => match b.side_to_move() {
+                chess::Color::White => Some(-1.0),
+                chess::Color::Black => Some(1.0),
             },
             chess::BoardStatus::Stalemate => Some(0.0),
             chess::BoardStatus::Ongoing => None,
         };
-        
+
         if status.is_some() {
             return status;
         }
@@ -248,7 +246,7 @@ impl Position {
                 for mv in &moves {
                     lmm[mv.get_source().to_index() * 64 + mv.get_dest().to_index()] = 1.0;
                 }
-            },
+            }
             Color::Black => {
                 for mv in &moves {
                     lmm[(63 - mv.get_source().to_index()) * 64 + (63 - mv.get_dest().to_index())] =
@@ -349,9 +347,7 @@ impl Position {
                     .map(|f| {
                         let sq = Square::make_square(r, f);
                         match self.top().b.piece_on(sq) {
-                            Some(p) => {
-                                p.to_string(self.top().b.color_on(sq).unwrap())
-                            }
+                            Some(p) => p.to_string(self.top().b.color_on(sq).unwrap()),
                             None => ".".to_string(),
                         }
                     })

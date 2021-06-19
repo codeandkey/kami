@@ -12,9 +12,9 @@ mod model;
 mod node;
 mod position;
 mod searcher;
-mod tui;
 mod trainer;
 mod tree;
+mod tui;
 mod worker;
 
 use disk::Disk;

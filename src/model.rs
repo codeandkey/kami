@@ -201,7 +201,8 @@ pub fn execute(m: &Model, b: &Batch) -> Output {
                 (PLY_FRAME_COUNT * PLY_FRAME_SIZE) as i64,
             ]);
 
-            let mut lmm_tensor = Tensor::of_slice(b.get_lmm()).reshape(&[b.get_size() as i64, 4096]);
+            let mut lmm_tensor =
+                Tensor::of_slice(b.get_lmm()).reshape(&[b.get_size() as i64, 4096]);
 
             if *cuda {
                 headers_tensor = headers_tensor.to(Device::Cuda(0));

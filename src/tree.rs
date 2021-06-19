@@ -269,7 +269,13 @@ impl Tree {
                     + (child.p / cur_ptotal * POLICY_SCALE)
                     + EXPLORATION * ((cur_n as f64).ln() / (child.n as f64 + 1.0)).sqrt();
 
-                assert!(!uct.is_nan(), "n: {}, w: {}, p: {}", child.n, child.w, child.p);
+                assert!(
+                    !uct.is_nan(),
+                    "n: {}, w: {}, p: {}",
+                    child.n,
+                    child.w,
+                    child.p
+                );
 
                 (cidx, uct)
             })
