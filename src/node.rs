@@ -1,4 +1,4 @@
-use chess::ChessMove;
+use chess::{ChessMove, Color};
 
 /// Node terminal cache enum.
 pub enum TerminalStatus {
@@ -8,22 +8,23 @@ pub enum TerminalStatus {
 }
 
 pub struct Node {
-    pub p: f32,
+    pub p: f64,
     pub n: u32,
     pub w: f32,
-    pub p_total: f32,
+    pub p_total: f64,
     pub children: Option<Vec<usize>>,
     pub parent: Option<usize>,
-    pub action: Option<chess::ChessMove>,
+    pub action: Option<ChessMove>,
     pub claim: bool,
     pub terminal: TerminalStatus,
+    pub color: Color,
 }
 
 impl Node {
     /**
      * Creates a new tree with a single root node at id 0.
      */
-    pub fn root() -> Self {
+    pub fn root(pov: Color) -> Self {
         Node {
             p: 0.0,
             p_total: 0.0,
@@ -34,13 +35,14 @@ impl Node {
             parent: None,
             action: None,
             terminal: TerminalStatus::Unknown,
+            color: pov,
         }
     }
 
     /**
      * Constructs a new child node.
      */
-    pub fn child(parent: usize, policy: f32, action: ChessMove) -> Self {
+    pub fn child(parent: usize, policy: f64, action: ChessMove, color: Color) -> Self {
         Node {
             p: policy,
             p_total: 0.0,
@@ -51,15 +53,16 @@ impl Node {
             parent: Some(parent),
             action: Some(action),
             terminal: TerminalStatus::Unknown,
+            color: color,
         }
     }
 
     /// Gets the Q-value at this node. (average node score)
-    pub fn q(&self) -> f32 {
+    pub fn q(&self) -> f64 {
         if self.n == 0 {
             0.0
         } else {
-            self.w / self.n as f32
+            self.w as f64 / self.n as f64
         }
     }
 }

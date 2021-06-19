@@ -1,5 +1,5 @@
 /// Structures for search worker threads.
-use crate::model::ModelPtr;
+use crate::model::{self, Model};
 use crate::tree::{BatchResponse, TreeReq};
 
 use serde::{Deserialize, Serialize};
@@ -30,12 +30,12 @@ pub struct Worker {
     thr: Option<JoinHandle<()>>,
     status: Arc<RwLock<Status>>,
     tree_tx: Sender<TreeReq>,
-    network: ModelPtr,
+    network: Arc<Model>,
 }
 
 impl Worker {
     /// Returns a new worker instance. Does not start the thread immediately.
-    pub fn new(tree_tx: Sender<TreeReq>, network: ModelPtr) -> Worker {
+    pub fn new(tree_tx: Sender<TreeReq>, network: Arc<Model>) -> Worker {
         Worker {
             thr: None,
             status: Arc::new(RwLock::new(Status::new())),
@@ -77,24 +77,27 @@ impl Worker {
 
                 // (3) Execution - Inputs fed to model and processed
                 thr_status.write().unwrap().state = "executing".to_string();
-                let results = thr_network.read().unwrap().execute(next_batch.get_inner());
 
-                // Update status fields
-                thr_status.write().unwrap().total_nodes += next_batch.get_inner().get_size();
-                thr_status
-                    .write()
-                    .unwrap()
-                    .batch_sizes
-                    .push(next_batch.get_inner().get_size());
+                if next_batch.get_inner().get_size() > 0 {
+                    let results = model::execute(&thr_network, next_batch.get_inner());
 
-                // (4) Backpropagation - send results back to tree
-                thr_status.write().unwrap().state = "backprop".to_string();
+                    // Update status fields
+                    thr_status.write().unwrap().total_nodes += next_batch.get_inner().get_size();
+                    thr_status
+                        .write()
+                        .unwrap()
+                        .batch_sizes
+                        .push(next_batch.get_inner().get_size());
 
-                if thr_tree_tx
-                    .send(TreeReq::Expand(Box::new(results), next_batch))
-                    .is_err()
-                {
-                    break;
+                    // (4) Backpropagation - send results back to tree
+                    thr_status.write().unwrap().state = "backprop".to_string();
+
+                    if thr_tree_tx
+                        .send(TreeReq::Expand(Box::new(results), next_batch))
+                        .is_err()
+                    {
+                        break;
+                    }
                 }
             }
         }))

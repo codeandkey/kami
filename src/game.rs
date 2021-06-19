@@ -14,7 +14,7 @@ use std::str::FromStr;
 /// Holds data relevant to a single played game.
 #[derive(Serialize, Deserialize)]
 pub struct Game {
-    mcts: Vec<Vec<(String, f32)>>,
+    mcts: Vec<Vec<(String, f64)>>,
     actions: Vec<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -45,7 +45,7 @@ impl Game {
     }
 
     /// Makes a move.
-    pub fn make_move(&mut self, action: ChessMove, mcts: Vec<(ChessMove, f32)>) {
+    pub fn make_move(&mut self, action: ChessMove, mcts: Vec<(ChessMove, f64)>) {
         self.actions.push(action.to_string());
         self.mcts
             .push(mcts.iter().map(|x| (x.0.to_string(), x.1)).collect());
@@ -87,6 +87,13 @@ impl Game {
             assert!(pos.make_move(ChessMove::from_str(&self.actions[i]).expect("bad move")));
         }
 
+        // Black wants -1 result, so flip the game result if POV is black
+        let mut result_mod = 1.0;
+
+        if idx % 2 == 1 {
+            result_mod = -1.0;
+        }
+
         // Build MCTS frame.
         let mut mcts = [0.0; 4096];
 
@@ -95,7 +102,7 @@ impl Game {
             mcts[mv.get_source().to_index() * 64 + mv.get_dest().to_index()] = *val;
         }
 
-        tb.add(&pos, &mcts, self.result.unwrap());
+        tb.add(&pos, &mcts, self.result.unwrap() * result_mod);
     }
 }
 
@@ -139,39 +146,42 @@ mod test {
         let mut g = Game::new();
 
         let mcts_data = vec![
-            ("a2a3",0.055456806),
-            ("a2a4",0.031994313),
-            ("b2b3",0.04372556),
-            ("b2b4",0.036437966),
-            ("c2c3",0.033771776),
-            ("c2c4",0.062211163),
-            ("d2d3",0.05083541),
-            ("d2d4",0.03768219),
-            ("e2e3",0.030750088),
-            ("e2e4",0.05954497),
-            ("f2f3",0.049591184),
-            ("f2f4",0.0627444),
-            ("g2g3",0.042125843),
-            ("g2g4",0.057767507),
-            ("h2h3",0.060611445),
-            ("h2h4",0.05954497),
-            ("b1a3",0.062388908),
-            ("b1c3",0.0419481),
-            ("g1f3",0.05901173),
-            ("g1h3",0.06185567)
+            ("a2a3", 0.055456806),
+            ("a2a4", 0.031994313),
+            ("b2b3", 0.04372556),
+            ("b2b4", 0.036437966),
+            ("c2c3", 0.033771776),
+            ("c2c4", 0.062211163),
+            ("d2d3", 0.05083541),
+            ("d2d4", 0.03768219),
+            ("e2e3", 0.030750088),
+            ("e2e4", 0.05954497),
+            ("f2f3", 0.049591184),
+            ("f2f4", 0.0627444),
+            ("g2g3", 0.042125843),
+            ("g2g4", 0.057767507),
+            ("h2h3", 0.060611445),
+            ("h2h4", 0.05954497),
+            ("b1a3", 0.062388908),
+            ("b1c3", 0.0419481),
+            ("g1f3", 0.05901173),
+            ("g1h3", 0.06185567),
         ];
 
-        let mcts_data = mcts_data.into_iter().map(|(a, b)| (ChessMove::from_str(a).expect("bad move"), b)).collect();
+        let mcts_data = mcts_data
+            .into_iter()
+            .map(|(a, b)| (ChessMove::from_str(a).expect("bad move"), b))
+            .collect();
 
-        g.make_move(
-            ChessMove::from_str("f2f4").expect("bad move"),
-            mcts_data,
-        );
+        g.make_move(ChessMove::from_str("f2f4").expect("bad move"), mcts_data);
 
         g.save(&gpath).expect("write failed");
 
         let mut contents = Vec::new();
-        File::open(&gpath).expect("read failed").read_to_end(&mut contents).expect("read failed");
+        File::open(&gpath)
+            .expect("read failed")
+            .read_to_end(&mut contents)
+            .expect("read failed");
 
         let contents = String::from_utf8(contents).unwrap();
 
@@ -195,13 +205,10 @@ mod test {
     #[test]
     fn game_can_get_string() {
         let mut g = Game::new();
-        
+
         assert_eq!(g.to_string(), "".to_string());
 
-        g.make_move(
-            ChessMove::from_str("f2f4").expect("bad move"),
-            Vec::new(),
-        );
+        g.make_move(ChessMove::from_str("f2f4").expect("bad move"), Vec::new());
 
         assert_eq!(g.to_string(), "f2f4".to_string());
     }
@@ -212,34 +219,34 @@ mod test {
         let mut g = Game::new();
 
         let mcts_data = vec![
-            ("a2a3",0.055456806),
-            ("a2a4",0.031994313),
-            ("b2b3",0.04372556),
-            ("b2b4",0.036437966),
-            ("c2c3",0.033771776),
-            ("c2c4",0.062211163),
-            ("d2d3",0.05083541),
-            ("d2d4",0.03768219),
-            ("e2e3",0.030750088),
-            ("e2e4",0.05954497),
-            ("f2f3",0.049591184),
-            ("f2f4",0.0627444),
-            ("g2g3",0.042125843),
-            ("g2g4",0.057767507),
-            ("h2h3",0.060611445),
-            ("h2h4",0.05954497),
-            ("b1a3",0.062388908),
-            ("b1c3",0.0419481),
-            ("g1f3",0.05901173),
-            ("g1h3",0.06185567)
+            ("a2a3", 0.055456806),
+            ("a2a4", 0.031994313),
+            ("b2b3", 0.04372556),
+            ("b2b4", 0.036437966),
+            ("c2c3", 0.033771776),
+            ("c2c4", 0.062211163),
+            ("d2d3", 0.05083541),
+            ("d2d4", 0.03768219),
+            ("e2e3", 0.030750088),
+            ("e2e4", 0.05954497),
+            ("f2f3", 0.049591184),
+            ("f2f4", 0.0627444),
+            ("g2g3", 0.042125843),
+            ("g2g4", 0.057767507),
+            ("h2h3", 0.060611445),
+            ("h2h4", 0.05954497),
+            ("b1a3", 0.062388908),
+            ("b1c3", 0.0419481),
+            ("g1f3", 0.05901173),
+            ("g1h3", 0.06185567),
         ];
 
-        let mcts_data = mcts_data.into_iter().map(|(a, b)| (ChessMove::from_str(a).expect("bad move"), b)).collect();
+        let mcts_data = mcts_data
+            .into_iter()
+            .map(|(a, b)| (ChessMove::from_str(a).expect("bad move"), b))
+            .collect();
 
-        g.make_move(
-            ChessMove::from_str("f2f4").expect("bad move"),
-            mcts_data,
-        );
+        g.make_move(ChessMove::from_str("f2f4").expect("bad move"), mcts_data);
 
         g.finalize(1.0);
 

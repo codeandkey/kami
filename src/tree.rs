@@ -3,26 +3,27 @@ use crate::model::Output;
 use crate::node::{Node, TerminalStatus};
 use crate::position::Position;
 
-use chess::ChessMove;
+use chess::{ChessMove, Color};
 use rand::distributions::WeightedIndex;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 use std::ops::{Index, IndexMut};
 use std::sync::mpsc::{channel, Sender};
 use std::thread::{spawn, JoinHandle};
 
-const EXPLORATION: f32 = 1.414; // MCTS exploration parameter - theoretically sqrt(2)
-const POLICY_SCALE: f32 = 1.0; // MCTS parameter ; how important is policy in UCT calculation
+const EXPLORATION: f64 = 1.414; // MCTS exploration parameter - theoretically sqrt(2)
+const POLICY_SCALE: f64 = 1.0; // MCTS parameter ; how important is policy in UCT calculation
 
 /// Status of a single node.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct StatusNode {
     pub action: String,
     pub n: u32,
-    pub nn: f32,
-    pub p_pct: f32,
+    pub nn: f64,
+    pub p_pct: f64,
     pub w: f32,
-    pub q: f32,
+    pub q: f64,
 }
 
 /// Status of the first level of children.
@@ -30,19 +31,21 @@ pub struct StatusNode {
 pub struct Status {
     pub nodes: Vec<StatusNode>,
     pub total_n: u32,
-    pub total_nn: f32,
-    pub temperature: f32,
+    pub total_nn: f64,
+    pub temperature: f64,
 }
 
 impl Status {
-    pub fn print(&self) {
+    /// Outputs the tree status to stdout.
+    /// Returns the number of lines printed.
+    pub fn print(&self) -> usize {
         println!(
             "+=> Tree status: {} nodes searched, current score {:3.2}, temperature {}",
             self.total_n, self.nodes[0].q, self.temperature
         );
         for nd in &self.nodes {
             println!(
-                "|=> {:>5} | N: {:4.1}% [{:>4}] | P: {:3.1}% | Q: {:3.2}",
+                "|=> {:>5} | N: {:5.1}% [{:>5}] | P: {:3.2}% | Q: {:3.2}",
                 nd.action,
                 nd.nn * 100.0 / self.total_nn,
                 nd.n,
@@ -54,6 +57,8 @@ impl Status {
             "+=> End tree status, deterministic bestmove {:>5}",
             self.nodes[0].action
         );
+
+        return 2 + self.nodes.len();
     }
 }
 
@@ -90,16 +95,16 @@ pub enum TreeReq {
 pub struct Tree {
     nodes: Vec<Node>,
     pos: Position,
-    temperature: f32,
+    temperature: f64,
     batch_size: usize,
 }
 
 impl Tree {
     /// Creates a new tree service with an initial position.
     /// The initial tree has a single root node with no action.
-    pub fn new(rootpos: Position, temp: f32, batch_size: usize) -> Self {
+    pub fn new(rootpos: Position, temp: f64, batch_size: usize) -> Self {
         Tree {
-            nodes: vec![Node::root()],
+            nodes: vec![Node::root(rootpos.side_to_move())],
             pos: rootpos,
             temperature: temp,
             batch_size: batch_size,
@@ -161,12 +166,8 @@ impl Tree {
                 }
             }
 
-            println!("Tree thread stopped.");
-
             self
         });
-
-        println!("Started tree.");
 
         (inp, handle)
     }
@@ -185,14 +186,14 @@ impl Tree {
             .map(|&c| StatusNode {
                 action: self[c].action.unwrap().to_string(), // action string
                 n: self[c].n,                                // visit count
-                nn: (self[c].n as f32).powf(1.0 / self.temperature), // normalized visit count
+                nn: (self[c].n as f64).powf(1.0 / self.temperature), // normalized visit count
                 w: self[c].w,                                // total value
                 p_pct: self[c].p / p_total,                  // normalized policy
                 q: self[c].q(),                              // average value
             })
             .collect::<Vec<StatusNode>>();
 
-        let total_nn: f32 = nodes.iter().map(|x| x.nn).sum();
+        let total_nn: f64 = nodes.iter().map(|x| x.nn).sum();
         let total_n: u32 = nodes.iter().map(|x| x.n).sum();
 
         // Reorder children by N
@@ -229,22 +230,14 @@ impl Tree {
             }
 
             // Check if this node is terminal. If so, immediately backprop the value.
-            let terminal = match self[this].terminal {
-                TerminalStatus::Terminal(r) => Some(r),
-                TerminalStatus::NotTerminal => None,
-                TerminalStatus::Unknown => match self.pos.is_game_over() {
-                    Some(res) => {
-                        self[this].terminal = TerminalStatus::Terminal(res);
-                        Some(res)
-                    }
-                    None => {
-                        self[this].terminal = TerminalStatus::NotTerminal;
-                        None
-                    }
-                },
-            };
+            if matches!(self[this].terminal, TerminalStatus::Unknown) {
+                self[this].terminal = match self.pos.is_game_over() {
+                    Some(v) => TerminalStatus::Terminal(v),
+                    None => TerminalStatus::NotTerminal,
+                };
+            }
 
-            if let Some(mut res) = terminal {
+            if let TerminalStatus::Terminal(mut res) = self[this].terminal {
                 if res == -1.0 {
                     res = 1.0; // If the position is checkmate, then this node (decision) has a high value.
                 }
@@ -268,21 +261,23 @@ impl Tree {
         let cur_n = self[this].n;
         let cur_ptotal = self[this].p_total;
 
-        let mut pairs: Vec<(usize, f32)> = children
+        let mut pairs: Vec<(usize, f64)> = children
             .iter()
             .map(|&cidx| {
                 let child = &mut self[cidx];
                 let uct = child.q()
-                    + (child.p / cur_ptotal) * POLICY_SCALE
-                    + EXPLORATION * ((cur_n as f32).ln() / (child.n as f32 + 1.0)).sqrt();
+                    + (child.p / cur_ptotal * POLICY_SCALE)
+                    + EXPLORATION * ((cur_n as f64).ln() / (child.n as f64 + 1.0)).sqrt();
+
+                assert!(!uct.is_nan(), "n: {}, w: {}, p: {}", child.n, child.w, child.p);
 
                 (cidx, uct)
             })
             .collect();
 
-        pairs.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        pairs.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
 
-        let mut uct_total: f32 = pairs.iter().map(|x| x.1).sum();
+        let mut uct_total: f64 = pairs.iter().map(|x| x.1).sum();
 
         // Iterate over children
         for (child, uct) in pairs {
@@ -292,7 +287,7 @@ impl Tree {
                 break;
             }
 
-            let mut child_alloc = (remaining as f32 * (uct / uct_total)).ceil() as usize;
+            let mut child_alloc = (remaining as f64 * (uct / uct_total)).ceil() as usize;
             uct_total -= uct;
 
             if child_alloc == 0 {
@@ -330,22 +325,38 @@ impl Tree {
 
     /// Expands a node.
     /// The node <idx> is assigned children from <moves>, and the policy from <policy> is applied to each child.
-    fn expand(&mut self, idx: usize, policy: &[f32], moves: &[ChessMove]) {
+    fn expand(&mut self, idx: usize, policy: &[f64], moves: &[ChessMove]) {
         let mut new_p_total = 0.0;
         let mut new_children: Vec<usize> = Vec::new();
 
         assert_ne!(moves.len(), 0);
 
         for mv in moves {
-            let p = policy[mv.get_source().to_index() * 64 + mv.get_dest().to_index()].exp();
+            let (p, new_color) = match self[idx].color {
+                Color::White => (
+                    policy[mv.get_source().to_index() * 64 + mv.get_dest().to_index()],
+                    Color::Black,
+                ),
+                Color::Black => (
+                    policy
+                        [(63 - mv.get_source().to_index()) * 64 + (63 - mv.get_dest().to_index())],
+                    Color::White,
+                ),
+            };
+
+            assert!(!p.is_nan(), "policy is NaN out of network");
 
             new_p_total += p;
             new_children.push(self.nodes.len());
 
-            self.nodes.push(Node::child(idx, p, *mv));
+            self.nodes.push(Node::child(idx, p, *mv, new_color));
         }
 
-        assert_ne!(new_p_total, 0.0);
+        assert_ne!(
+            new_p_total, 0.0,
+            "pov: {:?}, policy: {:?}",
+            self[idx].color, policy
+        );
 
         self[idx].p_total = new_p_total;
         self[idx].children = Some(new_children);
@@ -371,18 +382,18 @@ impl Tree {
 
     /// Gets MCTS visit counts for the root children in pair format.
     /// Output is normalized with temperature + softmax function.
-    pub fn get_mcts_data(&self) -> Vec<(ChessMove, f32)> {
+    pub fn get_mcts_data(&self) -> Vec<(ChessMove, f64)> {
         let child_nodes = self.nodes[0].children.as_ref().unwrap().clone();
         let mut out = Vec::new();
 
         for &nd in child_nodes.iter() {
             out.push((
                 self[nd].action.unwrap(),
-                ((self[nd].n + 1) as f32).powf(1.0 / self.temperature),
+                ((self[nd].n + 1) as f64).powf(1.0 / self.temperature),
             ));
         }
 
-        let sum: f32 = out.iter().map(|x| x.1).sum();
+        let sum: f64 = out.iter().map(|x| x.1).sum();
 
         for mut nd in out.iter_mut() {
             nd.1 /= sum;
@@ -411,7 +422,7 @@ impl IndexMut<usize> for Tree {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::model::{mock::MockModel, Model};
+    use crate::model::{self, Model};
 
     /// Tests the tree can be initialized without crashing.
     #[test]
@@ -469,9 +480,7 @@ mod test {
         assert_eq!(new_batch.get_inner().get_size(), 1);
 
         // Generate dummy network output and send it to the service.
-        let output = MockModel::generate()
-            .expect("model gen failed")
-            .execute(new_batch.get_inner());
+        let output = model::execute(&Model::Mock, new_batch.get_inner());
 
         tx.send(TreeReq::Expand(Box::new(output), new_batch))
             .expect("Failed to write to tree tx.");
@@ -498,9 +507,7 @@ mod test {
         assert_eq!(new_batch.get_inner().get_size(), 1);
 
         // Generate dummy network output and send it to the service.
-        let output = MockModel::generate()
-            .expect("model gen failed")
-            .execute(new_batch.get_inner());
+        let output = model::execute(&Model::Mock, new_batch.get_inner());
 
         tx.send(TreeReq::Expand(Box::new(output), new_batch))
             .expect("Failed to write to tree tx.");

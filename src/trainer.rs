@@ -1,54 +1,60 @@
 use crate::constants;
 use crate::disk::Disk;
 use crate::game::Game;
-use crate::model::{self, mock::MockModel, Model, ModelPtr};
+use crate::model::{self, Model, Type};
 use crate::position::Position;
 use crate::searcher::{SearchStatus, Searcher};
+use crate::tui::Tui;
 
 use std::error::Error;
 use std::sync::{Arc, Mutex};
 use std::thread::{spawn, JoinHandle};
 
 /// Manages the model training lifecycle.
+/// Displays training status in a TUI on stdout.
 pub struct Trainer {
-    latest: ModelPtr,
+    latest: Arc<Model>,
     diskmgr: Arc<Mutex<Disk>>,
     handle: Option<JoinHandle<()>>,
+    stopflag: Arc<Mutex<bool>>,
 }
 
 impl Trainer {
     /// Creates a new trainer instance with the latest generation loaded.
     pub fn new(diskmgr: Arc<Mutex<Disk>>) -> Result<Self, Box<dyn Error>> {
         // Load model, generate one if doesn't exist.
-        let mut latest = diskmgr.lock().unwrap().load_model()?;
+        let model_path = diskmgr.lock().unwrap().get_model_path();
+
+        let mut latest = model::load(&model_path)?;
 
         if latest.is_none() {
-            latest = Some(model::make_ptr(MockModel::generate()?));
-            diskmgr
-                .lock()
-                .unwrap()
-                .save_model(latest.as_ref().unwrap().clone())?;
+            let model_path = diskmgr.lock().unwrap().get_model_path();
+            model::generate(&model_path, Type::Torch)?;
+            latest = Some(model::load(&model_path)?.unwrap());
         }
 
         Ok(Trainer {
-            latest: latest.unwrap(),
+            latest: Arc::new(latest.unwrap()),
             diskmgr: diskmgr,
             handle: None,
+            stopflag: Arc::new(Mutex::new(false)),
         })
     }
 
     /// Starts training the model.
-    pub fn start_training(&mut self) -> Arc<Mutex<bool>> {
+    pub fn start(&mut self) {
         assert!(self.handle.is_none());
 
         let thr_diskmgr = self.diskmgr.clone();
         let thr_model = self.latest.clone();
-        let stop = Arc::new(Mutex::new(false));
-        let thr_stop = stop.clone();
+        let thr_stop = self.stopflag.clone();
 
         self.handle = Some(spawn(move || {
+            let mut tui = Tui::new();
+            tui.start();
+
             loop {
-                println!("Building training set.");
+                tui.log(format!("Building training set of {} games.", constants::TRAINING_SET_SIZE));
 
                 // Build training set.
                 while let Some(game_path) = thr_diskmgr.lock().unwrap().next_game_path().unwrap() {
@@ -57,10 +63,9 @@ impl Trainer {
                     // Setup a position.
                     let mut current_position = Position::new();
 
-                    println!("Next target game path: {}", game_path.display());
-
                     if game_path.exists() {
-                        println!("Resuming incomplete game {}", game_path.display());
+                        tui.log(format!("Resuming incomplete game {}", game_path.display()));
+
                         current_game =
                             Game::load(&game_path).expect("failed loading incomplete game");
 
@@ -69,10 +74,15 @@ impl Trainer {
                         }
                     } else {
                         current_game = Game::new();
-                        println!("Generating game {}", game_path.display());
+                        tui.log(format!("Generating game {}", game_path.display()));
                     }
 
+                    tui.reset_game();
+
                     loop {
+                        // Load position into tui
+                        tui.set_position(current_position.clone());
+
                         // Check if the game is over
                         if current_position.is_game_over().is_some() {
                             break;
@@ -106,20 +116,12 @@ impl Trainer {
                                 .recv()
                                 .expect("unexpected recv fail from search status rx");
 
-                            match status {
-                                SearchStatus::Searching(status) => {
-                                    println!(
-                                        "==> Game {}, hist {}",
-                                        game_path.display(),
-                                        current_game.to_string()
-                                    );
-                                    status.print();
-                                }
-                                SearchStatus::Stopping => println!("Stopping search.."),
-                                SearchStatus::Done => {
-                                    println!("Stopped search.");
-                                    break;
-                                }
+                            let will_stop = matches!(status, SearchStatus::Done);
+
+                            tui.push_status(status);
+
+                            if will_stop {
+                                break;
                             }
                         }
 
@@ -129,12 +131,36 @@ impl Trainer {
                         // Examine tree and perform move selection.
                         let selected_move = final_tree.select();
 
-                        // Write tree data to stdout
-                        final_tree.get_status().unwrap().print();
-
                         // Make the selected move.
                         current_position.make_move(selected_move);
                         current_game.make_move(selected_move, final_tree.get_mcts_data());
+
+                        // Find move with best n
+                        let mut best_n = 0;
+                        let mut best_score: Option<f64> = None;
+
+                        if let Some(children) = &final_tree[0].children {
+                            for &nd in children {
+                                if final_tree[nd].n > best_n {
+                                    best_n = final_tree[nd].n;
+                                    best_score = Some(final_tree[nd].q());
+                                }
+                            }
+                        }
+                        
+                        if let Some(s) = best_score {
+                            let score_mul = match current_position.side_to_move() {
+                                chess::Color::White => 1.0,
+                                chess::Color::Black => -1.0,
+                            };
+
+                            tui.push_score(score_mul * s);
+                        }
+
+                        // Stop training if the user has requested a stop.
+                        if tui.exit_requested() {
+                            *thr_stop.lock().unwrap() = true;
+                        }
 
                         if *thr_stop.lock().unwrap() {
                             break;
@@ -149,7 +175,7 @@ impl Trainer {
                     current_game
                         .save(&game_path)
                         .expect("failed saving completed game");
-                    println!("Wrote game to {}", game_path.display());
+                    tui.log(format!("Wrote game to {}", game_path.display()));
 
                     if *thr_stop.lock().unwrap() {
                         break;
@@ -169,37 +195,43 @@ impl Trainer {
                     .is_none()
                 {
                     // Build training batches.
-                    println!("Training set complete, building training batches.");
+                    tui.log("Training set complete, building training batches.");
 
-                    let batches = thr_diskmgr
+                    let tbatches = thr_diskmgr
                         .lock()
                         .unwrap()
                         .get_training_batches()
-                        .expect("failed getting training batches");
+                        .expect("failed getting training batch");
 
-                    println!("Archiving model.");
+                    tui.log("Archiving model.");
                     let gen = thr_diskmgr
                         .lock()
                         .unwrap()
                         .archive_model()
                         .expect("failed archiving model");
-                    println!("Archived as generation {}.", gen);
+                    tui.log(format!("Archived as generation {}.", gen));
 
-                    println!("Training model.");
-                    thr_model.write().unwrap().train(batches);
-                    println!(
+                    tui.log("Training model.");
+                    model::train(
+                        &thr_diskmgr.lock().unwrap().get_model_path(),
+                        tbatches,
+                        model::get_type(&thr_model),
+                    )
+                    .expect("failed training");
+
+                    tui.log(format!(
                         "Finished training model! Starting training set for generation {}",
                         gen + 1
-                    );
+                    ));
                 }
 
                 if *thr_stop.lock().unwrap() {
                     break;
                 }
             }
-        }));
 
-        stop
+            tui.stop();
+        }));
     }
 
     /// Waits for the trainer to stop.
@@ -213,6 +245,15 @@ impl Trainer {
             .unwrap()
             .join()
             .expect("failed joining trainer thread");
+
+        Ok(())
+    }
+
+    /// Stops and joins the trainer.
+    pub fn stop(&mut self) -> Result<(), Box<dyn Error>> {
+        *self.stopflag.lock().unwrap() = true;
+        self.wait()?;
+        *self.stopflag.lock().unwrap() = false;
 
         Ok(())
     }
@@ -244,13 +285,10 @@ mod test {
     #[test]
     fn trainer_can_start_stop_training() {
         let mut t = Trainer::new(mock_disk()).expect("failed initializing trainer");
-        let stopflag = t.start_training();
 
+        t.start();
         std::thread::sleep(std::time::Duration::from_secs(3));
-
-        *stopflag.lock().unwrap() = true;
-
-        t.wait().expect("failed stopping trainer");
+        t.stop().expect("failed stopping trainer");
     }
 
     /// Tests the trainer cannot start twice.
@@ -259,16 +297,13 @@ mod test {
     fn trainer_no_start_twice() {
         let mut t = Trainer::new(mock_disk()).expect("failed initializing trainer");
 
-        let sf1 = t.start_training();
-        let sf2 = t.start_training();
+        t.start();
+        t.start();
 
         // this should never be reached anyway, but try to avoid hanging the tests
         // if things get really broken
 
-        *sf1.lock().unwrap() = true;
-        *sf2.lock().unwrap() = true;
-
-        t.wait().expect("did not join trainer thread ??");
+        t.stop().expect("trainer stop failed..");
     }
 
     /// Tests the trainer cannot stop without starting.
@@ -302,11 +337,11 @@ mod test {
                 .expect("game write failed");
         }
 
-        let stopflag = t.start_training();
+        t.start();
 
         std::thread::sleep(std::time::Duration::from_secs(3));
-        *stopflag.lock().unwrap() = true;
-        t.wait().expect("failed stopping trainer");
+
+        t.stop().expect("failed stopping trainer");
 
         // Check the model was archived
         assert!(data_dir.join("archive").join("generation_0").is_dir());

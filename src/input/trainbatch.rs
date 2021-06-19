@@ -4,9 +4,12 @@
 use crate::input::batch::Batch;
 use crate::position::Position;
 
+use serde::Serialize;
+
+#[derive(Serialize)]
 pub struct TrainBatch {
     results: Vec<f32>,
-    mcts: Vec<f32>,
+    mcts: Vec<f64>,
     inner: Batch,
 }
 
@@ -27,7 +30,7 @@ impl TrainBatch {
     }
 
     /// Adds a position snapshot to the batch.
-    pub fn add(&mut self, p: &Position, mcts: &[f32], result: f32) {
+    pub fn add(&mut self, p: &Position, mcts: &[f64], result: f32) {
         // Store MCTS counts
         assert_eq!(mcts.len(), 4096);
         self.mcts.extend_from_slice(mcts);
@@ -45,7 +48,7 @@ impl TrainBatch {
     }
 
     /// Gets the MCTS counts as a float buffer.
-    pub fn get_mcts(&self) -> &[f32] {
+    pub fn get_mcts(&self) -> &[f64] {
         &self.mcts
     }
 

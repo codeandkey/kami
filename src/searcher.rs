@@ -1,4 +1,4 @@
-use crate::model::ModelPtr;
+use crate::model::Model;
 use crate::position::Position;
 use crate::tree::{self, StatusResponse, Tree, TreeReq};
 use crate::worker::{self, Worker};
@@ -10,25 +10,28 @@ use std::thread::{spawn, JoinHandle};
 use std::time::Duration;
 
 /// Used
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub enum SearchStatus {
     Searching(Status),
     Stopping,
     Done,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct Status {
-    tree: Option<tree::Status>,
-    workers: Vec<worker::Status>,
-    elapsed_ms: u64,
-    rootfen: String,
+    pub tree: Option<tree::Status>,
+    pub workers: Vec<worker::Status>,
+    pub elapsed_ms: u64,
+    pub rootfen: String,
 }
 
 impl Status {
-    pub fn print(&self) {
+    /// Writes the search status to stdout.
+    /// Returns the number of lines printed.
+    pub fn print(&self) -> usize {
         let total_nodes: usize = self.workers.iter().map(|x| x.total_nodes).sum();
         let total_batches: usize = self.workers.iter().map(|x| x.batch_sizes.len()).sum();
+        let mut total = 3;
 
         println!("==> ################################################################### <==");
 
@@ -53,13 +56,18 @@ impl Status {
             );
         }
 
+        total += self.workers.len();
+
         if let Some(tstatus) = &self.tree {
-            tstatus.print();
+            total += tstatus.print();
         } else {
             println!("==> (No tree status available yet)");
+            total += 1;
         }
 
         println!("==> End search status");
+
+        return total;
     }
 }
 
@@ -79,9 +87,9 @@ impl Searcher {
     pub fn start(
         &mut self,
         thr_stime: Option<usize>,
-        model: ModelPtr,
+        model: Arc<Model>,
         thr_pos: Position,
-        temp: f32,
+        temp: f64,
         batch_size: usize,
     ) -> Option<Receiver<SearchStatus>> {
         if self.handle.is_some() {
@@ -95,14 +103,8 @@ impl Searcher {
         let thr_workers = self.workers.clone();
         let thr_rootfen = thr_pos.get_fen();
 
-        println!(
-            "Searching `{}` for {}ms.",
-            thr_pos.get_fen(),
-            thr_stime.unwrap_or(0),
-        );
-
         self.handle = Some(spawn(move || {
-            let (thr_tree_tx, thr_tree_handle) = Tree::new(thr_pos, temp, batch_size).run();
+            let (thr_tree_tx, thr_tree_handle) = Tree::new(thr_pos.clone(), temp, batch_size).run();
 
             for _ in 0..num_cpus::get() {
                 let mut new_worker = Worker::new(thr_tree_tx.clone(), thr_model.clone());
@@ -112,7 +114,7 @@ impl Searcher {
 
             const TIMESTEP: u64 = 100;
             let mut elapsed: u64;
-            let start_point = std::time::SystemTime::now();
+            let mut start_point = std::time::SystemTime::now();
 
             loop {
                 std::thread::sleep(Duration::from_millis(TIMESTEP));
@@ -132,6 +134,11 @@ impl Searcher {
                         break;
                     }
                 };
+
+                // Reset starttime if no nodes have been searched yet (for GPU warmup)
+                if tree_status.is_none() {
+                    start_point = std::time::SystemTime::now();
+                }
 
                 // Send status to clients
                 let _ = search_status_tx.send(SearchStatus::Searching(Status {
@@ -157,13 +164,10 @@ impl Searcher {
             let _ = search_status_tx.send(SearchStatus::Stopping);
 
             // Send stop request to tree
-            println!("Sending prestop to tree.");
-
             thr_tree_tx
                 .send(TreeReq::RequestStop)
                 .expect("failed to send stopreq to tree");
 
-            println!("Waiting for workers.");
             // Join workers
             {
                 let mut w_lock = thr_workers.lock().unwrap();
@@ -176,7 +180,6 @@ impl Searcher {
             thr_tree_tx
                 .send(TreeReq::Done)
                 .expect("failed to send stopreq to tree");
-            println!("Waiting for tree.");
 
             // Join tree thread
             let tree_ret = thr_tree_handle.join().expect("failed to join tree");
@@ -195,16 +198,12 @@ impl Searcher {
             return None;
         }
 
-        println!("Waiting for search thread to join..");
-
         let ret = self
             .handle
             .take()
             .unwrap()
             .join()
             .expect("failed joining search thread");
-
-        println!("Search thread joined!");
 
         return Some(ret);
     }
@@ -213,7 +212,7 @@ impl Searcher {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::model::{self, mock::MockModel, Model};
+    use crate::model;
     use chess::ChessMove;
     use std::str::FromStr;
 
@@ -228,19 +227,15 @@ mod test {
     fn search_can_run_short() {
         let mut search = Searcher::new();
         let rx = search
-            .start(
-                Some(500),
-                model::make_ptr(MockModel::generate().expect("model gen failed")),
-                Position::new(),
-                1.0,
-                4,
-            )
+            .start(Some(500), model::mock(), Position::new(), 1.0, 4)
             .unwrap();
 
         loop {
             match rx.recv().expect("rx failed") {
                 SearchStatus::Done => break,
-                SearchStatus::Searching(stat) => stat.print(),
+                SearchStatus::Searching(stat) => {
+                    stat.print();
+                }
                 _ => (),
             }
         }
@@ -259,20 +254,14 @@ mod test {
         pos.make_move(ChessMove::from_str("g7g5").expect("move parse fail"));
 
         let mut search = Searcher::new();
-        let rx = search
-            .start(
-                Some(500),
-                model::make_ptr(MockModel::generate().expect("model gen failed")),
-                pos,
-                0.1,
-                4,
-            )
-            .unwrap();
+        let rx = search.start(Some(500), model::mock(), pos, 0.1, 4).unwrap();
 
         loop {
             match rx.recv().expect("rx failed") {
                 SearchStatus::Done => break,
-                SearchStatus::Searching(stat) => stat.print(),
+                SearchStatus::Searching(stat) => {
+                    stat.print();
+                }
                 _ => (),
             }
         }
@@ -299,23 +288,11 @@ mod test {
         let pos = Position::new();
 
         search
-            .start(
-                Some(200),
-                model::make_ptr(MockModel::generate().expect("model gen failed")),
-                pos.clone(),
-                1.0,
-                4,
-            )
+            .start(Some(200), model::mock(), pos.clone(), 1.0, 4)
             .unwrap();
 
         assert!(search
-            .start(
-                Some(200),
-                model::make_ptr(MockModel::generate().expect("model gen failed")),
-                pos,
-                1.0,
-                4
-            )
+            .start(Some(200), model::mock(), pos, 1.0, 4)
             .is_none());
 
         search.wait().expect("no tree returned");
@@ -327,15 +304,7 @@ mod test {
         let pos = Position::new();
 
         let mut search = Searcher::new();
-        let rx = search
-            .start(
-                Some(200),
-                model::make_ptr(MockModel::generate().expect("model gen failed")),
-                pos,
-                1.0,
-                4,
-            )
-            .unwrap();
+        let rx = search.start(Some(200), model::mock(), pos, 1.0, 4).unwrap();
 
         loop {
             match rx.recv().expect("rx failed") {

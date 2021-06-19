@@ -1,4 +1,4 @@
-use crate::model::{self, ModelPtr};
+use crate::model::{self, Model, Type};
 
 use crate::constants;
 use crate::game::Game;
@@ -37,10 +37,15 @@ impl Disk {
         })
     }
 
+    /// Gets the latest model path.
+    pub fn get_model_path(&self) -> PathBuf {
+        self.latest_path.clone()
+    }
+
     /// Loads the latest generation, if one is available.
     /// Returns Ok(Some(model)) if the model was loaded, Ok(None) if no model is present,
     /// or Err(e) if some other error occurred.
-    pub fn load_model(&self) -> Result<Option<ModelPtr>, Box<dyn Error>> {
+    pub fn load_model(&self) -> Result<Option<Model>, Box<dyn Error>> {
         Ok(model::load(&self.latest_path)?)
     }
 
@@ -63,22 +68,17 @@ impl Disk {
         // Create target generation dir.
         fs::create_dir_all(&gen_path)?;
 
-        fs_extra::move_items(
+        fs_extra::copy_items(
             &[&self.latest_path, &self.games_dir],
             gen_path,
             &fs_extra::dir::CopyOptions::new(),
         )?;
 
         // Regenerate games dir.
+        fs::remove_dir_all(&self.games_dir)?;
         fs::create_dir_all(&self.games_dir)?;
 
         Ok(cur)
-    }
-
-    /// Loads a model directly and writes it to the disk.
-    pub fn save_model(&mut self, md: ModelPtr) -> Result<(), Box<dyn Error>> {
-        model::save(&md, &self.latest_path)?;
-        Ok(())
     }
 
     /// Gets the path to the next game to be played.
@@ -102,7 +102,13 @@ impl Disk {
             }
 
             // Parse the game.
-            let gm = Game::load(&game_path)?;
+
+            let gm = match Game::load(&game_path) {
+                Ok(gm) => gm,
+                Err(e) => panic!("corrupted game file {}: {}", &game_path.display(), e),
+            };
+
+            //let gm = Game::load(&game_path)?;
 
             // Check the game was completed.
             if !gm.is_complete() {
@@ -135,7 +141,7 @@ impl Disk {
         let mut training_batches: Vec<TrainBatch> = Vec::new();
         let mut rng = thread_rng();
 
-        for _ in 0..constants::TRAINING_BATCH_COUNT {
+        for i in 0..constants::TRAINING_BATCH_COUNT {
             let mut tb = TrainBatch::new(constants::TRAINING_BATCH_SIZE);
 
             for _ in 0..constants::TRAINING_BATCH_SIZE {
@@ -154,7 +160,6 @@ impl Disk {
 mod test {
     use super::*;
     use chess::ChessMove;
-    use model::{mock::MockModel, Model};
     use std::str::FromStr;
 
     /// Returns a tempdir for mocking.
@@ -181,43 +186,12 @@ mod test {
         let d = Disk::new(&data_dir).expect("failed initializing disk");
 
         // Write a mock model to the latest path.
-        model::save(
-            &model::make_ptr(MockModel::generate().expect("model gen failed")),
-            &data_dir.join("model"),
-        )
-        .expect("model save failed");
+        model::generate(&data_dir.join("model"), Type::Mock).expect("model gen failed");
 
-        assert_eq!(
-            d.load_model()
-                .expect("failed loading model")
-                .unwrap()
-                .read()
-                .unwrap()
-                .get_type(),
-            "mock".to_string()
-        );
-    }
-
-    /// Tests the disk can save a model.
-    #[test]
-    fn disk_can_save_model() {
-        let data_dir = mock_data_dir();
-        let mut d = Disk::new(&data_dir).expect("failed initializing disk");
-
-        let mm = model::make_ptr(MockModel::generate().expect("model gen failed"));
-
-        d.save_model(mm).expect("model save failed");
-
-        // Write a mock model to the latest path.
-        assert_eq!(
-            model::load(&data_dir.join("model"))
-                .expect("model save failed")
-                .unwrap()
-                .read()
-                .unwrap()
-                .get_type(),
-            "mock".to_string()
-        );
+        assert!(matches!(
+            d.load_model().expect("failed loading model").unwrap(),
+            Model::Mock
+        ));
     }
 
     /// Tests the disk can archive a model.
@@ -226,9 +200,9 @@ mod test {
         let data_dir = mock_data_dir();
         let mut d = Disk::new(&data_dir).expect("failed initializing disk");
 
-        let mm = model::make_ptr(MockModel::generate().expect("model gen failed"));
+        // Write a mock model to the latest path.
+        model::generate(&d.get_model_path(), Type::Mock).expect("model gen failed");
 
-        d.save_model(mm).expect("model save failed");
         assert_eq!(d.archive_model().expect("archive model failed"), 0);
 
         assert!(data_dir.join("archive").join("generation_0").is_dir());
@@ -337,7 +311,7 @@ mod test {
 
         assert_eq!(batches.len(), constants::TRAINING_BATCH_COUNT);
 
-        for b in &batches {
+        for b in batches {
             assert_eq!(b.get_inner().get_size(), constants::TRAINING_BATCH_SIZE);
             assert_eq!(b.get_results(), &[1.0; constants::TRAINING_BATCH_SIZE]);
             assert_eq!(b.get_mcts(), &[0.0; constants::TRAINING_BATCH_SIZE * 4096]);

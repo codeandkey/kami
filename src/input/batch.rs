@@ -2,6 +2,7 @@
 use crate::model;
 use crate::position::Position;
 use chess::ChessMove;
+use serde::ser::{Serialize, SerializeStruct, Serializer};
 
 /// Manages a batch of inputs to the model.
 pub struct Batch {
@@ -81,6 +82,21 @@ impl Batch {
     /// Returns the batch headers input tensor.
     pub fn get_headers(&self) -> &[f32] {
         &self.headers
+    }
+}
+
+impl Serialize for Batch {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("batch", 5)?;
+
+        state.serialize_field("headers", &self.headers)?;
+        state.serialize_field("frames", &self.frames)?;
+        state.serialize_field("lmm", &self.lmm)?;
+
+        state.end()
     }
 }
 
