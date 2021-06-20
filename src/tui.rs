@@ -45,6 +45,7 @@ pub struct Tui {
     stop_flag: Arc<Mutex<bool>>,
     handle: Option<JoinHandle<()>>,
     exit_flag: Arc<Mutex<bool>>,
+    paused: Arc<Mutex<bool>>,
 }
 
 impl Tui {
@@ -58,6 +59,7 @@ impl Tui {
             nps_buf: Arc::new(Mutex::new(Vec::new())),
             stop_flag: Arc::new(Mutex::new(false)),
             exit_flag: Arc::new(Mutex::new(false)),
+            paused: Arc::new(Mutex::new(false)),
             handle: None,
         }
     }
@@ -69,6 +71,7 @@ impl Tui {
         let thr_score_buf = self.score_buf.clone();
         let thr_nps_buf = self.nps_buf.clone();
         let thr_stop_flag = self.stop_flag.clone();
+        let thr_paused = self.paused.clone();
         let thr_exit_flag = self.exit_flag.clone();
         let thr_current_pos = self.current_pos.clone();
 
@@ -109,7 +112,8 @@ impl Tui {
             let mut terminal = Terminal::new(backend).expect("failed initializing terminal");
 
             while !*thr_stop_flag.lock().unwrap() {
-                terminal
+                if !*thr_paused.lock().unwrap() {
+                    terminal
                     .draw(|f| {
                         // Compute layout areas
                         let rects = Layout::default()
@@ -455,6 +459,7 @@ impl Tui {
                         f.render_widget(nps_chart, nps_rect);
                     })
                     .expect("terminal draw failed");
+                }
 
                 // Process user input
                 match inp_rx.recv().expect("input rx failed") {
@@ -465,7 +470,17 @@ impl Tui {
                                 .unwrap()
                                 .push("Received exit request.".to_string());
                             *thr_exit_flag.lock().unwrap() = true;
-                        }
+                        },
+                        KeyCode::Char('p') => {
+                            let mut lock = thr_paused.lock().unwrap();
+                            *lock = !*lock;
+                            
+                            if *lock {
+                                thr_log_buf.lock().unwrap().push("Paused display".to_string());
+                            } else {
+                                thr_log_buf.lock().unwrap().push("Unpaused display".to_string());
+                            }
+                        },
                         _ => (),
                     },
                     Event::Tick => (),
