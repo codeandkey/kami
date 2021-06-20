@@ -28,7 +28,10 @@ use trainer::Trainer;
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Print program information
-    println!("========================== kami {} ==========================", env!("CARGO_PKG_VERSION"));
+    println!(
+        "========================== kami {} ==========================",
+        env!("CARGO_PKG_VERSION")
+    );
     println!("\tA chess engine powered by reinforcement learning");
     println!("\tJustin Stanley <jtst@iastate.edu>");
     println!("================================================================");

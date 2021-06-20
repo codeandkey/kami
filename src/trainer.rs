@@ -21,7 +21,10 @@ pub struct Trainer {
 
 impl Trainer {
     /// Creates a new trainer instance with the latest generation loaded.
-    pub fn new(diskmgr: Arc<Mutex<Disk>>, mut latest: Option<Model>) -> Result<Self, Box<dyn Error>> {
+    pub fn new(
+        diskmgr: Arc<Mutex<Disk>>,
+        mut latest: Option<Model>,
+    ) -> Result<Self, Box<dyn Error>> {
         // Load model, generate one if doesn't exist.
         let model_path = diskmgr.lock().unwrap().get_model_path();
 
@@ -294,7 +297,8 @@ mod test {
     /// Tests the trainer can start and shortly stop training.
     #[test]
     fn trainer_can_start_stop_training() {
-        let mut t = Trainer::new(mock_disk(), Some(Model::Mock)).expect("failed initializing trainer");
+        let mut t =
+            Trainer::new(mock_disk(), Some(Model::Mock)).expect("failed initializing trainer");
 
         t.start();
         std::thread::sleep(std::time::Duration::from_secs(3));
@@ -305,7 +309,8 @@ mod test {
     #[test]
     #[should_panic]
     fn trainer_no_start_twice() {
-        let mut t = Trainer::new(mock_disk(), Some(Model::Mock)).expect("failed initializing trainer");
+        let mut t =
+            Trainer::new(mock_disk(), Some(Model::Mock)).expect("failed initializing trainer");
 
         t.start();
         t.start();
@@ -319,7 +324,8 @@ mod test {
     /// Tests the trainer cannot stop without starting.
     #[test]
     fn trainer_stop_without_start() {
-        let mut t = Trainer::new(mock_disk(), Some(Model::Mock)).expect("failed initializing trainer");
+        let mut t =
+            Trainer::new(mock_disk(), Some(Model::Mock)).expect("failed initializing trainer");
 
         assert!(t.wait().is_err());
     }

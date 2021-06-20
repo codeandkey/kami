@@ -102,7 +102,10 @@ impl Game {
 
             match idx % 2 {
                 0 => mcts[mv.get_source().to_index() * 64 + mv.get_dest().to_index()] = *val,
-                1 => mcts[(63 - mv.get_source().to_index()) * 64 + (63 - mv.get_dest().to_index())] = *val,
+                1 => {
+                    mcts[(63 - mv.get_source().to_index()) * 64 + (63 - mv.get_dest().to_index())] =
+                        *val
+                }
                 _ => panic!("the universe broke"),
             }
         }

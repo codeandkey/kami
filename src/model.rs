@@ -6,7 +6,7 @@ use std::error::Error;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
-use std::sync::{Arc};
+use std::sync::Arc;
 
 #[cfg(feature = "tch")]
 use tch::{CModule, Device, IValue, Tensor};

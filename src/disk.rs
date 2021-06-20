@@ -159,9 +159,9 @@ impl Disk {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::model::Type;
     use chess::ChessMove;
     use std::str::FromStr;
-    use crate::model::Type;
 
     /// Returns a tempdir for mocking.
     fn mock_data_dir() -> PathBuf {

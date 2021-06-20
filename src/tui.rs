@@ -1,6 +1,6 @@
+use crate::constants;
 use crate::position::Position;
 use crate::searcher::SearchStatus;
-use crate::constants;
 
 use std::io::{stdout, Write};
 use std::sync::mpsc::channel;
@@ -114,351 +114,369 @@ impl Tui {
             while !*thr_stop_flag.lock().unwrap() {
                 if !*thr_paused.lock().unwrap() {
                     terminal
-                    .draw(|f| {
-                        // Compute layout areas
-                        let rects = Layout::default()
-                            .direction(Direction::Horizontal)
-                            .constraints([Constraint::Length(54), Constraint::Percentage(100)])
-                            .split(f.size());
+                        .draw(|f| {
+                            // Compute layout areas
+                            let rects = Layout::default()
+                                .direction(Direction::Horizontal)
+                                .constraints([Constraint::Length(54), Constraint::Percentage(100)])
+                                .split(f.size());
 
-                        let tree_rect = rects[0];
+                            let tree_rect = rects[0];
 
-                        let rects = Layout::default()
-                            .direction(Direction::Horizontal)
-                            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-                            .split(rects[1]);
+                            let rects = Layout::default()
+                                .direction(Direction::Horizontal)
+                                .constraints([
+                                    Constraint::Percentage(50),
+                                    Constraint::Percentage(50),
+                                ])
+                                .split(rects[1]);
 
-                        let (center_rect, charts_rect) = (rects[0], rects[1]);
+                            let (center_rect, charts_rect) = (rects[0], rects[1]);
 
-                        let rects = Layout::default()
-                            .direction(Direction::Vertical)
-                            .constraints([Constraint::Ratio(1, 3), Constraint::Ratio(1, 3), Constraint::Ratio(1, 3)])
-                            .split(charts_rect);
+                            let rects = Layout::default()
+                                .direction(Direction::Vertical)
+                                .constraints([
+                                    Constraint::Ratio(1, 3),
+                                    Constraint::Ratio(1, 3),
+                                    Constraint::Ratio(1, 3),
+                                ])
+                                .split(charts_rect);
 
-                        let nps_rect = rects[0];
-                        let mcts_rect = rects[1];
-                        let log_rect = rects[2];
+                            let nps_rect = rects[0];
+                            let mcts_rect = rects[1];
+                            let log_rect = rects[2];
 
-                        let rects = Layout::default()
-                            .direction(Direction::Vertical)
-                            .constraints([
-                                Constraint::Length(5),
-                                Constraint::Length(num_cpus::get() as u16 + 2),
-                                Constraint::Percentage(100),
-                            ])
-                            .split(center_rect);
+                            let rects = Layout::default()
+                                .direction(Direction::Vertical)
+                                .constraints([
+                                    Constraint::Length(5),
+                                    Constraint::Length(num_cpus::get() as u16 + 2),
+                                    Constraint::Percentage(100),
+                                ])
+                                .split(center_rect);
 
-                        let summary_rect = rects[0];
-                        let workers_rect = rects[1];
-                        let board_rect = rects[2];
+                            let summary_rect = rects[0];
+                            let workers_rect = rects[1];
+                            let board_rect = rects[2];
 
-                        // Render tree status, if there is one.
-                        let search_status = thr_status.lock().unwrap().clone();
+                            // Render tree status, if there is one.
+                            let search_status = thr_status.lock().unwrap().clone();
 
-                        let header_cells = ["Action", "N_normalized", "N_actual", "P", "Q"]
-                            .iter()
-                            .map(|h| Cell::from(*h).style(Style::default().fg(Color::Blue)));
+                            let header_cells = ["Action", "N_normalized", "N_actual", "P", "Q"]
+                                .iter()
+                                .map(|h| Cell::from(*h).style(Style::default().fg(Color::Blue)));
 
-                        let header = Row::new(header_cells).height(1).bottom_margin(1);
+                            let header = Row::new(header_cells).height(1).bottom_margin(1);
 
-                        let mut total_nn = 0.0;
+                            let mut total_nn = 0.0;
 
-                        let nodes = match &search_status {
-                            SearchStatus::Searching(s) => match &s.tree {
-                                Some(t) => {
-                                    total_nn = t.total_nn;
-                                    t.nodes.clone()
+                            let nodes = match &search_status {
+                                SearchStatus::Searching(s) => match &s.tree {
+                                    Some(t) => {
+                                        total_nn = t.total_nn;
+                                        t.nodes.clone()
+                                    }
+                                    None => Vec::new(),
+                                },
+                                SearchStatus::Stopping => Vec::new(),
+                                SearchStatus::Done => Vec::new(),
+                            };
+
+                            let rows = nodes.iter().map(|nd| {
+                                Row::new([
+                                    nd.action.clone(),
+                                    format!("{:.1}%", nd.nn * 100.0 / total_nn,),
+                                    format!("{}", nd.n),
+                                    format!("{:.2}%", nd.p_pct * 100.0),
+                                    format!("{:+.2}", nd.q),
+                                ])
+                            });
+
+                            let t = Table::new(rows)
+                                .header(header)
+                                .block(Block::default().borders(Borders::ALL).title("Tree"))
+                                .widths(&[
+                                    Constraint::Length(10),
+                                    Constraint::Length(14),
+                                    Constraint::Length(10),
+                                    Constraint::Length(8),
+                                    Constraint::Length(8),
+                                ]);
+
+                            f.render_widget(t, tree_rect);
+
+                            // Render log
+
+                            let log_lines = thr_log_buf.lock().unwrap().clone();
+                            let log_lines = log_lines[log_lines
+                                .len()
+                                .checked_sub((log_rect.height - 2) as usize)
+                                .unwrap_or(0)..]
+                                .join("\n");
+
+                            let lg = Paragraph::new(log_lines)
+                                .block(Block::default().title("Log").borders(Borders::ALL))
+                                .style(Style::default().fg(Color::White).bg(Color::Black))
+                                .wrap(Wrap { trim: true });
+
+                            f.render_widget(lg, log_rect);
+
+                            // Render board status
+                            let board_lines = thr_current_pos.lock().unwrap().to_string_pretty();
+
+                            // Center vertically
+                            let board_lines =
+                                (0..(board_rect.height / 2).checked_sub(4).unwrap_or(0))
+                                    .map(|_| "\n".to_string())
+                                    .collect::<Vec<String>>()
+                                    .join("")
+                                    + &board_lines;
+
+                            let board_widget = Paragraph::new(board_lines)
+                                .block(Block::default().title("Board"))
+                                .style(Style::default().fg(Color::White).bg(Color::Black))
+                                .alignment(Alignment::Center)
+                                .wrap(Wrap { trim: true });
+
+                            f.render_widget(board_widget, board_rect);
+
+                            // Render perf summary
+                            let summary_lines = format!(
+                                "Searcher: {}\nAvg. noderate: {}\nAvg. batchrate: {}\n",
+                                match &search_status {
+                                    SearchStatus::Searching(stat) =>
+                                        format!("searching {}", stat.rootfen),
+                                    SearchStatus::Stopping => "stopping".to_string(),
+                                    SearchStatus::Done => "stopped".to_string(),
+                                },
+                                match &search_status {
+                                    SearchStatus::Searching(stat) => {
+                                        format!(
+                                            "{:.1}",
+                                            (stat
+                                                .workers
+                                                .iter()
+                                                .map(|w| w.total_nodes as f64)
+                                                .sum::<f64>()
+                                                / stat.elapsed_ms as f64)
+                                                * 1000.0
+                                        )
+                                    }
+                                    _ => "N/A".to_string(),
+                                },
+                                match &search_status {
+                                    SearchStatus::Searching(stat) => {
+                                        format!(
+                                            "{:.1}",
+                                            (stat
+                                                .workers
+                                                .iter()
+                                                .map(|w| w.batch_sizes.len() as f64)
+                                                .sum::<f64>()
+                                                / stat.elapsed_ms as f64)
+                                                * 1000.0
+                                        )
+                                    }
+                                    _ => "N/A".to_string(),
                                 }
-                                None => Vec::new(),
-                            },
-                            SearchStatus::Stopping => Vec::new(),
-                            SearchStatus::Done => Vec::new(),
-                        };
-
-                        let rows = nodes.iter().map(|nd| {
-                            Row::new([
-                                nd.action.clone(),
-                                format!("{:.1}%", nd.nn * 100.0 / total_nn,),
-                                format!("{}", nd.n),
-                                format!("{:.2}%", nd.p_pct * 100.0),
-                                format!("{:+.2}", nd.q),
-                            ])
-                        });
-
-                        let t = Table::new(rows)
-                            .header(header)
-                            .block(Block::default().borders(Borders::ALL).title("Tree"))
-                            .widths(&[
-                                Constraint::Length(10),
-                                Constraint::Length(14),
-                                Constraint::Length(10),
-                                Constraint::Length(8),
-                                Constraint::Length(8),
-                            ]);
-
-                        f.render_widget(t, tree_rect);
-
-                        // Render log
-
-                        let log_lines = thr_log_buf.lock().unwrap().clone();
-                        let log_lines = log_lines[log_lines
-                            .len()
-                            .checked_sub((log_rect.height - 2) as usize)
-                            .unwrap_or(0)..]
-                            .join("\n");
-
-                        let lg = Paragraph::new(log_lines)
-                            .block(Block::default().title("Log").borders(Borders::ALL))
-                            .style(Style::default().fg(Color::White).bg(Color::Black))
-                            .wrap(Wrap { trim: true });
-
-                        f.render_widget(lg, log_rect);
-
-                        // Render board status
-                        let board_lines = thr_current_pos.lock().unwrap().to_string_pretty();
-
-                        // Center vertically
-                        let board_lines = (0..(board_rect.height / 2).checked_sub(4).unwrap_or(0))
-                            .map(|_| "\n".to_string())
-                            .collect::<Vec<String>>()
-                            .join("")
-                            + &board_lines;
-
-                        let board_widget = Paragraph::new(board_lines)
-                            .block(Block::default().title("Board"))
-                            .style(Style::default().fg(Color::White).bg(Color::Black))
-                            .alignment(Alignment::Center)
-                            .wrap(Wrap { trim: true });
-
-                        f.render_widget(board_widget, board_rect);
-
-                        // Render perf summary
-                        let summary_lines = format!(
-                            "Searcher: {}\nAvg. noderate: {}\nAvg. batchrate: {}\n",
-                            match &search_status {
-                                SearchStatus::Searching(stat) =>
-                                    format!("searching {}", stat.rootfen),
-                                SearchStatus::Stopping => "stopping".to_string(),
-                                SearchStatus::Done => "stopped".to_string(),
-                            },
-                            match &search_status {
-                                SearchStatus::Searching(stat) => {
-                                    format!(
-                                        "{:.1}",
-                                        (stat
-                                            .workers
-                                            .iter()
-                                            .map(|w| w.total_nodes as f64)
-                                            .sum::<f64>()
-                                            / stat.elapsed_ms as f64)
-                                            * 1000.0
-                                    )
-                                }
-                                _ => "N/A".to_string(),
-                            },
-                            match &search_status {
-                                SearchStatus::Searching(stat) => {
-                                    format!(
-                                        "{:.1}",
-                                        (stat
-                                            .workers
-                                            .iter()
-                                            .map(|w| w.batch_sizes.len() as f64)
-                                            .sum::<f64>()
-                                            / stat.elapsed_ms as f64)
-                                            * 1000.0
-                                    )
-                                }
-                                _ => "N/A".to_string(),
-                            }
-                        );
-
-                        let summary_widget = Paragraph::new(summary_lines)
-                            .block(Block::default().title("Performance").borders(Borders::ALL))
-                            .style(Style::default().fg(Color::White).bg(Color::Black))
-                            .wrap(Wrap { trim: true });
-
-                        f.render_widget(summary_widget, summary_rect);
-
-                        // Render search perf stats
-                        let perf_header_cells = ["ID", "status", "nodes", "batches"]
-                            .iter()
-                            .map(|h| Cell::from(*h).style(Style::default().fg(Color::Red)));
-
-                        let perf_header = Row::new(perf_header_cells).height(1).bottom_margin(1);
-
-                        let workers = match &search_status {
-                            SearchStatus::Searching(stat) => stat.workers.clone(),
-                            _ => Vec::new(),
-                        };
-
-                        let perf_rows = workers.iter().enumerate().map(|(id, w)| {
-                            Row::new([
-                                id.to_string(),
-                                w.state.clone(),
-                                w.total_nodes.to_string(),
-                                w.batch_sizes.len().to_string(),
-                            ])
-                        });
-
-                        let t = Table::new(perf_rows)
-                            .header(perf_header)
-                            .block(Block::default().borders(Borders::ALL).title("Workers"))
-                            .widths(&[
-                                Constraint::Length(4),
-                                Constraint::Length(16),
-                                Constraint::Length(8),
-                                Constraint::Length(8),
-                            ]);
-
-                        f.render_widget(t, workers_rect);
-
-                        // Render search score
-                        let mut mcts_score_data = thr_score_buf
-                            .lock()
-                            .unwrap()
-                            .iter()
-                            .enumerate()
-                            .map(|(a, b)| (a as f64, *b))
-                            .collect::<Vec<(f64, f64)>>();
-
-                        let last_ply = mcts_score_data.len() as i32 - 1;
-
-                        if mcts_score_data.len() > 0 {
-                            mcts_score_data =
-                                Tui::interpolate(mcts_score_data, mcts_rect.width as usize);
-                        }
-
-                        let score_dataset = Dataset::default()
-                            .name("MCTS")
-                            .marker(symbols::Marker::Braille)
-                            .style(Style::default().fg(Color::Cyan))
-                            .data(&mcts_score_data);
-
-                        let baseline_data: Vec<(f64, f64)> = (0..mcts_rect.width).map(|x| (x as f64 / mcts_rect.width as f64 * last_ply as f64, 0.0f64)).collect();
-
-                        let baseline_dataset = Dataset::default()
-                            .name("baseline")
-                            .marker(symbols::Marker::Braille)
-                            .style(Style::default().fg(Color::Gray))
-                            .data(&baseline_data);
-
-                        let sc = Chart::new(vec![score_dataset, baseline_dataset])
-                            .block(
-                                Block::default().title(Span::styled(
-                                    "Value history",
-                                    Style::default()
-                                        .fg(Color::Cyan)
-                                        .add_modifier(Modifier::BOLD),
-                                )),
-                            )
-                            .x_axis(
-                                Axis::default()
-                                    .title("ply")
-                                    .style(Style::default().fg(Color::Gray))
-                                    .bounds([0.0, last_ply as f64])
-                                    .labels(
-                                        [0.0, (last_ply / 2) as f32, last_ply as f32]
-                                            .iter()
-                                            .cloned()
-                                            .map(|x| Span::from(x.to_string()))
-                                            .collect(),
-                                    ),
-                            )
-                            .y_axis(
-                                Axis::default()
-                                    .title("value")
-                                    .style(Style::default().fg(Color::Gray))
-                                    .bounds([-1.0, 1.0])
-                                    .labels(
-                                        ["-1.0", "0.0", "1.0"]
-                                            .iter()
-                                            .cloned()
-                                            .map(Span::from)
-                                            .collect(),
-                                    ),
                             );
 
-                        f.render_widget(sc, mcts_rect);
+                            let summary_widget = Paragraph::new(summary_lines)
+                                .block(Block::default().title("Performance").borders(Borders::ALL))
+                                .style(Style::default().fg(Color::White).bg(Color::Black))
+                                .wrap(Wrap { trim: true });
 
-                        // Render nps history
-                        let mut nps_data_len = thr_nps_buf.lock().unwrap().len();
-                        let nps_data: Vec<f64> = thr_nps_buf
-                            .lock()
-                            .unwrap()
-                            .iter()
-                            .cloned()
-                            .collect();
-                        
-                        let nps_data: Vec<(f64, f64)> = nps_data
-                            [nps_data.len().checked_sub(nps_rect.width as usize).unwrap_or(0)..]
-                            .iter()
-                            .cloned()
-                            .enumerate()
-                            .map(|(x, y)| (x as f64, y as f64))
-                            .collect();
+                            f.render_widget(summary_widget, summary_rect);
 
-                        let nps_data_len = nps_data.len();
+                            // Render search perf stats
+                            let perf_header_cells = ["ID", "status", "nodes", "batches"]
+                                .iter()
+                                .map(|h| Cell::from(*h).style(Style::default().fg(Color::Red)));
 
-                        let nps_dataset = Dataset::default()
-                            .name("NPS")
-                            .marker(symbols::Marker::Braille)
-                            .style(Style::default().fg(Color::Blue))
-                            .data(&nps_data);
+                            let perf_header =
+                                Row::new(perf_header_cells).height(1).bottom_margin(1);
 
-                        let mut nps_min = f64::MAX;
-                        let mut nps_max = f64::MIN;
+                            let workers = match &search_status {
+                                SearchStatus::Searching(stat) => stat.workers.clone(),
+                                _ => Vec::new(),
+                            };
 
-                        for (_, y) in &nps_data {
-                            if *y < nps_min {
-                                nps_min = *y;
+                            let perf_rows = workers.iter().enumerate().map(|(id, w)| {
+                                Row::new([
+                                    id.to_string(),
+                                    w.state.clone(),
+                                    w.total_nodes.to_string(),
+                                    w.batch_sizes.len().to_string(),
+                                ])
+                            });
+
+                            let t = Table::new(perf_rows)
+                                .header(perf_header)
+                                .block(Block::default().borders(Borders::ALL).title("Workers"))
+                                .widths(&[
+                                    Constraint::Length(4),
+                                    Constraint::Length(16),
+                                    Constraint::Length(8),
+                                    Constraint::Length(8),
+                                ]);
+
+                            f.render_widget(t, workers_rect);
+
+                            // Render search score
+                            let mut mcts_score_data = thr_score_buf
+                                .lock()
+                                .unwrap()
+                                .iter()
+                                .enumerate()
+                                .map(|(a, b)| (a as f64, *b))
+                                .collect::<Vec<(f64, f64)>>();
+
+                            let last_ply = mcts_score_data.len() as i32 - 1;
+
+                            if mcts_score_data.len() > 0 {
+                                mcts_score_data =
+                                    Tui::interpolate(mcts_score_data, mcts_rect.width as usize);
                             }
 
-                            if *y > nps_max {
-                                nps_max = *y;
+                            let score_dataset = Dataset::default()
+                                .name("MCTS")
+                                .marker(symbols::Marker::Braille)
+                                .style(Style::default().fg(Color::Cyan))
+                                .data(&mcts_score_data);
+
+                            let baseline_data: Vec<(f64, f64)> = (0..mcts_rect.width)
+                                .map(|x| {
+                                    (x as f64 / mcts_rect.width as f64 * last_ply as f64, 0.0f64)
+                                })
+                                .collect();
+
+                            let baseline_dataset = Dataset::default()
+                                .name("baseline")
+                                .marker(symbols::Marker::Braille)
+                                .style(Style::default().fg(Color::Gray))
+                                .data(&baseline_data);
+
+                            let sc = Chart::new(vec![score_dataset, baseline_dataset])
+                                .block(
+                                    Block::default().title(Span::styled(
+                                        "Value history",
+                                        Style::default()
+                                            .fg(Color::Cyan)
+                                            .add_modifier(Modifier::BOLD),
+                                    )),
+                                )
+                                .x_axis(
+                                    Axis::default()
+                                        .title("ply")
+                                        .style(Style::default().fg(Color::Gray))
+                                        .bounds([0.0, last_ply as f64])
+                                        .labels(
+                                            [0.0, (last_ply / 2) as f32, last_ply as f32]
+                                                .iter()
+                                                .cloned()
+                                                .map(|x| Span::from(x.to_string()))
+                                                .collect(),
+                                        ),
+                                )
+                                .y_axis(
+                                    Axis::default()
+                                        .title("value")
+                                        .style(Style::default().fg(Color::Gray))
+                                        .bounds([-1.0, 1.0])
+                                        .labels(
+                                            ["-1.0", "0.0", "1.0"]
+                                                .iter()
+                                                .cloned()
+                                                .map(Span::from)
+                                                .collect(),
+                                        ),
+                                );
+
+                            f.render_widget(sc, mcts_rect);
+
+                            // Render nps history
+                            let mut nps_data_len = thr_nps_buf.lock().unwrap().len();
+                            let nps_data: Vec<f64> =
+                                thr_nps_buf.lock().unwrap().iter().cloned().collect();
+
+                            let nps_data: Vec<(f64, f64)> = nps_data[nps_data
+                                .len()
+                                .checked_sub(nps_rect.width as usize)
+                                .unwrap_or(0)..]
+                                .iter()
+                                .cloned()
+                                .enumerate()
+                                .map(|(x, y)| (x as f64, y as f64))
+                                .collect();
+
+                            let nps_data_len = nps_data.len();
+
+                            let nps_dataset = Dataset::default()
+                                .name("NPS")
+                                .marker(symbols::Marker::Braille)
+                                .style(Style::default().fg(Color::Blue))
+                                .data(&nps_data);
+
+                            let mut nps_min = f64::MAX;
+                            let mut nps_max = f64::MIN;
+
+                            for (_, y) in &nps_data {
+                                if *y < nps_min {
+                                    nps_min = *y;
+                                }
+
+                                if *y > nps_max {
+                                    nps_max = *y;
+                                }
                             }
-                        }
 
-                        let nps_backtime = constants::SEARCH_STATUS_RATE * nps_rect.width as u64;
+                            let nps_backtime =
+                                constants::SEARCH_STATUS_RATE * nps_rect.width as u64;
 
-                        let nps_chart = Chart::new(vec![nps_dataset])
-                            .block(
-                                Block::default().title(Span::styled(
-                                    "NPS history",
-                                    Style::default()
-                                        .fg(Color::Cyan)
-                                        .add_modifier(Modifier::BOLD),
-                                )),
-                            )
-                            .x_axis(
-                                Axis::default()
-                                    .style(Style::default().fg(Color::Gray))
-                                    .bounds([0.0, nps_data_len as f64])
-                                    .labels(
-                                        [format!("-{} ms", nps_backtime), "now".to_string()]
-                                            .iter()
-                                            .cloned()
-                                            .map(Span::from)
-                                            .collect()
-                                    )
-                            )
-                            .y_axis(
-                                Axis::default()
-                                    .title("nodes/s")
-                                    .style(Style::default().fg(Color::Gray))
-                                    .bounds([nps_min * 0.75, nps_max * 1.25])
-                                    .labels(
-                                        [nps_min * 0.75, nps_min + 0.25 * (nps_max-nps_min), nps_min + 0.5 * (nps_max-nps_min), nps_min + 0.75 * (nps_max-nps_min), nps_max * 1.25]
+                            let nps_chart = Chart::new(vec![nps_dataset])
+                                .block(
+                                    Block::default().title(Span::styled(
+                                        "NPS history",
+                                        Style::default()
+                                            .fg(Color::Cyan)
+                                            .add_modifier(Modifier::BOLD),
+                                    )),
+                                )
+                                .x_axis(
+                                    Axis::default()
+                                        .style(Style::default().fg(Color::Gray))
+                                        .bounds([0.0, nps_data_len as f64])
+                                        .labels(
+                                            [format!("-{} ms", nps_backtime), "now".to_string()]
+                                                .iter()
+                                                .cloned()
+                                                .map(Span::from)
+                                                .collect(),
+                                        ),
+                                )
+                                .y_axis(
+                                    Axis::default()
+                                        .title("nodes/s")
+                                        .style(Style::default().fg(Color::Gray))
+                                        .bounds([nps_min * 0.75, nps_max * 1.25])
+                                        .labels(
+                                            [
+                                                nps_min * 0.75,
+                                                nps_min + 0.25 * (nps_max - nps_min),
+                                                nps_min + 0.5 * (nps_max - nps_min),
+                                                nps_min + 0.75 * (nps_max - nps_min),
+                                                nps_max * 1.25,
+                                            ]
                                             .iter()
                                             .cloned()
                                             .map(|x| Span::from(format!("{}", x as usize)))
-                                            .collect()
-                                    ),
-                            );
+                                            .collect(),
+                                        ),
+                                );
 
-                        f.render_widget(nps_chart, nps_rect);
-                    })
-                    .expect("terminal draw failed");
+                            f.render_widget(nps_chart, nps_rect);
+                        })
+                        .expect("terminal draw failed");
                 }
 
                 // Process user input
@@ -470,17 +488,23 @@ impl Tui {
                                 .unwrap()
                                 .push("Received exit request.".to_string());
                             *thr_exit_flag.lock().unwrap() = true;
-                        },
+                        }
                         KeyCode::Char('p') => {
                             let mut lock = thr_paused.lock().unwrap();
                             *lock = !*lock;
-                            
+
                             if *lock {
-                                thr_log_buf.lock().unwrap().push("Paused display".to_string());
+                                thr_log_buf
+                                    .lock()
+                                    .unwrap()
+                                    .push("Paused display".to_string());
                             } else {
-                                thr_log_buf.lock().unwrap().push("Unpaused display".to_string());
+                                thr_log_buf
+                                    .lock()
+                                    .unwrap()
+                                    .push("Unpaused display".to_string());
                             }
-                        },
+                        }
                         _ => (),
                     },
                     Event::Tick => (),
