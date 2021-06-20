@@ -150,7 +150,7 @@ impl Tui {
                                 .direction(Direction::Vertical)
                                 .constraints([
                                     Constraint::Length(5),
-                                    Constraint::Length(num_cpus::get() as u16 + 2),
+                                    Constraint::Length(num_cpus::get() as u16 + 4),
                                     Constraint::Percentage(100),
                                 ])
                                 .split(center_rect);
@@ -395,7 +395,6 @@ impl Tui {
                             f.render_widget(sc, mcts_rect);
 
                             // Render nps history
-                            let mut nps_data_len = thr_nps_buf.lock().unwrap().len();
                             let nps_data: Vec<f64> =
                                 thr_nps_buf.lock().unwrap().iter().cloned().collect();
 
