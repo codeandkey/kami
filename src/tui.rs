@@ -199,7 +199,7 @@ impl Tui {
                         let log_lines = thr_log_buf.lock().unwrap().clone();
                         let log_lines = log_lines[log_lines
                             .len()
-                            .checked_sub(log_rect.height as usize)
+                            .checked_sub((log_rect.height - 2) as usize)
                             .unwrap_or(0)..]
                             .join("\n");
 
@@ -331,7 +331,15 @@ impl Tui {
                             .style(Style::default().fg(Color::Cyan))
                             .data(&mcts_score_data);
 
-                        let sc = Chart::new(vec![score_dataset])
+                        let baseline_data: Vec<(f64, f64)> = (0..mcts_rect.width).map(|x| (x as f64 / mcts_rect.width as f64 * last_ply as f64, 0.0f64)).collect();
+
+                        let baseline_dataset = Dataset::default()
+                            .name("baseline")
+                            .marker(symbols::Marker::Braille)
+                            .style(Style::default().fg(Color::Gray))
+                            .data(&baseline_data);
+
+                        let sc = Chart::new(vec![score_dataset, baseline_dataset])
                             .block(
                                 Block::default().title(Span::styled(
                                     "Value history",
