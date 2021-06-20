@@ -125,12 +125,7 @@ impl Trainer {
                                 .expect("unexpected recv fail from search status rx");
 
                             let will_stop = matches!(status, SearchStatus::Done);
-
-                            if let SearchStatus::Searching(stat) = &status {
-                                let nodes: usize = stat.workers.iter().map(|w| w.total_nodes).sum();
-                                tui.push_nps((nodes as f64 / stat.elapsed_ms as f64) * 1000.0);
-                            }
-
+                            
                             tui.push_status(status);
 
                             if will_stop {

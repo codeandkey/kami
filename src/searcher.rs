@@ -24,6 +24,10 @@ pub struct Status {
     pub workers: Vec<worker::Status>,
     pub elapsed_ms: u64,
     pub rootfen: String,
+    pub total_nodes: usize,
+    pub total_batches: usize,
+    pub nps: f32,
+    pub bps: f32,
 }
 
 impl Status {
@@ -147,7 +151,10 @@ impl Searcher {
                     .map(|w| w.get_status())
                     .collect();
 
-                let total_nodes: usize = worker_status.iter().map(|w| w.total_nodes).sum();
+                let (total_nodes, total_batches) = worker_status
+                    .iter()
+                    .map(|w| (w.total_nodes, w.batch_sizes.len()))
+                    .fold((0, 0), |(a1, a2), (n, b)| (a1 + n, a2 + b));
 
                 // Send status to clients
                 let _ = search_status_tx.send(SearchStatus::Searching(Status {
@@ -155,6 +162,10 @@ impl Searcher {
                     tree: tree_status,
                     rootfen: thr_rootfen.clone(),
                     workers: worker_status,
+                    total_nodes: total_nodes,
+                    total_batches: total_batches,
+                    nps: (total_nodes as f32 / (elapsed + 1) as f32) * 1000.0,
+                    bps: (total_batches as f32 / (elapsed + 1) as f32) * 1000.0,
                 }));
 
                 if let Some(t) = thr_stime {

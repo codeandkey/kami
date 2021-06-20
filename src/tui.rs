@@ -22,7 +22,7 @@ use tui::{
     symbols,
     text::Span,
     widgets::{
-        Axis, Block, Borders, Cell, Chart, Dataset, GraphType, Paragraph, Row, Table, TableState,
+        Axis, Block, Borders, Cell, Chart, Dataset, GraphType, Paragraph, Row, Table, TableState, Gauge,
         Wrap,
     },
     Terminal,
@@ -111,6 +111,8 @@ impl Tui {
             let backend = CrosstermBackend::new(stdout);
             let mut terminal = Terminal::new(backend).expect("failed initializing terminal");
 
+            let mut nps_history: Vec<f64> = Vec::new();
+
             while !*thr_stop_flag.lock().unwrap() {
                 if !*thr_paused.lock().unwrap() {
                     terminal
@@ -152,12 +154,14 @@ impl Tui {
                                     Constraint::Length(5),
                                     Constraint::Length(num_cpus::get() as u16 + 4),
                                     Constraint::Percentage(100),
+                                    Constraint::Length(3),
                                 ])
                                 .split(center_rect);
 
                             let summary_rect = rects[0];
                             let workers_rect = rects[1];
                             let board_rect = rects[2];
+                            let prog_rect = rects[3];
 
                             // Render tree status, if there is one.
                             let search_status = thr_status.lock().unwrap().clone();
@@ -322,6 +326,33 @@ impl Tui {
 
                             f.render_widget(t, workers_rect);
 
+                            // Render search progress
+                            let mut prog_rect = board_rect.clone();
+
+                            prog_rect.y = prog_rect.y + prog_rect.height - 2;
+                            prog_rect.height = 2;
+
+                            let prog_total_nodes = match &search_status {
+                                SearchStatus::Searching(stat) => stat.total_nodes,
+                                _ => 0,
+                            };
+
+                            let label = format!("{}/{}", prog_total_nodes, constants::SEARCH_MAXNODES);
+
+                            let prog_widget = Gauge::default()
+                                .block(Block::default().title("Progress"))
+                                .gauge_style(
+                                    Style::default()
+                                        .fg(Color::Green)
+                                        .bg(Color::Black)
+                                        .add_modifier(Modifier::BOLD),
+                                )
+                                .percent((prog_total_nodes as f32 * 100.0 / constants::SEARCH_MAXNODES as f32) as u16)
+                                .label(label)
+                                .use_unicode(true);
+                            
+                            f.render_widget(prog_widget, prog_rect);
+
                             // Render search score
                             let mut mcts_score_data = thr_score_buf
                                 .lock()
@@ -395,13 +426,21 @@ impl Tui {
                             f.render_widget(sc, mcts_rect);
 
                             // Render nps history
-                            let nps_data: Vec<f64> =
-                                thr_nps_buf.lock().unwrap().iter().cloned().collect();
 
-                            let nps_data: Vec<(f64, f64)> = nps_data[nps_data
+                            if let SearchStatus::Searching(stat) = &search_status {
+                                nps_history.push(stat.nps as f64);
+                            }
+
+                            let disp_frames = nps_history
                                 .len()
                                 .checked_sub(nps_rect.width as usize)
-                                .unwrap_or(0)..]
+                                .unwrap_or(0);
+
+                            if disp_frames > 0 {
+                                nps_history.drain(0..disp_frames);
+                            }
+
+                            let nps_data: Vec<(f64, f64)> = nps_history
                                 .iter()
                                 .cloned()
                                 .enumerate()
@@ -570,11 +609,6 @@ impl Tui {
     /// Adds a score to the TUI score buffer.
     pub fn push_score(&self, score: f64) {
         self.score_buf.lock().unwrap().push(score);
-    }
-
-    /// Adds an NPS to the TUI nps buffer.
-    pub fn push_nps(&self, nps: f64) {
-        self.nps_buf.lock().unwrap().push(nps);
     }
 
     /// Sets the current position.

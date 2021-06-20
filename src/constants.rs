@@ -1,7 +1,7 @@
 /// Several configuration constants for the search.
 
 pub const TRAINING_SET_SIZE: usize = 8; // number of games played per generation
-pub const SEARCH_TIME: usize = 2500; // milliseconds per move
+pub const SEARCH_TIME: usize = 10000; // milliseconds per move (if node target not reached)
 pub const SEARCH_MAXNODES: usize = 12000; // maximum nodes searched per move
 pub const SEARCH_STATUS_RATE: u64 = 100; // milliseconds between search status reports
 pub const TEMPERATURE: f64 = 1.0; // MCTS initial temperature
