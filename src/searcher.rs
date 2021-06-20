@@ -113,12 +113,11 @@ impl Searcher {
                 thr_workers.lock().unwrap().push(new_worker);
             }
 
-            const TIMESTEP: u64 = 100;
             let mut elapsed: u64;
             let mut start_point = std::time::SystemTime::now();
 
             loop {
-                std::thread::sleep(Duration::from_millis(TIMESTEP));
+                std::thread::sleep(Duration::from_millis(constants::SEARCH_STATUS_RATE));
                 elapsed = start_point.elapsed().unwrap().as_millis() as u64;
 
                 // Get tree status

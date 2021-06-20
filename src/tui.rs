@@ -1,6 +1,6 @@
 use crate::position::Position;
 use crate::searcher::SearchStatus;
-
+use crate::constants;
 
 use std::io::{stdout, Write};
 use std::sync::mpsc::channel;
@@ -34,10 +34,12 @@ enum Event<I> {
 }
 
 const TUI_TICK_RATE: u64 = 100; // 10 FPS
+const NPS_HIST_MS: usize = 5000; // milliseconds of NPS to show in graph
 
 pub struct Tui {
     status: Arc<Mutex<SearchStatus>>,
     score_buf: Arc<Mutex<Vec<f64>>>,
+    nps_buf: Arc<Mutex<Vec<f64>>>,
     log_buf: Arc<Mutex<Vec<String>>>,
     current_pos: Arc<Mutex<Position>>,
     stop_flag: Arc<Mutex<bool>>,
@@ -53,6 +55,7 @@ impl Tui {
             log_buf: Arc::new(Mutex::new(Vec::new())),
             current_pos: Arc::new(Mutex::new(Position::new())),
             score_buf: Arc::new(Mutex::new(Vec::new())),
+            nps_buf: Arc::new(Mutex::new(Vec::new())),
             stop_flag: Arc::new(Mutex::new(false)),
             exit_flag: Arc::new(Mutex::new(false)),
             handle: None,
@@ -64,6 +67,7 @@ impl Tui {
         let thr_status = self.status.clone();
         let thr_log_buf = self.log_buf.clone();
         let thr_score_buf = self.score_buf.clone();
+        let thr_nps_buf = self.nps_buf.clone();
         let thr_stop_flag = self.stop_flag.clone();
         let thr_exit_flag = self.exit_flag.clone();
         let thr_current_pos = self.current_pos.clone();
@@ -124,11 +128,12 @@ impl Tui {
 
                         let rects = Layout::default()
                             .direction(Direction::Vertical)
-                            .constraints([Constraint::Ratio(1, 3), Constraint::Ratio(2, 3)])
+                            .constraints([Constraint::Ratio(1, 3), Constraint::Ratio(1, 3), Constraint::Ratio(1, 3)])
                             .split(charts_rect);
 
-                        let mcts_rect = rects[0];
-                        let log_rect = rects[1];
+                        let nps_rect = rects[0];
+                        let mcts_rect = rects[1];
+                        let log_rect = rects[2];
 
                         let rects = Layout::default()
                             .direction(Direction::Vertical)
@@ -363,6 +368,83 @@ impl Tui {
                             );
 
                         f.render_widget(sc, mcts_rect);
+
+                        // Render nps history
+                        let mut nps_data_len = thr_nps_buf.lock().unwrap().len();
+                        let nps_data: Vec<f64> = thr_nps_buf
+                            .lock()
+                            .unwrap()
+                            .iter()
+                            .cloned()
+                            .collect();
+                        
+                        let nps_data: Vec<(f64, f64)> = nps_data
+                            [nps_data.len().checked_sub(nps_rect.width as usize).unwrap_or(0)..]
+                            .iter()
+                            .cloned()
+                            .enumerate()
+                            .map(|(x, y)| (x as f64, y as f64))
+                            .collect();
+
+                        let nps_data_len = nps_data.len();
+
+                        let nps_dataset = Dataset::default()
+                            .name("NPS")
+                            .marker(symbols::Marker::Braille)
+                            .style(Style::default().fg(Color::Blue))
+                            .data(&nps_data);
+
+                        let mut nps_min = f64::MAX;
+                        let mut nps_max = f64::MIN;
+
+                        for (_, y) in &nps_data {
+                            if *y < nps_min {
+                                nps_min = *y;
+                            }
+
+                            if *y > nps_max {
+                                nps_max = *y;
+                            }
+                        }
+
+                        let nps_backtime = constants::SEARCH_STATUS_RATE * nps_rect.width as u64;
+
+                        let nps_chart = Chart::new(vec![nps_dataset])
+                            .block(
+                                Block::default().title(Span::styled(
+                                    "NPS history",
+                                    Style::default()
+                                        .fg(Color::Cyan)
+                                        .add_modifier(Modifier::BOLD),
+                                )),
+                            )
+                            .x_axis(
+                                Axis::default()
+                                    .style(Style::default().fg(Color::Gray))
+                                    .bounds([0.0, nps_data_len as f64])
+                                    .labels(
+                                        [format!("-{} ms", nps_backtime), "now".to_string()]
+                                            .iter()
+                                            .cloned()
+                                            .map(Span::from)
+                                            .collect()
+                                    )
+                            )
+                            .y_axis(
+                                Axis::default()
+                                    .title("nodes/s")
+                                    .style(Style::default().fg(Color::Gray))
+                                    .bounds([nps_min * 0.75, nps_max * 1.25])
+                                    .labels(
+                                        [nps_min * 0.75, nps_min + 0.25 * (nps_max-nps_min), nps_min + 0.5 * (nps_max-nps_min), nps_min + 0.75 * (nps_max-nps_min), nps_max * 1.25]
+                                            .iter()
+                                            .cloned()
+                                            .map(|x| Span::from(format!("{}", x as usize)))
+                                            .collect()
+                                    ),
+                            );
+
+                        f.render_widget(nps_chart, nps_rect);
                     })
                     .expect("terminal draw failed");
 
@@ -442,6 +524,11 @@ impl Tui {
     /// Adds a score to the TUI score buffer.
     pub fn push_score(&self, score: f64) {
         self.score_buf.lock().unwrap().push(score);
+    }
+
+    /// Adds an NPS to the TUI nps buffer.
+    pub fn push_nps(&self, nps: f64) {
+        self.nps_buf.lock().unwrap().push(nps);
     }
 
     /// Sets the current position.
