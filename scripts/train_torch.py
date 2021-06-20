@@ -61,12 +61,12 @@ def train_loop():
         policy, value = module(headers, frames, lmm)
         current_loss = loss(policy, value, mcts, result)
 
-        print("BEGIN")
-        print("policy: {}", policy)
-        print("lmm: {}", lmm)
-        print("policy * lmm: {}", policy * lmm)
-        print("policy * lmm * mcts", policy * lmm * mcts)
-        print("END")
+        #print("BEGIN")
+        #print("policy: {}", policy)
+        #print("lmm: {}", lmm)
+        #print("policy * lmm: {}", policy * lmm)
+        #print("policy * lmm * mcts", policy * lmm * mcts)
+        #print("END")
 
         optimizer.zero_grad()
         current_loss.backward()
