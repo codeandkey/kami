@@ -125,7 +125,7 @@ impl Trainer {
                                 .expect("unexpected recv fail from search status rx");
 
                             let will_stop = matches!(status, SearchStatus::Done);
-                            
+
                             tui.push_status(status);
 
                             if will_stop {
@@ -138,10 +138,6 @@ impl Trainer {
 
                         // Examine tree and perform move selection.
                         let selected_move = final_tree.select();
-
-                        // Make the selected move.
-                        current_position.make_move(selected_move);
-                        current_game.make_move(selected_move, final_tree.get_mcts_data());
 
                         // Find move with best n
                         let mut best_n = 0;
@@ -164,6 +160,10 @@ impl Trainer {
 
                             tui.push_score(score_mul * s);
                         }
+
+                        // Make the selected move.
+                        current_position.make_move(selected_move);
+                        current_game.make_move(selected_move, final_tree.get_mcts_data());
 
                         // Stop training if the user has requested a stop.
                         if tui.exit_requested() {

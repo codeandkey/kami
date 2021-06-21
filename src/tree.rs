@@ -14,7 +14,7 @@ use std::thread::{spawn, JoinHandle};
 
 const EXPLORATION: f64 = 1.414; // MCTS exploration parameter - theoretically sqrt(2)
 const POLICY_SCALE: f64 = 1.0; // MCTS parameter ; how important is policy in UCT calculation
-const Q_SCALE: f64 = 5.0; // MCTS parameter ; how important is avg. value
+const Q_SCALE: f64 = 1.0; // MCTS parameter ; how important is avg. value
 
 /// Status of a single node.
 #[derive(Clone, Serialize, Deserialize)]
@@ -64,9 +64,9 @@ impl Status {
 }
 
 /// Response to tree batch requests.
-/// Can contain either a new batch or a request to stop.
+/// Can contain either a new batch and terminal count or a request to stop.
 pub enum BatchResponse {
-    NextBatch(Box<TreeBatch>),
+    NextBatch(Box<TreeBatch>, usize),
     Stop,
 }
 
@@ -133,10 +133,10 @@ impl Tree {
                             resp_tx.send(BatchResponse::Stop).expect("tree send failed");
                         } else {
                             // Build batch and send it
-                            let next_batch = Box::new(self.make_batch(self.batch_size));
+                            let (next_batch, terminals) = self.make_batch(self.batch_size);
 
                             resp_tx
-                                .send(BatchResponse::NextBatch(next_batch))
+                                .send(BatchResponse::NextBatch(Box::new(next_batch), terminals))
                                 .expect("tree send failed");
                         }
                     }
@@ -210,26 +210,22 @@ impl Tree {
 
     /// Generates a single batch with maximum size <bsize>.
     /// Returns the generated batch.
-    fn make_batch(&mut self, bsize: usize) -> TreeBatch {
+    fn make_batch(&mut self, bsize: usize) -> (TreeBatch, usize) {
         let mut b = TreeBatch::new(bsize);
-        self.build_batch(&mut b, 0, bsize);
-        b
+        let (_, terminals) = self.build_batch(&mut b, 0, bsize);
+        (b, terminals)
     }
 
     /// Selects nodes for a batch.
     /// Returns the number of positions in the new Batch.
-    fn build_batch(&mut self, b: &mut TreeBatch, this: usize, allocated: usize) -> usize {
+    fn build_batch(&mut self, b: &mut TreeBatch, this: usize, allocated: usize) -> (usize, usize) {
         // Is this node claimed? If so, stop here.
         if self[this].claim {
-            return 0;
+            return (0, 0);
         }
 
-        // Does this node have children? If not, try and claim this node.
+        // Does this node have children? If not, claim this node.
         if self[this].children.is_none() {
-            if self[this].claim {
-                return 0;
-            }
-
             // Check if this node is terminal. If so, immediately backprop the value.
             if matches!(self[this].terminal, TerminalStatus::Unknown) {
                 self[this].terminal = match self.pos.is_game_over() {
@@ -247,18 +243,19 @@ impl Tree {
                     self.backprop(this, res);
                 }
 
-                return allocated;
+                return (0, allocated);
             } else {
                 // Nonterminal, claim the node and add to the batch.
                 self[this].claim = true;
                 b.add(&self.pos, this);
 
-                return 1;
+                return (1, 0);
             }
         }
 
         // Node has children, so we walk through them in the proper order and allocate batches accordingly.
         let mut total_batch_size = 0;
+        let mut total_terminals = 0;
 
         // Collect node children IDs, order by UCT
         let children = self[this].children.as_ref().unwrap().clone();
@@ -291,9 +288,11 @@ impl Tree {
 
         // Iterate over children
         for (child, uct) in pairs {
-            let remaining = allocated - total_batch_size;
+            let remaining = allocated
+                .checked_sub(total_batch_size)
+                .unwrap_or(0);
 
-            if remaining <= 0 {
+            if remaining == 0 {
                 break;
             }
 
@@ -312,13 +311,18 @@ impl Tree {
             assert!(self.pos.make_move(self[child].action.unwrap()));
 
             // Allocate batches
-            total_batch_size += self.build_batch(b, child, child_alloc);
+            let (child_batches, child_terminals) = self.build_batch(b, child, child_alloc);
+
+            total_batch_size += child_batches;
+            total_batch_size += child_terminals; // include terminals in allocated batches (?)
+
+            total_terminals += child_terminals;
 
             // Unmake child move
             self.pos.unmake_move();
         }
 
-        total_batch_size
+        (total_batch_size, total_terminals)
     }
 
     /// Backpropagates a value up through the tree.
@@ -460,7 +464,7 @@ mod test {
             .expect("Failed to write to tree tx.");
 
         let new_batch = match brx.recv().expect("Failed to receive from request rx.") {
-            BatchResponse::NextBatch(b) => b,
+            BatchResponse::NextBatch(b, _) => b,
             BatchResponse::Stop => panic!("Unexpected early tree stop!"),
         };
 
@@ -482,7 +486,7 @@ mod test {
             .expect("Failed to write to tree tx.");
 
         let new_batch = match brx.recv().expect("Failed to receive from request rx.") {
-            BatchResponse::NextBatch(b) => b,
+            BatchResponse::NextBatch(b, _) => b,
             BatchResponse::Stop => panic!("Unexpected early tree stop!"),
         };
 
@@ -509,7 +513,7 @@ mod test {
             .expect("Failed to write to tree tx.");
 
         let new_batch = match brx.recv().expect("Failed to receive from request rx.") {
-            BatchResponse::NextBatch(b) => b,
+            BatchResponse::NextBatch(b, _) => b,
             BatchResponse::Stop => panic!("Unexpected early tree stop!"),
         };
 

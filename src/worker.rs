@@ -67,13 +67,16 @@ impl Worker {
                 }
 
                 // (2) Wait for batch response
-                let next_batch = match tmp_tree_rx.recv() {
+                let (next_batch, terminals) = match tmp_tree_rx.recv() {
                     Ok(resp) => match resp {
-                        BatchResponse::NextBatch(b) => b,
+                        BatchResponse::NextBatch(b, terminals) => (b, terminals),
                         BatchResponse::Stop => break,
                     },
                     Err(_) => break,
                 };
+
+                // Add terminal evaluations to node count
+                thr_status.write().unwrap().total_nodes += terminals;
 
                 // (3) Execution - Inputs fed to model and processed
                 thr_status.write().unwrap().state = "executing".to_string();

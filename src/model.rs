@@ -156,6 +156,8 @@ pub fn load(p: &Path) -> Result<Option<Model>, Box<dyn Error>> {
                 println!("CUDNN acceleration enabled");
             }
 
+            println!("{} CUDA devices available", tch::Cuda::device_count());
+
             cmod.to(Device::Cuda(0), tch::Kind::Float, false);
         } else {
             println!("CUDA is not available, using CPU for evaluation");

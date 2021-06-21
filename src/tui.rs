@@ -2,7 +2,7 @@ use crate::constants;
 use crate::position::Position;
 use crate::searcher::SearchStatus;
 
-use std::io::{stdout, Write};
+use std::io::stdout;
 use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex};
 use std::thread::{spawn, JoinHandle};
@@ -11,8 +11,7 @@ use std::time::{Duration, Instant};
 use crossterm::{
     event::{self, Event as CEvent, KeyCode},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-    ExecutableCommand,
+    terminal::{enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 
 use tui::{
@@ -22,7 +21,7 @@ use tui::{
     symbols,
     text::Span,
     widgets::{
-        Axis, Block, Borders, Cell, Chart, Dataset, GraphType, Paragraph, Row, Table, TableState, Gauge,
+        Axis, Block, Borders, Cell, Chart, Dataset, Paragraph, Row, Table, Gauge,
         Wrap,
     },
     Terminal,
@@ -34,12 +33,10 @@ enum Event<I> {
 }
 
 const TUI_TICK_RATE: u64 = 100; // 10 FPS
-const NPS_HIST_MS: usize = 5000; // milliseconds of NPS to show in graph
 
 pub struct Tui {
     status: Arc<Mutex<SearchStatus>>,
     score_buf: Arc<Mutex<Vec<f64>>>,
-    nps_buf: Arc<Mutex<Vec<f64>>>,
     log_buf: Arc<Mutex<Vec<String>>>,
     current_pos: Arc<Mutex<Position>>,
     stop_flag: Arc<Mutex<bool>>,
@@ -56,7 +53,6 @@ impl Tui {
             log_buf: Arc::new(Mutex::new(Vec::new())),
             current_pos: Arc::new(Mutex::new(Position::new())),
             score_buf: Arc::new(Mutex::new(Vec::new())),
-            nps_buf: Arc::new(Mutex::new(Vec::new())),
             stop_flag: Arc::new(Mutex::new(false)),
             exit_flag: Arc::new(Mutex::new(false)),
             paused: Arc::new(Mutex::new(false)),
@@ -69,7 +65,6 @@ impl Tui {
         let thr_status = self.status.clone();
         let thr_log_buf = self.log_buf.clone();
         let thr_score_buf = self.score_buf.clone();
-        let thr_nps_buf = self.nps_buf.clone();
         let thr_stop_flag = self.stop_flag.clone();
         let thr_paused = self.paused.clone();
         let thr_exit_flag = self.exit_flag.clone();
@@ -161,7 +156,6 @@ impl Tui {
                             let summary_rect = rects[0];
                             let workers_rect = rects[1];
                             let board_rect = rects[2];
-                            let prog_rect = rects[3];
 
                             // Render tree status, if there is one.
                             let search_status = thr_status.lock().unwrap().clone();
@@ -329,7 +323,7 @@ impl Tui {
                             // Render search progress
                             let mut prog_rect = board_rect.clone();
 
-                            prog_rect.y = prog_rect.y + prog_rect.height - 2;
+                            prog_rect.y += prog_rect.height - 2;
                             prog_rect.height = 2;
 
                             let prog_total_nodes = match &search_status {
@@ -347,7 +341,7 @@ impl Tui {
                                         .bg(Color::Black)
                                         .add_modifier(Modifier::BOLD),
                                 )
-                                .percent((prog_total_nodes as f32 * 100.0 / constants::SEARCH_MAXNODES as f32) as u16)
+                                .percent(((prog_total_nodes as f32 * 100.0 / constants::SEARCH_MAXNODES as f32) as u16).min(100))
                                 .label(label)
                                 .use_unicode(true);
                             
