@@ -8,11 +8,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-LEARNING_RATE=1e-4
+LEARNING_RATE=1e-5
 FRAME_COUNT=6
 FRAME_SIZE=14
 HEADER_SIZE=18
-EPOCHS = 10
+EPOCHS = 15
 
 # Load module from path
 module = torch.jit.load(sys.argv[1])

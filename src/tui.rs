@@ -490,14 +490,14 @@ impl Tui {
                                     Axis::default()
                                         .title("nodes/s")
                                         .style(Style::default().fg(Color::Gray))
-                                        .bounds([nps_min * 0.75, nps_max * 1.25])
+                                        .bounds([nps_min - 0.25 * (nps_max - nps_min), nps_max + 1.25 * (nps_max - nps_min)])
                                         .labels(
                                             [
-                                                nps_min * 0.75,
+                                                nps_min - 0.25 * (nps_max - nps_min),
                                                 nps_min + 0.25 * (nps_max - nps_min),
                                                 nps_min + 0.5 * (nps_max - nps_min),
                                                 nps_min + 0.75 * (nps_max - nps_min),
-                                                nps_max * 1.25,
+                                                nps_max + 1.25 * (nps_max - nps_min),
                                             ]
                                             .iter()
                                             .cloned()
