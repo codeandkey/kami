@@ -69,7 +69,7 @@ impl Disk {
         fs::create_dir_all(&gen_path)?;
 
         fs_extra::copy_items(
-            &[&self.latest_path, &self.games_dir],
+            &[&self.games_dir],
             gen_path,
             &fs_extra::dir::CopyOptions::new(),
         )?;
