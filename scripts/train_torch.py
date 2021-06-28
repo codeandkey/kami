@@ -13,6 +13,7 @@ FRAME_COUNT=6
 FRAME_SIZE=14
 HEADER_SIZE=18
 EPOCHS = 15
+POLICY_EPSILON=1e-6
 
 # Load module from path
 module = torch.jit.load(sys.argv[1])
@@ -46,7 +47,7 @@ module.train()
 # Define loss function
 def loss(policy, value, mcts, result):
     #print('loss: policy.shape={}, value.shape={}, mcts.shape={}, result.shape={}'.format(policy.shape, value.shape, mcts.shape, result.shape))
-    return nn.MSELoss()(value, result) - torch.log(torch.sum(mcts * policy))
+    return nn.MSELoss()(value, result) - torch.sum(mcts * torch.log(torch.add(policy, POLICY_EPSILON)))
 
 # Train model!
 
