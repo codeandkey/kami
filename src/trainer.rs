@@ -178,6 +178,7 @@ impl Trainer {
                     if current_position.is_game_over().is_some() {
                         // Game is finished, write to disk.
                         current_game.finalize(current_position.is_game_over().unwrap());
+                        tui.log(format!("Game over, result {}", current_position.is_game_over().unwrap()));
                     }
 
                     current_game
