@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-LEARNING_RATE=1e-5
+LEARNING_RATE=0.001
 FRAME_COUNT=6
 FRAME_SIZE=14
 HEADER_SIZE=18
