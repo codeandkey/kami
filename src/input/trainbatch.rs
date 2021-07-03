@@ -52,16 +52,14 @@ impl TrainBatch {
             saved_games.push(gm);
         }
 
-        let mut training_batches: Vec<TrainBatch> = Vec::new();
         let mut rng = thread_rng();
-
         let mut tb = TrainBatch::new(constants::TRAINING_BATCH_SIZE);
 
         for _ in 0..constants::TRAINING_BATCH_SIZE {
             saved_games[rng.next_u32() as usize % constants::TRAINING_SET_SIZE]
                 .add_to_batch(&mut tb);
         }
-        
+
         Ok(tb)
     }
 
