@@ -63,11 +63,6 @@ impl Game {
         self.result.is_some()
     }
 
-    /// Gets the game moves in string format.
-    pub fn to_string(&self) -> String {
-        self.actions.join(" ")
-    }
-
     /// Gets the game moves in vector format.
     pub fn get_actions(&self) -> Vec<ChessMove> {
         self.actions
