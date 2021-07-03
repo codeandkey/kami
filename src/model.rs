@@ -121,10 +121,10 @@ pub fn generate(p: &Path, nt: Type) -> Result<(), Box<dyn Error>> {
 }
 
 /// Loads a model from a path.
-pub fn load(p: &Path) -> Result<Option<Model>, Box<dyn Error>> {
+pub fn load(p: &Path, quiet: bool) -> Result<Model, Box<dyn Error>> {
     // Test if no model exists.
     if !p.exists() {
-        return Ok(None);
+        return Err("Path does not exist".into());
     }
 
     // Test if the model path is corrupted
@@ -133,37 +133,47 @@ pub fn load(p: &Path) -> Result<Option<Model>, Box<dyn Error>> {
     }
 
     // Find the model type.
-    println!("Loading model from '{}'.", p.display());
+    if !quiet {
+        println!("Loading model from '{}'.", p.display());
+    }
 
     if p.join("mock.type").exists() {
-        println!("Detected model type mock");
-        return Ok(Some(Model::Mock));
+        if !quiet {
+            println!("Detected model type mock");
+        }
+
+        return Ok(Model::Mock);
     }
 
     #[cfg(feature = "tch")]
     if p.join("torch.type").exists() {
         // Load torch model.
-        println!("Detected model type torch");
+        if !quiet {
+            println!("Detected model type torch");
+        }
 
         let mut cmod = CModule::load(p.join("model.pt"))?;
 
         tch::maybe_init_cuda();
 
         if tch::Cuda::is_available() {
-            println!("CUDA support enabled");
+            if !quiet {
+                println!("CUDA support enabled");
+                println!("{} CUDA devices available", tch::Cuda::device_count());
 
-            if tch::Cuda::cudnn_is_available() {
-                println!("CUDNN acceleration enabled");
+                if tch::Cuda::cudnn_is_available() {
+                    println!("CUDNN acceleration enabled");
+                }
             }
-
-            println!("{} CUDA devices available", tch::Cuda::device_count());
 
             cmod.to(Device::Cuda(0), tch::Kind::Float, false);
         } else {
-            println!("CUDA is not available, using CPU for evaluation");
+            if !quiet {
+                println!("CUDA is not available, using CPU for evaluation");
+            }
         }
 
-        return Ok(Some(Model::Torch(cmod, tch::Cuda::is_available())));
+        return Ok(Model::Torch(cmod, tch::Cuda::is_available()));
     }
 
     return Err(
@@ -357,7 +367,7 @@ mod test {
 
         generate(&path, Type::Mock).expect("model gen failed");
         assert!(matches!(
-            load(&path).expect("load failed").expect("missing model"),
+            load(&path, false).expect("load failed"),
             Model::Mock
         ));
     }

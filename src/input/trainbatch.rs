@@ -1,10 +1,15 @@
 /// Represents a batch for training the network.
 /// This batch contains normal inputs to the network,
 /// as well as the actual MCTS counts from the search and the results of the games.
+use crate::constants;
+use crate::game::Game;
 use crate::input::batch::Batch;
 use crate::position::Position;
 
+use rand::{prelude::*, thread_rng};
 use serde::Serialize;
+use std::error::Error;
+use std::path::Path;
 
 #[derive(Serialize)]
 pub struct TrainBatch {
@@ -27,6 +32,37 @@ impl TrainBatch {
             mcts: mcts,
             results: results,
         }
+    }
+
+    /// Generates a trainbatch from the disk.
+    pub fn generate(games_dir: &Path) -> Result<TrainBatch, Box<dyn Error>> {
+        let mut saved_games: Vec<Game> = Vec::new();
+
+        for i in 0..constants::TRAINING_SET_SIZE {
+            let game_path = games_dir.join(format!("{}.game", i));
+
+            // Parse the game.
+            let gm = Game::load(&game_path)?;
+
+            // Check the game was completed.
+            if !gm.is_complete() {
+                return Err("Training set contains incomplete games!".into());
+            }
+
+            saved_games.push(gm);
+        }
+
+        let mut training_batches: Vec<TrainBatch> = Vec::new();
+        let mut rng = thread_rng();
+
+        let mut tb = TrainBatch::new(constants::TRAINING_BATCH_SIZE);
+
+        for _ in 0..constants::TRAINING_BATCH_SIZE {
+            saved_games[rng.next_u32() as usize % constants::TRAINING_SET_SIZE]
+                .add_to_batch(&mut tb);
+        }
+        
+        Ok(tb)
     }
 
     /// Adds a position snapshot to the batch.
