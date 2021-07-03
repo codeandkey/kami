@@ -70,11 +70,6 @@ pub fn get_type(m: &Model) -> Type {
     }
 }
 
-/// Generates a new threadsafe mock model for testing.
-pub fn mock() -> Arc<Model> {
-    Arc::new(Model::Mock)
-}
-
 /// Generates a new model on the disk.
 pub fn generate(p: &Path, nt: Type) -> Result<(), Box<dyn Error>> {
     match nt {

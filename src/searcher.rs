@@ -189,6 +189,12 @@ mod test {
     use chess::ChessMove;
     use std::str::FromStr;
 
+    
+    /// Generates a new threadsafe mock model for testing.
+    pub fn mock() -> Arc<Model> {
+        Arc::new(Model::Mock)
+    }
+
     /// Tests that a search can be initialized.
     #[test]
     fn search_can_initialize() {

@@ -95,6 +95,7 @@ impl TrainBatch {
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::str::FromStr;
 
     /// Tests the treebatch can be initialized.
     #[test]
