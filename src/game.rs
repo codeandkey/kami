@@ -204,18 +204,6 @@ mod test {
         assert!(g.is_complete());
     }
 
-    /// Tests a game can be converted to string.
-    #[test]
-    fn game_can_get_string() {
-        let mut g = Game::new();
-
-        assert_eq!(g.to_string(), "".to_string());
-
-        g.make_move(ChessMove::from_str("f2f4").expect("bad move"), Vec::new());
-
-        assert_eq!(g.to_string(), "f2f4".to_string());
-    }
-
     /// Tests a game can be added to a training batch.
     #[test]
     fn game_can_add_to_trainbatch() {
