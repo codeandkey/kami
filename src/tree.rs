@@ -15,6 +15,7 @@ use std::thread::{spawn, JoinHandle};
 const EXPLORATION: f64 = 1.414; // MCTS exploration parameter - theoretically sqrt(2)
 const POLICY_SCALE: f64 = 1.0; // MCTS parameter ; how important is policy in UCT calculation
 const Q_SCALE: f64 = 1.0; // MCTS parameter ; how important is avg. value
+const PUCT: f64 = 4.0; // MCTS parameter, effect of policy on exploration component
 
 /// Status of a single node.
 #[derive(Clone, Serialize, Deserialize)]
@@ -267,8 +268,7 @@ impl Tree {
             .map(|&cidx| {
                 let child = &mut self[cidx];
                 let uct = child.q() * Q_SCALE
-                    + (child.p / cur_ptotal) * POLICY_SCALE
-                    + EXPLORATION * ((cur_n as f64).ln() / (child.n as f64 + 1.0)).sqrt();
+                    + (child.p / cur_ptotal) * PUCT * (cur_n as f64).sqrt() / (child.n as f64 + 1.0);
 
                 assert!(
                     !uct.is_nan(),
