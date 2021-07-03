@@ -75,21 +75,6 @@ impl TrainBatch {
         // Add input to inner batch
         self.inner.add(p);
     }
-
-    /// Gets the game results as a float buffer.
-    pub fn get_results(&self) -> &[f32] {
-        &self.results
-    }
-
-    /// Gets the MCTS counts as a float buffer.
-    pub fn get_mcts(&self) -> &[f64] {
-        &self.mcts
-    }
-
-    /// Gets a reference to the inner batch.
-    pub fn get_inner(&self) -> &Batch {
-        &self.inner
-    }
 }
 
 #[cfg(test)]
@@ -110,40 +95,6 @@ mod test {
         b.add(&Position::new(), &[0.0; 4096], 0.0);
     }
 
-    /// Tests the MCTS frames can be returned.
-    #[test]
-    fn trainbatch_can_get_mcts() {
-        let mut b = TrainBatch::new(16);
-
-        b.add(&Position::new(), &[0.0; 4096], 0.0);
-        b.add(&Position::new(), &[0.0; 4096], 0.0);
-
-        assert_eq!(b.get_mcts(), &[0.0; 8192]);
-    }
-
-    /// Tests the game results can be returned.
-    #[test]
-    fn trainbatch_can_get_results() {
-        let mut b = TrainBatch::new(16);
-
-        b.add(&Position::new(), &[0.0; 4096], 0.0);
-        b.add(&Position::new(), &[0.0; 4096], 0.0);
-
-        assert_eq!(b.get_results(), &[0.0; 2]);
-    }
-
-    /// Tests the inner batch can be returned.
-    #[test]
-    fn trainbatch_can_get_inner() {
-        let mut b = TrainBatch::new(16);
-
-        b.add(&Position::new(), &[0.0; 4096], 0.0);
-        b.add(&Position::new(), &[0.0; 4096], 0.0);
-        b.add(&Position::new(), &[0.0; 4096], 0.0);
-
-        assert_eq!(b.get_inner().get_size(), 3);
-    }
-
     /// Tests a training batch can be generated from the disk.
     #[test]
     fn trainbatch_can_generate() {
@@ -159,10 +110,7 @@ mod test {
             g.save(&games_path.join(format!("{}.game", i))).expect("game save failed");
         }
 
-        let tb = TrainBatch::generate(&games_path).expect("trainbatch generated failed");
-
-        assert_eq!(tb.get_inner().get_size(), constants::TRAINING_BATCH_SIZE);
-        assert_eq!(tb.get_results(), &[1.0; constants::TRAINING_BATCH_SIZE]);
+        TrainBatch::generate(&games_path).expect("trainbatch generated failed");
     }
 
     /// Tests a training batch can be generated from the disk.

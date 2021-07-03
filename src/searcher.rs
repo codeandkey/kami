@@ -185,7 +185,6 @@ impl Searcher {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::model;
     use chess::ChessMove;
     use std::str::FromStr;
 
@@ -206,7 +205,7 @@ mod test {
     fn search_can_run_short() {
         let mut search = Searcher::new();
         let rx = search
-            .start(Some(500), model::mock(), Position::new(), 1.0, 4)
+            .start(Some(500), mock(), Position::new(), 1.0, 4)
             .unwrap();
 
         loop {
@@ -230,7 +229,7 @@ mod test {
         pos.make_move(ChessMove::from_str("g7g5").expect("move parse fail"));
 
         let mut search = Searcher::new();
-        let rx = search.start(Some(500), model::mock(), pos, 0.1, 4).unwrap();
+        let rx = search.start(Some(500), mock(), pos, 0.1, 4).unwrap();
 
         loop {
             match rx.recv().expect("rx failed") {
@@ -261,11 +260,11 @@ mod test {
         let pos = Position::new();
 
         search
-            .start(Some(200), model::mock(), pos.clone(), 1.0, 4)
+            .start(Some(200), mock(), pos.clone(), 1.0, 4)
             .unwrap();
 
         assert!(search
-            .start(Some(200), model::mock(), pos, 1.0, 4)
+            .start(Some(200), mock(), pos, 1.0, 4)
             .is_none());
 
         search.wait().expect("no tree returned");
@@ -277,7 +276,7 @@ mod test {
         let pos = Position::new();
 
         let mut search = Searcher::new();
-        let rx = search.start(Some(200), model::mock(), pos, 1.0, 4).unwrap();
+        let rx = search.start(Some(200), mock(), pos, 1.0, 4).unwrap();
 
         loop {
             match rx.recv().expect("rx failed") {

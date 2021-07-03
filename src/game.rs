@@ -244,8 +244,5 @@ mod test {
         let mut tb = TrainBatch::new(1);
 
         g.add_to_batch(&mut tb);
-
-        assert_eq!(tb.get_inner().get_size(), 1);
-        assert_eq!(tb.get_results(), &[1.0]);
     }
 }
