@@ -36,33 +36,6 @@ pub struct Status {
     pub temperature: f64,
 }
 
-impl Status {
-    /// Outputs the tree status to stdout.
-    /// Returns the number of lines printed.
-    pub fn print(&self) -> usize {
-        println!(
-            "+=> Tree status: {} nodes searched, current score {:3.2}, temperature {}",
-            self.total_n, self.nodes[0].q, self.temperature
-        );
-        for nd in &self.nodes {
-            println!(
-                "|=> {:>5} | N: {:5.1}% [{:>5}] | P: {:3.2}% | Q: {:3.2}",
-                nd.action,
-                nd.nn * 100.0 / self.total_nn,
-                nd.n,
-                nd.p_pct * 100.0,
-                nd.q
-            );
-        }
-        println!(
-            "+=> End tree status, deterministic bestmove {:>5}",
-            self.nodes[0].action
-        );
-
-        return 2 + self.nodes.len();
-    }
-}
-
 /// Response to tree batch requests.
 /// Can contain either a new batch and terminal count or a request to stop.
 pub enum BatchResponse {
