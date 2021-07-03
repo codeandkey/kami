@@ -10,7 +10,6 @@ use rand::{prelude::*, thread_rng};
 use serde::Serialize;
 use std::error::Error;
 use std::path::Path;
-use std::str::FromStr;
 
 #[derive(Serialize)]
 pub struct TrainBatch {
