@@ -30,52 +30,6 @@ pub struct Status {
     pub bps: f32,
 }
 
-impl Status {
-    /// Writes the search status to stdout.
-    /// Returns the number of lines printed.
-    pub fn print(&self) -> usize {
-        let total_nodes: usize = self.workers.iter().map(|x| x.total_nodes).sum();
-        let total_batches: usize = self.workers.iter().map(|x| x.batch_sizes.len()).sum();
-        let mut total = 3;
-
-        println!("==> ################################################################### <==");
-
-        println!(
-            "==> Searching {}, {}ms elapsed, {} nodes ({:.1} nps), {} batches ({:.1} bps)",
-            self.rootfen,
-            self.elapsed_ms,
-            total_nodes,
-            total_nodes as f32 * 1000.0 / (self.elapsed_ms as f32),
-            total_batches,
-            total_batches as f32 * 1000.0 / (self.elapsed_ms as f32),
-        );
-
-        for (id, w) in self.workers.iter().enumerate() {
-            println!(
-                "=> Worker {:>2}: {:>16} | {:>7} nodes | {:>5} batches | {:.1} avg bsize",
-                id,
-                w.state,
-                w.total_nodes,
-                w.batch_sizes.len(),
-                w.batch_sizes.iter().sum::<usize>() as f32 / w.batch_sizes.len() as f32,
-            );
-        }
-
-        total += self.workers.len();
-
-        if let Some(tstatus) = &self.tree {
-            total += tstatus.print();
-        } else {
-            println!("==> (No tree status available yet)");
-            total += 1;
-        }
-
-        println!("==> End search status");
-
-        return total;
-    }
-}
-
 pub struct Searcher {
     workers: Arc<Mutex<Vec<Worker>>>,
     handle: Option<JoinHandle<Tree>>,
@@ -252,9 +206,6 @@ mod test {
         loop {
             match rx.recv().expect("rx failed") {
                 SearchStatus::Done => break,
-                SearchStatus::Searching(stat) => {
-                    stat.print();
-                }
                 _ => (),
             }
         }
@@ -278,9 +229,6 @@ mod test {
         loop {
             match rx.recv().expect("rx failed") {
                 SearchStatus::Done => break,
-                SearchStatus::Searching(stat) => {
-                    stat.print();
-                }
                 _ => (),
             }
         }
