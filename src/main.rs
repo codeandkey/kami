@@ -19,6 +19,8 @@ use std::error::Error;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
+use std::thread::sleep;
+use std::time::Duration;
 
 use input::trainbatch::TrainBatch;
 use game::Game;
@@ -38,6 +40,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("\tA chess engine powered by reinforcement learning");
     println!("\tJustin Stanley <jtst@iastate.edu>");
     println!("================================================================");
+
+    sleep(Duration::from_secs(1));
 
     // Set data dir
     let data_dir = dirs::data_dir().unwrap().join("kami");
@@ -111,6 +115,8 @@ fn train(data_dir: &Path) -> Result<(), Box<dyn Error>> {
             for mv in current_game.get_actions() {
                 assert!(current_position.make_move(mv));
             }
+
+            tui.reset_game();
 
             loop {
                 // Check if the game is over
@@ -218,7 +224,7 @@ fn train(data_dir: &Path) -> Result<(), Box<dyn Error>> {
 
         // Train model.
         tui.log("Training model.");
-        model::train(&model_dir, training_batches, MODEL_TYPE)?;
+        model::train(&model_dir, training_batches, model::get_type(&current_model))?;
 
         // Archive games.
         // Walk through archive generations to find the lowest available slot.
