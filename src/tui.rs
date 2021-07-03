@@ -20,10 +20,7 @@ use tui::{
     style::{Color, Modifier, Style},
     symbols,
     text::Span,
-    widgets::{
-        Axis, Block, Borders, Cell, Chart, Dataset, Paragraph, Row, Table, Gauge,
-        Wrap,
-    },
+    widgets::{Axis, Block, Borders, Cell, Chart, Dataset, Gauge, Paragraph, Row, Table, Wrap},
     Terminal,
 };
 
@@ -160,9 +157,12 @@ impl Tui {
                             // Render tree status, if there is one.
                             let search_status = thr_status.lock().unwrap().clone();
 
-                            let header_cells = ["Action", "N_normalized", "N_actual", "P", "Q", "depth"]
-                                .iter()
-                                .map(|h| Cell::from(*h).style(Style::default().fg(Color::Blue)));
+                            let header_cells =
+                                ["Action", "N_normalized", "N_actual", "P", "Q", "depth"]
+                                    .iter()
+                                    .map(|h| {
+                                        Cell::from(*h).style(Style::default().fg(Color::Blue))
+                                    });
 
                             let header = Row::new(header_cells).height(1).bottom_margin(1);
 
@@ -333,7 +333,8 @@ impl Tui {
                                 _ => 0,
                             };
 
-                            let label = format!("{}/{}", prog_total_nodes, constants::SEARCH_MAXNODES);
+                            let label =
+                                format!("{}/{}", prog_total_nodes, constants::SEARCH_MAXNODES);
 
                             let prog_widget = Gauge::default()
                                 .block(Block::default().title("Progress"))
@@ -343,10 +344,15 @@ impl Tui {
                                         .bg(Color::Black)
                                         .add_modifier(Modifier::BOLD),
                                 )
-                                .percent(((prog_total_nodes as f32 * 100.0 / constants::SEARCH_MAXNODES as f32) as u16).min(100))
+                                .percent(
+                                    ((prog_total_nodes as f32 * 100.0
+                                        / constants::SEARCH_MAXNODES as f32)
+                                        as u16)
+                                        .min(100),
+                                )
                                 .label(label)
                                 .use_unicode(true);
-                            
+
                             f.render_widget(prog_widget, prog_rect);
 
                             // Render search score
@@ -492,7 +498,10 @@ impl Tui {
                                     Axis::default()
                                         .title("nodes/s")
                                         .style(Style::default().fg(Color::Gray))
-                                        .bounds([nps_min - 0.25 * (nps_max - nps_min), nps_max + 1.25 * (nps_max - nps_min)])
+                                        .bounds([
+                                            nps_min - 0.25 * (nps_max - nps_min),
+                                            nps_max + 1.25 * (nps_max - nps_min),
+                                        ])
                                         .labels(
                                             [
                                                 nps_min - 0.25 * (nps_max - nps_min),

@@ -188,7 +188,6 @@ mod test {
     use chess::ChessMove;
     use std::str::FromStr;
 
-    
     /// Generates a new threadsafe mock model for testing.
     pub fn mock() -> Arc<Model> {
         Arc::new(Model::Mock)
@@ -263,9 +262,7 @@ mod test {
             .start(Some(200), mock(), pos.clone(), 1.0, 4)
             .unwrap();
 
-        assert!(search
-            .start(Some(200), mock(), pos, 1.0, 4)
-            .is_none());
+        assert!(search.start(Some(200), mock(), pos, 1.0, 4).is_none());
 
         search.wait().expect("no tree returned");
     }

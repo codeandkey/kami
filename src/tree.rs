@@ -165,7 +165,7 @@ impl Tree {
                 w: self[c].w,                                // total value
                 p_pct: self[c].p / p_total,                  // normalized policy
                 q: self[c].q(),                              // average value
-                depth: self[c].maxdepth,                        // node maxdepth
+                depth: self[c].maxdepth,                     // node maxdepth
             })
             .collect::<Vec<StatusNode>>();
 
@@ -252,7 +252,8 @@ impl Tree {
             .map(|(&cidx, noise)| {
                 let child = &mut self[cidx];
                 let uct = child.q() * Q_SCALE
-                    + (child.p / cur_ptotal) * noise * PUCT * (cur_n as f64).sqrt() / (child.n as f64 + 1.0);
+                    + (child.p / cur_ptotal) * noise * PUCT * (cur_n as f64).sqrt()
+                        / (child.n as f64 + 1.0);
 
                 assert!(
                     !uct.is_nan(),
@@ -272,9 +273,7 @@ impl Tree {
 
         // Iterate over children
         for (child, uct) in pairs {
-            let remaining = allocated
-                .checked_sub(total_batch_size)
-                .unwrap_or(0);
+            let remaining = allocated.checked_sub(total_batch_size).unwrap_or(0);
 
             if remaining == 0 {
                 break;
@@ -315,7 +314,7 @@ impl Tree {
 
         node.n += 1;
         node.w += value;
-        
+
         if depth > node.maxdepth {
             node.maxdepth = depth;
         }

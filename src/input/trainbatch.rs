@@ -104,10 +104,14 @@ mod test {
         for i in 0..constants::TRAINING_SET_SIZE {
             let mut g = Game::new();
 
-            g.make_move(chess::ChessMove::from_str("e2e4").expect("bad move"), Vec::new());
+            g.make_move(
+                chess::ChessMove::from_str("e2e4").expect("bad move"),
+                Vec::new(),
+            );
 
             g.finalize(1.0);
-            g.save(&games_path.join(format!("{}.game", i))).expect("game save failed");
+            g.save(&games_path.join(format!("{}.game", i)))
+                .expect("game save failed");
         }
 
         TrainBatch::generate(&games_path).expect("trainbatch generated failed");
@@ -122,8 +126,12 @@ mod test {
         for i in 0..constants::TRAINING_SET_SIZE {
             let mut g = Game::new();
 
-            g.make_move(chess::ChessMove::from_str("e2e4").expect("bad move"), Vec::new());
-            g.save(&games_path.join(format!("{}.game", i))).expect("game save failed");
+            g.make_move(
+                chess::ChessMove::from_str("e2e4").expect("bad move"),
+                Vec::new(),
+            );
+            g.save(&games_path.join(format!("{}.game", i)))
+                .expect("game save failed");
         }
 
         assert!(TrainBatch::generate(&games_path).is_err());

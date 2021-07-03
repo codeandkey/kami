@@ -22,11 +22,11 @@ use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 
-use input::trainbatch::TrainBatch;
-use game::Game;
-use searcher::{Searcher, SearchStatus};
-use position::Position;
 use crate::tui::Tui;
+use game::Game;
+use input::trainbatch::TrainBatch;
+use position::Position;
+use searcher::{SearchStatus, Searcher};
 
 /**
  * Server entry point
@@ -92,7 +92,7 @@ fn train(data_dir: &Path) -> Result<(), Box<dyn Error>> {
                 tui.log(format!("Starting game {}", game_path.display()));
             } else {
                 let g = game::Game::load(&game_path)?;
-                
+
                 if !g.is_complete() {
                     should_generate = true;
                     tui.log(format!("Resuming incomplete game {}", game_path.display()));
@@ -123,7 +123,7 @@ fn train(data_dir: &Path) -> Result<(), Box<dyn Error>> {
                 if current_position.is_game_over().is_some() {
                     break;
                 }
-                
+
                 tui.set_position(current_position.clone());
 
                 // Initialize searcher
@@ -200,7 +200,10 @@ fn train(data_dir: &Path) -> Result<(), Box<dyn Error>> {
             if current_position.is_game_over().is_some() {
                 // Game is finished, write to disk.
                 current_game.finalize(current_position.is_game_over().unwrap());
-                tui.log(format!("Game over, result {}", current_position.is_game_over().unwrap()));
+                tui.log(format!(
+                    "Game over, result {}",
+                    current_position.is_game_over().unwrap()
+                ));
             }
 
             current_game
@@ -224,7 +227,11 @@ fn train(data_dir: &Path) -> Result<(), Box<dyn Error>> {
 
         // Train model.
         tui.log("Training model.");
-        model::train(&model_dir, training_batches, model::get_type(&current_model))?;
+        model::train(
+            &model_dir,
+            training_batches,
+            model::get_type(&current_model),
+        )?;
 
         // Archive games.
         // Walk through archive generations to find the lowest available slot.
@@ -243,11 +250,7 @@ fn train(data_dir: &Path) -> Result<(), Box<dyn Error>> {
         // Create target generation dir.
         fs::create_dir_all(&gen_path)?;
 
-        fs_extra::copy_items(
-            &[&games_dir],
-            gen_path,
-            &fs_extra::dir::CopyOptions::new(),
-        )?;
+        fs_extra::copy_items(&[&games_dir], gen_path, &fs_extra::dir::CopyOptions::new())?;
 
         // Regenerate games dir.
         fs::remove_dir_all(&games_dir)?;
