@@ -12,10 +12,9 @@ use std::ops::{Index, IndexMut};
 use std::sync::mpsc::{channel, Sender};
 use std::thread::{spawn, JoinHandle};
 
-const EXPLORATION: f64 = 1.414; // MCTS exploration parameter - theoretically sqrt(2)
-const POLICY_SCALE: f64 = 1.0; // MCTS parameter ; how important is policy in UCT calculation
 const Q_SCALE: f64 = 1.0; // MCTS parameter ; how important is avg. value
 const PUCT: f64 = 4.0; // MCTS parameter, effect of policy on exploration component
+const P_NOISE_DIRICHLET: f64 = 0.285; // Dirichlet noise to add to P before PUCT calculation
 
 /// Status of a single node.
 #[derive(Clone, Serialize, Deserialize)]
@@ -263,12 +262,22 @@ impl Tree {
         let cur_n = self[this].n;
         let cur_ptotal = self[this].p_total;
 
+        let p_noise = match children.len() {
+            1 => vec![1.0],
+            len => {
+                let dist = rand::distributions::Dirichlet::new_with_param(P_NOISE_DIRICHLET, len);
+                let mut rng = rand::thread_rng();
+                dist.sample(&mut rng)
+            }
+        };
+
         let mut pairs: Vec<(usize, f64)> = children
             .iter()
-            .map(|&cidx| {
+            .zip(p_noise)
+            .map(|(&cidx, noise)| {
                 let child = &mut self[cidx];
                 let uct = child.q() * Q_SCALE
-                    + (child.p / cur_ptotal) * PUCT * (cur_n as f64).sqrt() / (child.n as f64 + 1.0);
+                    + (child.p / cur_ptotal) * noise * PUCT * (cur_n as f64).sqrt() / (child.n as f64 + 1.0);
 
                 assert!(
                     !uct.is_nan(),
