@@ -10,6 +10,7 @@ use rand::{prelude::*, thread_rng};
 use serde::Serialize;
 use std::error::Error;
 use std::path::Path;
+use std::str::FromStr;
 
 #[derive(Serialize)]
 pub struct TrainBatch {
@@ -141,5 +142,42 @@ mod test {
         b.add(&Position::new(), &[0.0; 4096], 0.0);
 
         assert_eq!(b.get_inner().get_size(), 3);
+    }
+
+    /// Tests a training batch can be generated from the disk.
+    #[test]
+    fn trainbatch_can_generate() {
+        let games_dir = tempfile::tempdir().expect("tempdir failed");
+        let games_path = games_dir.path();
+
+        for i in 0..constants::TRAINING_SET_SIZE {
+            let mut g = Game::new();
+
+            g.make_move(chess::ChessMove::from_str("e2e4").expect("bad move"), Vec::new());
+
+            g.finalize(1.0);
+            g.save(&games_path.join(format!("{}.game", i))).expect("game save failed");
+        }
+
+        let tb = TrainBatch::generate(&games_path).expect("trainbatch generated failed");
+
+        assert_eq!(tb.get_inner().get_size(), constants::TRAINING_BATCH_SIZE);
+        assert_eq!(tb.get_results(), &[1.0; constants::TRAINING_BATCH_SIZE]);
+    }
+
+    /// Tests a training batch can be generated from the disk.
+    #[test]
+    fn trainbatch_can_not_generate_incomplete() {
+        let games_dir = tempfile::tempdir().expect("tempdir failed");
+        let games_path = games_dir.path();
+
+        for i in 0..constants::TRAINING_SET_SIZE {
+            let mut g = Game::new();
+
+            g.make_move(chess::ChessMove::from_str("e2e4").expect("bad move"), Vec::new());
+            g.save(&games_path.join(format!("{}.game", i))).expect("game save failed");
+        }
+
+        assert!(TrainBatch::generate(&games_path).is_err());
     }
 }
