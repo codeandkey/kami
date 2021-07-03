@@ -9,7 +9,6 @@ pub struct Batch {
     headers: Vec<f32>,
     frames: Vec<f32>,
     lmm: Vec<f32>,
-    pov: Vec<f32>,
     moves: Vec<Vec<ChessMove>>,
     current_size: usize,
 }
@@ -19,12 +18,10 @@ impl Batch {
     pub fn new(reserve_size: usize) -> Self {
         let mut headers = Vec::new();
         let mut frames = Vec::new();
-        let mut povs = Vec::new();
         let mut moves = Vec::new();
         let mut lmm = Vec::new();
 
         headers.reserve(reserve_size * 24);
-        povs.reserve(reserve_size);
         frames.reserve(reserve_size * model::FRAMES_SIZE);
         moves.reserve(reserve_size);
         lmm.reserve(4096 * reserve_size);
@@ -35,7 +32,6 @@ impl Batch {
             current_size: 0,
             lmm: lmm,
             moves: moves,
-            pov: povs,
         }
     }
 
@@ -44,7 +40,6 @@ impl Batch {
         // Store position network inputs
         self.headers.extend_from_slice(p.get_headers());
         self.frames.extend_from_slice(p.get_frames());
-        self.pov.push(p.get_pov());
 
         // Generate moves and LMM
         let (lmm, moves) = p.get_lmm();
@@ -72,11 +67,6 @@ impl Batch {
     /// Returns the batch legal move mask input data.
     pub fn get_lmm(&self) -> &[f32] {
         &self.lmm
-    }
-
-    /// Returns the batch POV data.
-    pub fn get_pov(&self) -> &[f32] {
-        &self.pov
     }
 
     /// Returns the batch headers input tensor.
@@ -160,15 +150,6 @@ mod test {
     /// Tests the batch can return header data.
     #[test]
     fn batch_can_get_headers() {
-        let mut b = Batch::new(16);
-        b.add(&Position::new());
-
-        assert_eq!(b.get_headers().len(), model::SQUARE_HEADER_SIZE);
-    }
-
-    /// Tests the batch can return pov data.
-    #[test]
-    fn batch_can_get_pov() {
         let mut b = Batch::new(16);
         b.add(&Position::new());
 
