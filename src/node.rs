@@ -12,6 +12,7 @@ pub struct Node {
     pub n: u32,
     pub w: f32,
     pub p_total: f64,
+    pub maxdepth: usize,
     pub children: Option<Vec<usize>>,
     pub parent: Option<usize>,
     pub action: Option<ChessMove>,
@@ -36,6 +37,7 @@ impl Node {
             action: None,
             terminal: TerminalStatus::Unknown,
             color: pov,
+            maxdepth: 0,
         }
     }
 
@@ -54,6 +56,7 @@ impl Node {
             action: Some(action),
             terminal: TerminalStatus::Unknown,
             color: color,
+            maxdepth: 0,
         }
     }
 

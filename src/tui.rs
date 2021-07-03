@@ -115,7 +115,7 @@ impl Tui {
                             // Compute layout areas
                             let rects = Layout::default()
                                 .direction(Direction::Horizontal)
-                                .constraints([Constraint::Length(54), Constraint::Percentage(100)])
+                                .constraints([Constraint::Length(63), Constraint::Percentage(100)])
                                 .split(f.size());
 
                             let tree_rect = rects[0];
@@ -160,7 +160,7 @@ impl Tui {
                             // Render tree status, if there is one.
                             let search_status = thr_status.lock().unwrap().clone();
 
-                            let header_cells = ["Action", "N_normalized", "N_actual", "P", "Q"]
+                            let header_cells = ["Action", "N_normalized", "N_actual", "P", "Q", "depth"]
                                 .iter()
                                 .map(|h| Cell::from(*h).style(Style::default().fg(Color::Blue)));
 
@@ -187,6 +187,7 @@ impl Tui {
                                     format!("{}", nd.n),
                                     format!("{:.2}%", nd.p_pct * 100.0),
                                     format!("{:+.2}", nd.q),
+                                    format!("{}", nd.depth),
                                 ])
                             });
 
@@ -197,6 +198,7 @@ impl Tui {
                                     Constraint::Length(10),
                                     Constraint::Length(14),
                                     Constraint::Length(10),
+                                    Constraint::Length(8),
                                     Constraint::Length(8),
                                     Constraint::Length(8),
                                 ]);

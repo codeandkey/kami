@@ -25,6 +25,7 @@ pub struct StatusNode {
     pub p_pct: f64,
     pub w: f32,
     pub q: f64,
+    pub depth: usize,
 }
 
 /// Status of the first level of children.
@@ -132,7 +133,7 @@ impl Tree {
                                 output.get_policy(i),
                                 batch.get_inner().get_moves(i),
                             );
-                            self.backprop(batch.get_selected(i), output.get_value(i));
+                            self.backprop(batch.get_selected(i), output.get_value(i), 0);
                         }
                     }
                     TreeReq::RequestStop => stop_requested = true,
@@ -164,6 +165,7 @@ impl Tree {
                 w: self[c].w,                                // total value
                 p_pct: self[c].p / p_total,                  // normalized policy
                 q: self[c].q(),                              // average value
+                depth: self[c].maxdepth,                        // node maxdepth
             })
             .collect::<Vec<StatusNode>>();
 
@@ -213,7 +215,7 @@ impl Tree {
                 }
 
                 for _ in 0..allocated {
-                    self.backprop(this, res);
+                    self.backprop(this, res, 0);
                 }
 
                 return (0, allocated);
@@ -308,14 +310,18 @@ impl Tree {
     }
 
     /// Backpropagates a value up through the tree.
-    fn backprop(&mut self, idx: usize, value: f32) {
+    fn backprop(&mut self, idx: usize, value: f32, depth: usize) {
         let mut node = &mut self[idx];
 
         node.n += 1;
         node.w += value;
+        
+        if depth > node.maxdepth {
+            node.maxdepth = depth;
+        }
 
         if let Some(pidx) = node.parent {
-            self.backprop(pidx, -value);
+            self.backprop(pidx, -value, depth + 1);
         }
     }
 
