@@ -289,7 +289,7 @@ impl Tui {
                             // Render search perf stats
                             let perf_header_cells = ["ID", "status", "nodes", "batches"]
                                 .iter()
-                                .map(|h| Cell::from(*h).style(Style::default().fg(Color::Red)));
+                                .map(|h| Cell::from(*h).style(Style::default().fg(Color::Cyan)));
 
                             let perf_header =
                                 Row::new(perf_header_cells).height(1).bottom_margin(1);
