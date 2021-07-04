@@ -421,8 +421,7 @@ impl Tui {
 
                             let summary_widget = Paragraph::new(summary_lines)
                                 .block(Block::default().title("Performance").borders(Borders::ALL))
-                                .style(Style::default().fg(Color::White).bg(Color::Black))
-                                .wrap(Wrap { trim: true });
+                                .style(Style::default().fg(Color::White).bg(Color::Black));
 
                             f.render_widget(summary_widget, summary_rect);
 
