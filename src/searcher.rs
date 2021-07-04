@@ -241,7 +241,8 @@ mod test {
 
         assert_eq!(
             final_tree.select(),
-            ChessMove::from_str("d1h5").expect("move parse fail")
+            ChessMove::from_str("d1h5").expect("move parse fail"),
+            "tree: \n{}", serde_json::to_string_pretty(&final_tree.get_status().unwrap()).expect("serialize failed"),
         );
     }
 
