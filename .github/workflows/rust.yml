@@ -42,8 +42,6 @@ jobs:
       - name: Generate coverage
         id: coverage
         uses: actions-rs/grcov@v0.1
-      - name: Upload to codecov.io
-        uses: codecov/codecov-action@v1.0.2
-        with:
-          token: ${{secrets.CODECOV_TOKEN}}
-          file: ${{ steps.coverage.outputs.report }}
+      - name: Upload to coveralls.io
+        uses: coverallsapp/github-action@v1.1.2
+        github-token: ${{secrets.GITHUB_TOKEN}}
