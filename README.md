@@ -6,7 +6,7 @@ A portable chess engine powered by reinforcement learning.
 - Install Rust nightly using the instructions available at [rustup.rs](https://rustup.rs/).
 - Install Python 3+ using the instructions available at [python.org](https://www.python.org/downloads/)
 
-First install Torch and chess (for PGN export) for python:
+Install Torch and chess (for PGN export) for python:
 
 ```shell-session
 python -m pip install torch chess
