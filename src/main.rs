@@ -16,20 +16,18 @@ mod tui;
 mod worker;
 
 use crossterm::{
-    event::{self, Event as CEvent, KeyCode},
     execute,
     terminal::{enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 
 use std::error::Error;
 use std::fs;
-use std::io::{Write, stdout};
+use std::io::stdout;
 use std::path::Path;
 use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 use ::tui::backend::CrosstermBackend;
-use ::tui::Terminal;
 
 use crate::tui::Tui;
 use game::Game;
