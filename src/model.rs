@@ -365,4 +365,26 @@ mod test {
             Model::Mock
         ));
     }
+
+    /// Tests that torch models can be generated.
+    #[cfg(feature = "tch")]
+    #[test]
+    fn torch_model_can_generate() {
+        let path = tdir();
+
+        generate(&path, Type::Torch).expect("generate failed");
+    }
+
+    /// Tests that torch models can be loaded.
+    #[cfg(feature = "tch")]
+    #[test]
+    fn torch_model_can_load() {
+        let path = tdir();
+
+        generate(&path, Type::Torch).expect("generate failed");
+
+        let md = load(&path, false).expect("load failed");
+
+        assert!(matches!(get_type(&md), Type::Torch));
+    }
 }

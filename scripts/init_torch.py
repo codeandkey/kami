@@ -206,9 +206,9 @@ model = KamiNet()
 print('Done.')
 
 dummy_inputs=(
-    torch.randn(32, HEADER_SIZE),
-    torch.randn(32, 8, 8, 14 * FRAME_COUNT),
-    torch.randn(32, 4096),
+    torch.randn(1, HEADER_SIZE),
+    torch.randn(1, 8, 8, 14 * FRAME_COUNT),
+    torch.randn(1, 4096),
 )
 
 input_names=['headers', 'frames', 'lmm']
