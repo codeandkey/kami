@@ -43,8 +43,6 @@ jobs:
       - name: Generate coverage
         id: coverage
         uses: actions-rs/grcov@v0.1
-        with:
-          output-type: lcov
       - name: Upload to coveralls.io
         uses: coverallsapp/github-action@master
         with:
