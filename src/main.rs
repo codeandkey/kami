@@ -15,12 +15,21 @@ mod tree;
 mod tui;
 mod worker;
 
+use crossterm::{
+    event::{self, Event as CEvent, KeyCode},
+    execute,
+    terminal::{enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
+
 use std::error::Error;
 use std::fs;
+use std::io::{Write, stdout};
 use std::path::Path;
 use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
+use ::tui::backend::CrosstermBackend;
+use ::tui::Terminal;
 
 use crate::tui::Tui;
 use game::Game;
@@ -68,9 +77,14 @@ fn train(data_dir: &Path) -> Result<(), Box<dyn Error>> {
         model::generate(&model_dir, MODEL_TYPE)?;
     }
 
-    let mut tui = Tui::new();
+    // Switch to TUI screen and start rendering TUI.
+    enable_raw_mode().expect("failed setting raw mode");
 
-    tui.start();
+    execute!(stdout(), EnterAlternateScreen)
+        .expect("failed starting alternate screen");
+
+    let mut tui = Tui::new();
+    tui.start(CrosstermBackend::new(stdout()));
 
     // Start training loop.
     loop {
@@ -264,5 +278,10 @@ fn train(data_dir: &Path) -> Result<(), Box<dyn Error>> {
     }
 
     tui.stop();
+
+    // Leave TUI screen and reset terminal.
+    execute!(stdout(), LeaveAlternateScreen)
+        .expect("failed leaving alternate screen");
+
     Ok(())
 }

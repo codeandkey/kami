@@ -2,7 +2,6 @@ use crate::constants;
 use crate::position::Position;
 use crate::searcher::SearchStatus;
 
-use std::io::stdout;
 use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex};
 use std::thread::{spawn, JoinHandle};
@@ -10,17 +9,14 @@ use std::time::{Duration, Instant};
 
 use crossterm::{
     event::{self, Event as CEvent, KeyCode},
-    execute,
-    terminal::{enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 
 use tui::{
-    backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     symbols,
     text::Span,
-    widgets::{Axis, Block, Borders, Cell, Chart, Dataset, Gauge, Paragraph, Row, Table, Wrap},
+    widgets::{Axis, Block, Borders, Cell, Chart, Dataset, Gauge, Paragraph, Row, Table, Wrap, GraphType},
     Terminal,
 };
 
@@ -57,8 +53,158 @@ impl Tui {
         }
     }
 
+    /// Renders the NPS history graph.
+    fn render_nps<T>(f: &mut tui::Frame<T>, rect: tui::layout::Rect, data: &Vec<f64>)
+    where T: tui::backend::Backend
+    {
+        const NPS_BACKTIME: u64 = 15000;
+        const MAX_FRAMES: u64 = NPS_BACKTIME / constants::SEARCH_STATUS_RATE;
+
+        let data: Vec<(f64, f64)> = data
+            [data.len().checked_sub(MAX_FRAMES as usize).unwrap_or(0)..]
+            .iter()
+            .cloned()
+            .enumerate()
+            .map(|(x, y)| (x as f64, y as f64))
+            .collect();
+
+        let nps_dataset = Dataset::default()
+            .name("NPS")
+            .marker(symbols::Marker::Braille)
+            .style(Style::default().fg(Color::Blue))
+            .graph_type(GraphType::Line)
+            .data(&data);
+
+        let mut nps_max = f64::MIN;
+
+        for (_, y) in &data {
+            if *y > nps_max {
+                nps_max = *y;
+            }
+        }
+
+        let nps_chart = Chart::new(vec![nps_dataset])
+            .block(
+                Block::default().title(Span::styled(
+                    "NPS history",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                )),
+            )
+            .x_axis(
+                Axis::default()
+                    .style(Style::default().fg(Color::Gray))
+                    .bounds([0.0, data.len() as f64])
+                    .labels(
+                        [format!("T-{}ms", data.len() as u64 * constants::SEARCH_STATUS_RATE), "T-0ms".to_string()]
+                            .iter()
+                            .cloned()
+                            .map(Span::from)
+                            .collect(),
+                    ),
+            )
+            .y_axis(
+                Axis::default()
+                    .title("nodes/s")
+                    .style(Style::default().fg(Color::Gray))
+                    .bounds([
+                        0.0,
+                        nps_max * 1.25,
+                    ])
+                    .labels(
+                        [
+                            0.0,
+                            nps_max * 1.25,
+                        ]
+                        .iter()
+                        .cloned()
+                        .map(|x| Span::from(format!("{}", x as usize)))
+                        .collect(),
+                    ),
+            );
+
+        f.render_widget(nps_chart, rect);
+    }
+
+    /// Renders the value graph.
+    fn render_score<T>(f: &mut tui::Frame<T>, rect: tui::layout::Rect, data: &Vec<f64>)
+    where T: tui::backend::Backend
+    {
+        let mut data: Vec<(f64, f64)> = data
+            .iter()
+            .cloned()
+            .enumerate()
+            .map(|(x, y)| (x as f64, y as f64))
+            .collect();
+
+        if data.len() == 0 {
+            data.push((0.0, 0.0));
+        }
+
+        let score_dataset = Dataset::default()
+            .name("MCTS")
+            .marker(symbols::Marker::Braille)
+            .style(Style::default().fg(Color::Green))
+            .graph_type(GraphType::Line)
+            .data(&data);
+
+        let baseline_data: Vec<(f64, f64)> = (0..rect.width)
+            .map(|x| {
+                (x as f64 / rect.width as f64 * data.len() as f64, 0.0)
+            })
+            .collect();
+
+        let baseline_dataset = Dataset::default()
+            .name("baseline")
+            .marker(symbols::Marker::Braille)
+            .style(Style::default().fg(Color::Gray))
+            .graph_type(GraphType::Line)
+            .data(&baseline_data);
+
+        let sc = Chart::new(vec![score_dataset, baseline_dataset])
+            .block(
+                Block::default().title(Span::styled(
+                    "Value history",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                )),
+            )
+            .x_axis(
+                Axis::default()
+                    .title("ply")
+                    .style(Style::default().fg(Color::Gray))
+                    .bounds([0.0, ((data.len() - 1) as f64).max(0.1)])
+                    .labels(
+                        [0.0, (data.len() / 2) as f32, (data.len() - 1) as f32]
+                            .iter()
+                            .cloned()
+                            .map(|x| Span::from(x.to_string()))
+                            .collect(),
+                    ),
+            )
+            .y_axis(
+                Axis::default()
+                    .title("value")
+                    .style(Style::default().fg(Color::Gray))
+                    .bounds([-1.0, 1.0])
+                    .labels(
+                        ["-1.0", "0.0", "1.0"]
+                            .iter()
+                            .cloned()
+                            .map(Span::from)
+                            .collect(),
+                    ),
+            );
+
+        f.render_widget(sc, rect);
+    }
+
     /// Starts the TUI thread and begins displaying status data.
-    pub fn start(&mut self) {
+    pub fn start<T>(&mut self, backend: T)
+    where T: tui::backend::Backend + Send + 'static
+    {
         let thr_status = self.status.clone();
         let thr_log_buf = self.log_buf.clone();
         let thr_score_buf = self.score_buf.clone();
@@ -68,12 +214,6 @@ impl Tui {
         let thr_current_pos = self.current_pos.clone();
 
         self.handle = Some(spawn(move || {
-            // Initialize TUI
-            enable_raw_mode().expect("failed setting raw mode");
-
-            let mut stdout = stdout();
-            execute!(stdout, EnterAlternateScreen).expect("failed entering alternate screen");
-
             // Start input thread
             let (inp_tx, inp_rx) = channel();
             let inp_thread_stopflag = Arc::new(Mutex::new(false));
@@ -100,10 +240,8 @@ impl Tui {
                 }
             });
 
-            let backend = CrosstermBackend::new(stdout);
-            let mut terminal = Terminal::new(backend).expect("failed initializing terminal");
-
-            let mut nps_history: Vec<f64> = Vec::new();
+            let mut terminal = Terminal::new(backend).expect("terminal init failed");
+            let mut nps_history: Vec<f64> = vec![0.0];
 
             while !*thr_stop_flag.lock().unwrap() {
                 if !*thr_paused.lock().unwrap() {
@@ -137,7 +275,7 @@ impl Tui {
                                 .split(charts_rect);
 
                             let nps_rect = rects[0];
-                            let mcts_rect = rects[1];
+                            let score_rect = rects[1];
                             let log_rect = rects[2];
 
                             let rects = Layout::default()
@@ -356,168 +494,14 @@ impl Tui {
                             f.render_widget(prog_widget, prog_rect);
 
                             // Render search score
-                            let mut mcts_score_data = thr_score_buf
-                                .lock()
-                                .unwrap()
-                                .iter()
-                                .enumerate()
-                                .map(|(a, b)| (a as f64, *b))
-                                .collect::<Vec<(f64, f64)>>();
+                            Tui::render_score(f, score_rect, &thr_score_buf.lock().unwrap());
 
-                            let last_ply = mcts_score_data.len() as i32 - 1;
-
-                            if mcts_score_data.len() > 0 {
-                                mcts_score_data =
-                                    Tui::interpolate(mcts_score_data, mcts_rect.width as usize);
-                            }
-
-                            let score_dataset = Dataset::default()
-                                .name("MCTS")
-                                .marker(symbols::Marker::Braille)
-                                .style(Style::default().fg(Color::Cyan))
-                                .data(&mcts_score_data);
-
-                            let baseline_data: Vec<(f64, f64)> = (0..mcts_rect.width)
-                                .map(|x| {
-                                    (x as f64 / mcts_rect.width as f64 * last_ply as f64, 0.0f64)
-                                })
-                                .collect();
-
-                            let baseline_dataset = Dataset::default()
-                                .name("baseline")
-                                .marker(symbols::Marker::Braille)
-                                .style(Style::default().fg(Color::Gray))
-                                .data(&baseline_data);
-
-                            let sc = Chart::new(vec![score_dataset, baseline_dataset])
-                                .block(
-                                    Block::default().title(Span::styled(
-                                        "Value history",
-                                        Style::default()
-                                            .fg(Color::Cyan)
-                                            .add_modifier(Modifier::BOLD),
-                                    )),
-                                )
-                                .x_axis(
-                                    Axis::default()
-                                        .title("ply")
-                                        .style(Style::default().fg(Color::Gray))
-                                        .bounds([0.0, last_ply as f64])
-                                        .labels(
-                                            [0.0, (last_ply / 2) as f32, last_ply as f32]
-                                                .iter()
-                                                .cloned()
-                                                .map(|x| Span::from(x.to_string()))
-                                                .collect(),
-                                        ),
-                                )
-                                .y_axis(
-                                    Axis::default()
-                                        .title("value")
-                                        .style(Style::default().fg(Color::Gray))
-                                        .bounds([-1.0, 1.0])
-                                        .labels(
-                                            ["-1.0", "0.0", "1.0"]
-                                                .iter()
-                                                .cloned()
-                                                .map(Span::from)
-                                                .collect(),
-                                        ),
-                                );
-
-                            f.render_widget(sc, mcts_rect);
-
-                            // Render nps history
-
+                            // Render NPS history
                             if let SearchStatus::Searching(stat) = &search_status {
                                 nps_history.push(stat.nps as f64);
                             }
 
-                            let disp_frames = nps_history
-                                .len()
-                                .checked_sub(nps_rect.width as usize)
-                                .unwrap_or(0);
-
-                            if disp_frames > 0 {
-                                nps_history.drain(0..disp_frames);
-                            }
-
-                            let nps_data: Vec<(f64, f64)> = nps_history
-                                .iter()
-                                .cloned()
-                                .enumerate()
-                                .map(|(x, y)| (x as f64, y as f64))
-                                .collect();
-
-                            let nps_data_len = nps_data.len();
-
-                            let nps_dataset = Dataset::default()
-                                .name("NPS")
-                                .marker(symbols::Marker::Braille)
-                                .style(Style::default().fg(Color::Blue))
-                                .data(&nps_data);
-
-                            let mut nps_min = f64::MAX;
-                            let mut nps_max = f64::MIN;
-
-                            for (_, y) in &nps_data {
-                                if *y < nps_min {
-                                    nps_min = *y;
-                                }
-
-                                if *y > nps_max {
-                                    nps_max = *y;
-                                }
-                            }
-
-                            let nps_backtime =
-                                constants::SEARCH_STATUS_RATE * nps_rect.width as u64;
-
-                            let nps_chart = Chart::new(vec![nps_dataset])
-                                .block(
-                                    Block::default().title(Span::styled(
-                                        "NPS history",
-                                        Style::default()
-                                            .fg(Color::Cyan)
-                                            .add_modifier(Modifier::BOLD),
-                                    )),
-                                )
-                                .x_axis(
-                                    Axis::default()
-                                        .style(Style::default().fg(Color::Gray))
-                                        .bounds([0.0, nps_data_len as f64])
-                                        .labels(
-                                            [format!("-{} ms", nps_backtime), "now".to_string()]
-                                                .iter()
-                                                .cloned()
-                                                .map(Span::from)
-                                                .collect(),
-                                        ),
-                                )
-                                .y_axis(
-                                    Axis::default()
-                                        .title("nodes/s")
-                                        .style(Style::default().fg(Color::Gray))
-                                        .bounds([
-                                            nps_min - 0.25 * (nps_max - nps_min),
-                                            nps_max + 1.25 * (nps_max - nps_min),
-                                        ])
-                                        .labels(
-                                            [
-                                                nps_min - 0.25 * (nps_max - nps_min),
-                                                nps_min + 0.25 * (nps_max - nps_min),
-                                                nps_min + 0.5 * (nps_max - nps_min),
-                                                nps_min + 0.75 * (nps_max - nps_min),
-                                                nps_max + 1.25 * (nps_max - nps_min),
-                                            ]
-                                            .iter()
-                                            .cloned()
-                                            .map(|x| Span::from(format!("{}", x as usize)))
-                                            .collect(),
-                                        ),
-                                );
-
-                            f.render_widget(nps_chart, nps_rect);
+                            Tui::render_nps(f, nps_rect, &nps_history);
                         })
                         .expect("terminal draw failed");
                 }
@@ -556,38 +540,7 @@ impl Tui {
 
             *inp_thread_stopflag.lock().unwrap() = true;
             input_thread.join().expect("failed joining input thread");
-
-            execute!(terminal.backend_mut(), LeaveAlternateScreen)
-                .expect("failed leaving alternate screen");
-
-            terminal.show_cursor().expect("failed showing cursor");
-        }));
-    }
-
-    /// Interpolates a set of points to create a line graph.
-    fn interpolate(points: Vec<(f64, f64)>, width: usize) -> Vec<(f64, f64)> {
-        if points.len() == 1 {
-            (0..width)
-                .map(|i| (i as f64 / width as f64, points[0].1))
-                .collect()
-        } else {
-            (0..width)
-                .map(|i| {
-                    let x = (i * (points.len() - 1)) as f64 / width as f64;
-                    let last = points[x.floor() as usize];
-                    let next = points[x.ceil() as usize];
-
-                    if x == x.floor() {
-                        (x, last.1)
-                    } else {
-                        let last_weight = x.ceil() - x;
-                        let next_weight = x - x.floor();
-
-                        (x, next.1 * next_weight + last.1 * last_weight)
-                    }
-                })
-                .collect()
-        }
+        }));  
     }
 
     /// Stops the TUI thread and consumes this object.
@@ -629,5 +582,30 @@ impl Tui {
     /// Returns true if the user has requested to quit.
     pub fn exit_requested(&self) -> bool {
         *self.exit_flag.lock().unwrap()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::thread::sleep;
+    use tui::backend::TestBackend;
+
+    /// Tests the TUI can be initialized.
+    #[test]
+    fn tui_can_initialize() {
+        Tui::new();
+    }
+
+    #[test]
+    /// Tests the TUI can be started and stopped.
+    fn tui_can_start_stop() {
+        let mut t = Tui::new();
+
+        t.start(TestBackend::new(800, 600));
+
+        sleep(Duration::from_secs(1));
+
+        t.stop();
     }
 }
