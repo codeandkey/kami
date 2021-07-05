@@ -188,6 +188,14 @@ impl Position {
             return status;
         }
 
+        // Check for insufficient material
+        let all_pieces = b.color_combined(Color::White) | b.color_combined(Color::Black);
+
+        // K(N)(B)vK(N)(B)
+        if b.pieces(Piece::King) | b.pieces(Piece::Knight) | b.pieces(Piece::Bishop) == all_pieces && (b.pieces(Piece::Knight) | b.pieces(Piece::Bishop)).popcnt() < 3 {
+            return Some(0.0);
+        }
+
         // Check for 50-move rule
         if self.top().halfmove_clock >= 50 {
             return Some(0.0);
