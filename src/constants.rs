@@ -10,3 +10,4 @@ pub const TEMPERATURE_DROPOFF_PLY: usize = 1000; // ply to switch from initial t
 pub const SEARCH_BATCH_SIZE: usize = 16; // number of nodes to expand at once on a single thread
 pub const TRAINING_BATCH_SIZE: usize = 32; // number of decisions in each training batch
 pub const TRAINING_BATCH_COUNT: usize = 32; // number of training batches
+pub const TUI_FRAME_RATE: u64 = 15; // TUI framerate (frames/second)

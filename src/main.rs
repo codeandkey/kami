@@ -12,28 +12,29 @@ mod node;
 mod position;
 mod searcher;
 mod tree;
-mod tui;
+mod ui;
 mod worker;
 
 use crossterm::{
     execute,
     terminal::{enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    event::{self, Event, KeyCode},
 };
 
 use std::error::Error;
 use std::fs;
 use std::io::stdout;
 use std::path::Path;
-use std::sync::Arc;
-use std::thread::sleep;
-use std::time::Duration;
-use ::tui::backend::CrosstermBackend;
+use std::sync::{Arc, Mutex};
+use std::thread::{sleep, spawn};
+use std::time::{Duration, Instant};
+use tui::backend::CrosstermBackend;
 
-use crate::tui::Tui;
 use game::Game;
 use input::trainbatch::TrainBatch;
 use position::Position;
 use searcher::{SearchStatus, Searcher};
+use ui::Ui;
 
 /**
  * Server entry point
@@ -81,8 +82,32 @@ fn train(data_dir: &Path) -> Result<(), Box<dyn Error>> {
     execute!(stdout(), EnterAlternateScreen)
         .expect("failed starting alternate screen");
 
-    let mut tui = Tui::new();
-    tui.start(CrosstermBackend::new(stdout()));
+    let mut ui = Ui::new();
+    ui.start(CrosstermBackend::new(stdout()));
+
+    let ui_tx = ui.tx();
+
+    // Start event thread.
+
+    let should_stop = Arc::new(Mutex::new(false));
+            
+    let inp_ui_tx = ui_tx.clone();
+    let inp_should_stop = should_stop.clone();
+    let inp_thread = spawn(move || {
+        while !*inp_should_stop.lock().unwrap() {
+            match event::read().unwrap() {
+                Event::Key(e) => match e.code {
+                    KeyCode::Char('q') | KeyCode::Esc => {
+                        *inp_should_stop.lock().unwrap() = true;
+                        inp_ui_tx.send(ui::Event::Log("Shutting down..".to_string())).unwrap()
+                    },
+                    KeyCode::Char('p') => inp_ui_tx.send(ui::Event::Pause).unwrap(),
+                    _ => (),
+                },
+                _ => (),
+            };
+        }
+    });
 
     // Start training loop.
     loop {
@@ -101,13 +126,13 @@ fn train(data_dir: &Path) -> Result<(), Box<dyn Error>> {
 
             if !game_path.exists() {
                 should_generate = true;
-                tui.log(format!("Starting game {}", game_path.display()));
+                ui_tx.send(ui::Event::Log(format!("Starting game {}", game_path.display()))).unwrap();
             } else {
                 let g = game::Game::load(&game_path)?;
 
                 if !g.is_complete() {
                     should_generate = true;
-                    tui.log(format!("Resuming incomplete game {}", game_path.display()));
+                    ui_tx.send(ui::Event::Log(format!("Resuming incomplete game {}", game_path.display()))).unwrap();
                 }
             }
 
@@ -128,7 +153,7 @@ fn train(data_dir: &Path) -> Result<(), Box<dyn Error>> {
                 assert!(current_position.make_move(mv));
             }
 
-            tui.reset_game();
+            ui_tx.send(ui::Event::Reset).unwrap();
 
             loop {
                 // Check if the game is over
@@ -136,7 +161,7 @@ fn train(data_dir: &Path) -> Result<(), Box<dyn Error>> {
                     break;
                 }
 
-                tui.set_position(current_position.clone());
+                ui_tx.send(ui::Event::Position(current_position.clone())).unwrap();
 
                 // Initialize searcher
                 let mut search = Searcher::new();
@@ -164,7 +189,7 @@ fn train(data_dir: &Path) -> Result<(), Box<dyn Error>> {
                         .recv()
                         .expect("unexpected recv fail from search status rx");
 
-                    tui.push_status(status.clone());
+                    ui_tx.send(ui::Event::Status(status.clone())).unwrap();
 
                     if matches!(status, SearchStatus::Done) {
                         break;
@@ -196,7 +221,7 @@ fn train(data_dir: &Path) -> Result<(), Box<dyn Error>> {
                         chess::Color::Black => -1.0,
                     };
 
-                    tui.push_score(score_mul * s);
+                    ui_tx.send(ui::Event::Score(score_mul * s)).unwrap();
                 }
 
                 // Make the selected move.
@@ -204,7 +229,7 @@ fn train(data_dir: &Path) -> Result<(), Box<dyn Error>> {
                 current_game.make_move(selected_move, final_tree.get_mcts_data());
 
                 // Stop training if the user has requested a stop.
-                if tui.exit_requested() {
+                if *should_stop.lock().unwrap() {
                     break;
                 }
             }
@@ -212,23 +237,25 @@ fn train(data_dir: &Path) -> Result<(), Box<dyn Error>> {
             if current_position.is_game_over().is_some() {
                 // Game is finished, write to disk.
                 current_game.finalize(current_position.is_game_over().unwrap());
-                tui.log(format!(
+
+                ui_tx.send(ui::Event::Log(format!(
                     "Game over, result {}",
                     current_position.is_game_over().unwrap()
-                ));
+                ))).unwrap();
             }
 
             current_game
                 .save(&game_path)
                 .expect("failed saving completed game");
-            tui.log(format!("Wrote game to {}", game_path.display()));
 
-            if tui.exit_requested() {
+            ui_tx.send(ui::Event::Log(format!("Wrote game to {}", game_path.display()))).unwrap();
+
+            if *should_stop.lock().unwrap() {
                 break;
             }
         }
 
-        if tui.exit_requested() {
+        if *should_stop.lock().unwrap() {
             break;
         }
 
@@ -238,7 +265,7 @@ fn train(data_dir: &Path) -> Result<(), Box<dyn Error>> {
             .collect::<Result<Vec<TrainBatch>, _>>()?;
 
         // Train model.
-        tui.log("Training model.");
+        ui_tx.send(ui::Event::Log("Training model".to_string())).unwrap();
         model::train(
             &model_dir,
             training_batches,
@@ -268,14 +295,17 @@ fn train(data_dir: &Path) -> Result<(), Box<dyn Error>> {
         fs::remove_dir_all(&games_dir)?;
         fs::create_dir_all(&games_dir)?;
 
-        tui.log(format!("Archived games for generation {}", cur));
+        ui_tx.send(ui::Event::Log(format!("Archived games for generation {}", cur))).unwrap();
 
-        if tui.exit_requested() {
+        if *should_stop.lock().unwrap() {
             break;
         }
     }
 
-    tui.stop();
+    ui_tx.send(ui::Event::Stop).unwrap();
+
+    inp_thread.join().expect("failed joining input thread");
+    ui.join();
 
     // Leave TUI screen and reset terminal.
     execute!(stdout(), LeaveAlternateScreen)

@@ -2,14 +2,18 @@ use crate::constants;
 use crate::position::Position;
 use crate::searcher::SearchStatus;
 
-use std::sync::mpsc::channel;
-use std::sync::{Arc, Mutex};
+use std::ops::Add;
+
+use std::sync::{
+    mpsc::{
+        channel,
+        Sender,
+        RecvTimeoutError::Timeout,
+    },
+};
+
 use std::thread::{spawn, JoinHandle};
 use std::time::{Duration, Instant};
-
-use crossterm::{
-    event::{self, Event as CEvent, KeyCode},
-};
 
 use tui::{
     layout::{Alignment, Constraint, Direction, Layout},
@@ -20,35 +24,26 @@ use tui::{
     Terminal,
 };
 
-enum Event<I> {
-    Input(I),
-    Tick,
+pub enum Event {
+    Status(SearchStatus),
+    Log(String),
+    Score(f64),
+    Position(Position),
+    Pause,
+    Reset,
+    Stop,
 }
 
-const TUI_TICK_RATE: u64 = 100; // 10 FPS
-
-pub struct Tui {
-    status: Arc<Mutex<SearchStatus>>,
-    score_buf: Arc<Mutex<Vec<f64>>>,
-    log_buf: Arc<Mutex<Vec<String>>>,
-    current_pos: Arc<Mutex<Position>>,
-    stop_flag: Arc<Mutex<bool>>,
+pub struct Ui {
+    tx: Option<Sender<Event>>,
     handle: Option<JoinHandle<()>>,
-    exit_flag: Arc<Mutex<bool>>,
-    paused: Arc<Mutex<bool>>,
 }
 
-impl Tui {
+impl Ui {
     /// Creates a new TUI instance.
     pub fn new() -> Self {
-        Tui {
-            status: Arc::new(Mutex::new(SearchStatus::Done)),
-            log_buf: Arc::new(Mutex::new(Vec::new())),
-            current_pos: Arc::new(Mutex::new(Position::new())),
-            score_buf: Arc::new(Mutex::new(Vec::new())),
-            stop_flag: Arc::new(Mutex::new(false)),
-            exit_flag: Arc::new(Mutex::new(false)),
-            paused: Arc::new(Mutex::new(false)),
+        Self {
+            tx: None,
             handle: None,
         }
     }
@@ -205,46 +200,21 @@ impl Tui {
     pub fn start<T>(&mut self, backend: T)
     where T: tui::backend::Backend + Send + 'static
     {
-        let thr_status = self.status.clone();
-        let thr_log_buf = self.log_buf.clone();
-        let thr_score_buf = self.score_buf.clone();
-        let thr_stop_flag = self.stop_flag.clone();
-        let thr_paused = self.paused.clone();
-        let thr_exit_flag = self.exit_flag.clone();
-        let thr_current_pos = self.current_pos.clone();
+        let (tx, rx) = channel();
+        self.tx = Some(tx);
 
         self.handle = Some(spawn(move || {
-            // Start input thread
-            let (inp_tx, inp_rx) = channel();
-            let inp_thread_stopflag = Arc::new(Mutex::new(false));
-            let inp_thr_thread_stopflag = inp_thread_stopflag.clone();
-
-            let input_thread = spawn(move || {
-                let tick_rate = Duration::from_millis(TUI_TICK_RATE);
-                let mut last_tick = Instant::now();
-                while !*inp_thr_thread_stopflag.lock().unwrap() {
-                    let timeout = tick_rate
-                        .checked_sub(last_tick.elapsed())
-                        .unwrap_or_else(|| Duration::from_secs(0));
-
-                    if event::poll(timeout).unwrap() {
-                        if let CEvent::Key(key) = event::read().unwrap() {
-                            inp_tx.send(Event::Input(key)).unwrap();
-                        }
-                    }
-
-                    if last_tick.elapsed() >= tick_rate {
-                        inp_tx.send(Event::Tick).unwrap();
-                        last_tick = Instant::now();
-                    }
-                }
-            });
-
             let mut terminal = Terminal::new(backend).expect("terminal init failed");
             let mut nps_history: Vec<f64> = vec![0.0];
 
-            while !*thr_stop_flag.lock().unwrap() {
-                if !*thr_paused.lock().unwrap() {
+            let mut paused = false;
+            let mut cstatus = SearchStatus::Done;
+            let mut cposition = Position::new();
+            let mut log_buf: Vec<String> = Vec::new();
+            let mut score_buf: Vec<f64> = Vec::new();
+
+            loop {
+                if !paused {
                     terminal
                         .draw(|f| {
                             // Compute layout areas
@@ -293,8 +263,6 @@ impl Tui {
                             let board_rect = rects[2];
 
                             // Render tree status, if there is one.
-                            let search_status = thr_status.lock().unwrap().clone();
-
                             let header_cells =
                                 ["Action", "N_normalized", "N_actual", "P", "Q", "depth"]
                                     .iter()
@@ -306,7 +274,7 @@ impl Tui {
 
                             let mut total_nn = 0.0;
 
-                            let nodes = match &search_status {
+                            let nodes = match &cstatus {
                                 SearchStatus::Searching(s) => match &s.tree {
                                     Some(t) => {
                                         total_nn = t.total_nn;
@@ -345,8 +313,7 @@ impl Tui {
 
                             // Render log
 
-                            let log_lines = thr_log_buf.lock().unwrap().clone();
-                            let log_lines = log_lines[log_lines
+                            let log_lines = log_buf[log_buf
                                 .len()
                                 .checked_sub((log_rect.height - 2) as usize)
                                 .unwrap_or(0)..]
@@ -360,7 +327,7 @@ impl Tui {
                             f.render_widget(lg, log_rect);
 
                             // Render board status
-                            let board_lines = thr_current_pos.lock().unwrap().to_string_pretty();
+                            let board_lines = cposition.to_string_pretty();
 
                             // Center vertically
                             let board_lines =
@@ -379,45 +346,28 @@ impl Tui {
                             f.render_widget(board_widget, board_rect);
 
                             // Render perf summary
-                            let summary_lines = format!(
-                                "Searcher: {}\nAvg. noderate: {}\nAvg. batchrate: {}\n",
-                                match &search_status {
-                                    SearchStatus::Searching(stat) =>
-                                        format!("searching {}", stat.rootfen),
-                                    SearchStatus::Stopping => "stopping".to_string(),
-                                    SearchStatus::Done => "stopped".to_string(),
-                                },
-                                match &search_status {
-                                    SearchStatus::Searching(stat) => {
-                                        format!(
-                                            "{:.1}",
-                                            (stat
-                                                .workers
-                                                .iter()
-                                                .map(|w| w.total_nodes as f64)
-                                                .sum::<f64>()
-                                                / stat.elapsed_ms as f64)
-                                                * 1000.0
-                                        )
-                                    }
-                                    _ => "N/A".to_string(),
-                                },
-                                match &search_status {
-                                    SearchStatus::Searching(stat) => {
-                                        format!(
-                                            "{:.1}",
-                                            (stat
-                                                .workers
-                                                .iter()
-                                                .map(|w| w.batch_sizes.len() as f64)
-                                                .sum::<f64>()
-                                                / stat.elapsed_ms as f64)
-                                                * 1000.0
-                                        )
-                                    }
-                                    _ => "N/A".to_string(),
-                                }
-                            );
+                            let summary_lines = match &cstatus {
+                                SearchStatus::Stopping => "Search stopping.".to_string(),
+                                SearchStatus::Done => "Search done.".to_string(),
+                                SearchStatus::Searching(stat) => format!(
+                                    "FEN: {}\nNPS: {:.1}\nBPS: {:.1}",
+                                    stat.rootfen,
+                                    (stat
+                                        .workers
+                                        .iter()
+                                        .map(|w| w.total_nodes as f64)
+                                        .sum::<f64>()
+                                        / stat.elapsed_ms as f64)
+                                        * 1000.0,
+                                    (stat
+                                        .workers
+                                        .iter()
+                                        .map(|w| w.batch_sizes.len() as f64)
+                                        .sum::<f64>()
+                                        / stat.elapsed_ms as f64)
+                                        * 1000.0
+                                ),
+                            };
 
                             let summary_widget = Paragraph::new(summary_lines)
                                 .block(Block::default().title("Performance").borders(Borders::ALL))
@@ -433,7 +383,7 @@ impl Tui {
                             let perf_header =
                                 Row::new(perf_header_cells).height(1).bottom_margin(1);
 
-                            let workers = match &search_status {
+                            let workers = match &cstatus {
                                 SearchStatus::Searching(stat) => stat.workers.clone(),
                                 _ => Vec::new(),
                             };
@@ -465,7 +415,7 @@ impl Tui {
                             prog_rect.y += prog_rect.height - 2;
                             prog_rect.height = 2;
 
-                            let prog_total_nodes = match &search_status {
+                            let prog_total_nodes = match &cstatus {
                                 SearchStatus::Searching(stat) => stat.total_nodes,
                                 _ => 0,
                             };
@@ -493,94 +443,62 @@ impl Tui {
                             f.render_widget(prog_widget, prog_rect);
 
                             // Render search score
-                            Tui::render_score(f, score_rect, &thr_score_buf.lock().unwrap());
+                            Ui::render_score(f, score_rect, &score_buf);
 
                             // Render NPS history
-                            if let SearchStatus::Searching(stat) = &search_status {
+                            if let SearchStatus::Searching(stat) = &cstatus {
                                 nps_history.push(stat.nps as f64);
                             }
 
-                            Tui::render_nps(f, nps_rect, &nps_history);
+                            Ui::render_nps(f, nps_rect, &nps_history);
                         })
                         .expect("terminal draw failed");
                 }
 
-                // Process user input
-                match inp_rx.recv().expect("input rx failed") {
-                    Event::Input(event) => match event.code {
-                        KeyCode::Char('q') | KeyCode::Esc => {
-                            thr_log_buf
-                                .lock()
-                                .unwrap()
-                                .push("Received exit request.".to_string());
-                            *thr_exit_flag.lock().unwrap() = true;
-                        }
-                        KeyCode::Char('p') => {
-                            let mut lock = thr_paused.lock().unwrap();
-                            *lock = !*lock;
+                // Find deadline for next frame
+                let frame_timer = Instant::now();
+                let mut stop = false;
 
-                            if *lock {
-                                thr_log_buf
-                                    .lock()
-                                    .unwrap()
-                                    .push("Paused display".to_string());
-                            } else {
-                                thr_log_buf
-                                    .lock()
-                                    .unwrap()
-                                    .push("Unpaused display".to_string());
-                            }
-                        }
-                        _ => (),
-                    },
-                    Event::Tick => (),
+                // Process TUI events
+                while frame_timer.elapsed().as_millis() < (1000 / constants::TUI_FRAME_RATE) as u128 {
+                    match rx.recv_timeout(Duration::from_millis((1000 / constants::TUI_FRAME_RATE) - frame_timer.elapsed().as_millis() as u64)) {
+                        Ok(evt) => match evt {
+                            Event::Stop => stop = true,
+                            Event::Log(s) => log_buf.push(s),
+                            Event::Position(p) => cposition = p,
+                            Event::Reset => score_buf.clear(),
+                            Event::Score(s) => score_buf.push(s),
+                            Event::Status(s) => cstatus = s,
+                            Event::Pause => {
+                                if paused {
+                                    log_buf.push("Resumed display.".to_string());
+                                } else {
+                                    log_buf.push("Paused display.".to_string());
+                                }
+                                
+                                paused = !paused;
+                            },
+                        },
+                        Err(Timeout) => (),
+                        Err(e) => Err(e).expect("unexpected recv fail"),
+                    }
+                }
+
+                if stop {
+                    break;
                 }
             }
-
-            *inp_thread_stopflag.lock().unwrap() = true;
-            input_thread.join().expect("failed joining input thread");
-        }));  
+        }));
     }
 
-    /// Stops the TUI thread and consumes this object.
-    pub fn stop(self) {
-        assert!(self.handle.is_some(), "TUI not running?");
-
-        *self.stop_flag.lock().unwrap() = true;
-        self.handle
-            .unwrap()
-            .join()
-            .expect("failed joining TUI thread");
+    /// Gets an event sender handle for this TUI.
+    pub fn tx(&self) -> Sender<Event> {
+        self.tx.as_ref().expect("TUI not running").clone()
     }
 
-    /// Adds a message to the TUI log.
-    pub fn log(&self, msg: impl ToString) {
-        self.log_buf.lock().unwrap().push(msg.to_string());
-    }
-
-    /// Adds a search status to the TUI search status buffer.
-    pub fn push_status(&self, status: SearchStatus) {
-        *self.status.lock().unwrap() = status;
-    }
-
-    /// Adds a score to the TUI score buffer.
-    pub fn push_score(&self, score: f64) {
-        self.score_buf.lock().unwrap().push(score);
-    }
-
-    /// Sets the current position.
-    pub fn set_position(&self, pos: Position) {
-        *self.current_pos.lock().unwrap() = pos;
-    }
-
-    /// Resets all per-game data, should be called between games.
-    pub fn reset_game(&self) {
-        self.score_buf.lock().unwrap().clear();
-    }
-
-    /// Returns true if the user has requested to quit.
-    pub fn exit_requested(&self) -> bool {
-        *self.exit_flag.lock().unwrap()
+    /// Joins the TUI thread.
+    pub fn join(mut self) {
+        self.handle.take().expect("TUI not running").join().expect("TUI thread failed to join")
     }
 }
 
@@ -592,19 +510,20 @@ mod test {
 
     /// Tests the TUI can be initialized.
     #[test]
-    fn tui_can_initialize() {
-        Tui::new();
+    fn ui_can_initialize() {
+        Ui::new();
     }
 
     #[test]
     /// Tests the TUI can be started and stopped.
-    fn tui_can_start_stop() {
-        let mut t = Tui::new();
+    fn ui_can_start_stop() {
+        let mut t = Ui::new();
 
         t.start(TestBackend::new(800, 600));
 
         sleep(Duration::from_secs(1));
 
-        t.stop();
+        t.tx().send(Event::Stop).unwrap();
+        t.join();
     }
 }
