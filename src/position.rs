@@ -59,7 +59,7 @@ impl State {
         })
     }
 
-    pub fn get_header(&self) -> &[f32; model::SQUARE_HEADER_SIZE] {
+    pub fn get_header(&self) -> &[f32] {
         &self.header
     }
 
@@ -82,13 +82,13 @@ impl State {
         }
 
         // Write castling rights
-        let wrights = b.castle_rights(Color::White);
-        let brights = b.castle_rights(Color::Black);
+        let mrights = b.my_castle_rights();
+        let trights = b.their_castle_rights();
 
-        hdr[14] = wrights.has_kingside() as i32 as f32;
-        hdr[15] = wrights.has_queenside() as i32 as f32;
-        hdr[16] = brights.has_kingside() as i32 as f32;
-        hdr[17] = brights.has_queenside() as i32 as f32;
+        hdr[14] = mrights.has_kingside() as i32 as f32;
+        hdr[15] = mrights.has_queenside() as i32 as f32;
+        hdr[16] = trights.has_kingside() as i32 as f32;
+        hdr[17] = trights.has_queenside() as i32 as f32;
 
         hdr
     }
@@ -98,7 +98,8 @@ impl State {
 pub struct Position {
     states: Vec<State>,
     reps: Vec<u8>,
-    frames: Vec<f32>,
+    wframes: Vec<f32>,
+    bframes: Vec<f32>,
 }
 
 impl Position {
@@ -110,7 +111,8 @@ impl Position {
 
         let mut p = Position {
             states: vec![State::initial()],
-            frames: initial_frames,
+            wframes: initial_frames.clone(),
+            bframes: initial_frames,
             reps: vec![0],
         };
 
@@ -121,6 +123,11 @@ impl Position {
     /// Gets the most recent game state.
     fn top(&self) -> &State {
         &self.states.last().unwrap()
+    }
+
+    /// Gets the current side to move.
+    pub fn side_to_move(&self) -> Color {
+        self.top().b.side_to_move()
     }
 
     /// Returns an iterator over the legal moves in this Position.
@@ -168,16 +175,26 @@ impl Position {
     pub fn is_game_over(&self) -> Option<f32> {
         let b = self.top().b;
 
-        match b.status() {
-            chess::BoardStatus::Checkmate => {
-                return match b.side_to_move() {
-                    chess::Color::White => Some(-1.0),
-                    chess::Color::Black => Some(1.0),
-                };
-            }
+        let status = match b.status() {
+            chess::BoardStatus::Checkmate => match b.side_to_move() {
+                chess::Color::White => Some(-1.0),
+                chess::Color::Black => Some(1.0),
+            },
             chess::BoardStatus::Stalemate => Some(0.0),
             chess::BoardStatus::Ongoing => None,
         };
+
+        if status.is_some() {
+            return status;
+        }
+
+        // Check for insufficient material
+        let all_pieces = b.color_combined(Color::White) | b.color_combined(Color::Black);
+
+        // K(N)(B)vK(N)(B)
+        if b.pieces(Piece::King) | b.pieces(Piece::Knight) | b.pieces(Piece::Bishop) == all_pieces && (b.pieces(Piece::Knight) | b.pieces(Piece::Bishop)).popcnt() < 3 {
+            return Some(0.0);
+        }
 
         // Check for 50-move rule
         if self.top().halfmove_clock >= 50 {
@@ -208,20 +225,23 @@ impl Position {
         self.states.pop();
 
         // Shorten frame vector
-        self.frames
-            .drain(self.frames.len() - (model::PLY_FRAME_SIZE * 64)..);
+        self.wframes
+            .drain(self.wframes.len() - (model::PLY_FRAME_SIZE * 64)..);
+        self.bframes
+            .drain(self.bframes.len() - (model::PLY_FRAME_SIZE * 64)..);
     }
 
-    /// Returns a reference to the per-square input layer data.
-    /// Gets up to
+    /// Returns a reference to the current input frames.
     pub fn get_frames(&self) -> &[f32] {
-        let current_len = self.frames.len();
-        &self.frames[current_len - model::PLY_FRAME_COUNT * model::PLY_FRAME_SIZE * 64..]
+        match self.top().b.side_to_move() {
+            Color::White => &self.wframes[self.wframes.len() - model::FRAMES_SIZE..],
+            Color::Black => &self.bframes[self.bframes.len() - model::FRAMES_SIZE..],
+        }
     }
 
-    /// Returns a reference to the per-move input layer headers.
-    pub fn get_headers(&self) -> &[f32; model::SQUARE_HEADER_SIZE] {
-        self.top().get_header()
+    /// Returns a reference to the current input headers.
+    pub fn get_headers(&self) -> &[f32] {
+        &self.top().get_header()
     }
 
     /// Returns a slice with the legal move mask for this position as well as a list of legal moves.
@@ -229,9 +249,21 @@ impl Position {
         let mut lmm = [0.0; 4096];
         let moves = self.generate_moves();
 
-        for mv in &moves {
-            lmm[mv.get_source().to_index() * 64 + mv.get_dest().to_index()] = 1.0;
+        match self.top().b.side_to_move() {
+            Color::White => {
+                for mv in &moves {
+                    lmm[mv.get_source().to_index() * 64 + mv.get_dest().to_index()] = 1.0;
+                }
+            }
+            Color::Black => {
+                for mv in &moves {
+                    lmm[(63 - mv.get_source().to_index()) * 64 + (63 - mv.get_dest().to_index())] =
+                        1.0;
+                }
+            }
         }
+
+        assert_ne!(moves.len(), 0, "in position {}", self.get_fen());
 
         (lmm, moves)
     }
@@ -241,23 +273,20 @@ impl Position {
         self.top().b.to_string()
     }
 
-    /// Returns the current POV in float format.
-    /// 0: White to move
-    /// 1: Black to move
-    pub fn get_pov(&self) -> f32 {
-        match self.top().b.side_to_move() {
-            Color::White => 0.0,
-            Color::Black => 1.0,
-        }
-    }
-
     /// Pushes the current board/rep state onto the frames layer.
     fn push(&mut self, reps: usize) {
         let b = self.top().b;
-        let last_len = self.frames.len();
-        self.frames
+        let last_len = self.wframes.len();
+
+        assert_eq!(self.wframes.len(), self.bframes.len());
+
+        self.wframes
             .resize(last_len + model::PLY_FRAME_SIZE * 64, 0.0);
-        let dst = &mut self.frames[last_len..];
+        self.bframes
+            .resize(last_len + model::PLY_FRAME_SIZE * 64, 0.0);
+
+        let wdst = &mut self.wframes[last_len..];
+        let bdst = &mut self.bframes[last_len..];
 
         let rbitlow = (reps & 1) as f32;
         let rbithigh = ((reps >> 1) & 1) as f32;
@@ -267,8 +296,10 @@ impl Position {
             for f in 0..8 {
                 let sq = Square::make_square(Rank::from_index(r), File::from_index(f));
                 let p = b.piece_on(sq);
+
+                // White input update
                 let offset = r * (model::PLY_FRAME_SIZE * 8) + f * model::PLY_FRAME_SIZE;
-                let dst_square_frame = &mut dst[offset..offset + model::PLY_FRAME_SIZE];
+                let dst_square_frame = &mut wdst[offset..offset + model::PLY_FRAME_SIZE];
 
                 dst_square_frame[12] = rbitlow;
                 dst_square_frame[13] = rbithigh;
@@ -279,6 +310,21 @@ impl Position {
 
                     dst_square_frame[pbit] = 1.0;
                 }
+
+                // Black input update
+                let boffset =
+                    (7 - r) * (model::PLY_FRAME_SIZE * 8) + (7 - f) * model::PLY_FRAME_SIZE;
+                let bdst_square_frame = &mut bdst[boffset..boffset + model::PLY_FRAME_SIZE];
+
+                bdst_square_frame[12] = rbitlow;
+                bdst_square_frame[13] = rbithigh;
+
+                if let Some(pc) = p {
+                    let mut pbit = pc.to_index() + 6;
+                    pbit -= b.color_on(sq).unwrap().to_index() * 6;
+
+                    bdst_square_frame[pbit] = 1.0;
+                }
             }
         }
     }
@@ -286,6 +332,28 @@ impl Position {
     /// Gets the number of moves made in the game.
     pub fn ply(&self) -> usize {
         self.states.len() - 1
+    }
+
+    /// Returns a pretty-printed board representation.
+    pub fn to_string_pretty(&self) -> String {
+        (0..8)
+            .rev()
+            .map(Rank::from_index)
+            .map(|r| {
+                (0..8)
+                    .map(File::from_index)
+                    .map(|f| {
+                        let sq = Square::make_square(r, f);
+                        match self.top().b.piece_on(sq) {
+                            Some(p) => p.to_string(self.top().b.color_on(sq).unwrap()),
+                            None => ".".to_string(),
+                        }
+                    })
+                    .collect::<Vec<String>>()
+                    .join(" ")
+            })
+            .collect::<Vec<String>>()
+            .join("\n")
     }
 }
 
