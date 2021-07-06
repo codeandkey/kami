@@ -228,7 +228,7 @@ mod test {
         pos.make_move(ChessMove::from_str("g7g5").expect("move parse fail"));
 
         let mut search = Searcher::new();
-        let rx = search.start(Some(1000), mock(), pos, 0.1, 4).unwrap();
+        let rx = search.start(Some(10000), mock(), pos, 0.1, 16).unwrap();
 
         loop {
             match rx.recv().expect("rx failed") {
