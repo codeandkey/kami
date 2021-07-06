@@ -27,7 +27,7 @@ use std::io::stdout;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::thread::{sleep, spawn};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tui::backend::CrosstermBackend;
 
 use game::Game;

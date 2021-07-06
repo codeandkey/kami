@@ -2,8 +2,6 @@ use crate::constants;
 use crate::position::Position;
 use crate::searcher::SearchStatus;
 
-use std::ops::Add;
-
 use std::sync::{
     mpsc::{
         channel,
