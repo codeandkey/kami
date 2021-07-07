@@ -14,6 +14,7 @@ FRAME_SIZE=14
 HEADER_SIZE=18
 EPOCHS = 10
 POLICY_EPSILON=1e-6
+DROPOUT = 0.3
 
 # Load module from path
 module = torch.jit.load(sys.argv[1])
@@ -59,7 +60,17 @@ torch.set_printoptions(edgeitems=4096)
 
 def train_loop():
     for b, ((headers, frames, lmm), (mcts, result)) in enumerate(batches):
+        headers = torch.nn.Dropout(DROPOUT)(headers)
+        frames = torch.nn.Dropout(DROPOUT)(frames)
+
+        # don't apply dropout to LMM
+
         policy, value = module(headers, frames, lmm)
+
+        l2_reg = 0
+        for p in module.parameters():
+            l2_reg += 0.5 * (p ** 2).sum()
+
         current_loss = loss(policy, value, mcts, result)
 
         #print("BEGIN")
