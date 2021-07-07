@@ -38,7 +38,7 @@ pub struct Status {
 }
 
 /// Response to tree batch requests.
-/// Can contain either a new batch and terminal count or a request to stop.
+/// Can contain either a new batch and total node count or a request to stop.
 pub enum BatchResponse {
     NextBatch(Box<TreeBatch>, usize),
     Stop,
@@ -107,10 +107,10 @@ impl Tree {
                             resp_tx.send(BatchResponse::Stop).expect("tree send failed");
                         } else {
                             // Build batch and send it
-                            let (next_batch, terminals) = self.make_batch(self.batch_size);
+                            let (next_batch, nodes) = self.make_batch(self.batch_size);
 
                             resp_tx
-                                .send(BatchResponse::NextBatch(Box::new(next_batch), terminals))
+                                .send(BatchResponse::NextBatch(Box::new(next_batch), nodes))
                                 .expect("tree send failed");
                         }
                     }
@@ -184,19 +184,29 @@ impl Tree {
     }
 
     /// Generates a single batch with maximum size <bsize>.
-    /// Returns the generated batch.
+    /// Returns the number of MCTS iterations performed.
     fn make_batch(&mut self, bsize: usize) -> (TreeBatch, usize) {
         let mut b = TreeBatch::new(bsize);
-        let (_, terminals) = self.build_batch(&mut b, 0, bsize);
-        (b, terminals)
+        let mut nodes = 0;
+
+        for _ in 0..bsize {
+            if !self.mcts(&mut b, 0) {
+                // If MCTS fails, there are no nodes available to evaluate
+                break;
+            }
+
+            nodes += 1;
+        }
+
+        (b, nodes)
     }
 
-    /// Selects nodes for a batch.
-    /// Returns the number of positions in the new Batch.
-    fn build_batch(&mut self, b: &mut TreeBatch, this: usize, allocated: usize) -> (usize, usize) {
+    /// Performs a single MCTS iteration.
+    /// Returns true if a leaf was reached, false otherwise.
+    fn mcts(&mut self, b: &mut TreeBatch, this: usize) -> bool {
         // Is this node claimed? If so, stop here.
         if self[this].claim {
-            return (0, 0);
+            return false;
         }
 
         // Does this node have children? If not, claim this node.
@@ -214,23 +224,18 @@ impl Tree {
                     res = 1.0; // If the position is checkmate, then this node (decision) has a high value.
                 }
 
-                for _ in 0..allocated {
-                    self.backprop(this, res, 0);
-                }
-
-                return (0, allocated);
+                self.backprop(this, res, 0);
+                return true;
             } else {
                 // Nonterminal, claim the node and add to the batch.
                 self[this].claim = true;
                 b.add(&self.pos, this);
 
-                return (1, 0);
+                return true;
             }
         }
 
-        // Node has children, so we walk through them in the proper order and allocate batches accordingly.
-        let mut total_batch_size = 0;
-        let mut total_terminals = 0;
+        // Node has children, so we walk through them in the proper order and try to find a new leaf.
 
         // Collect node children IDs, order by UCT
         let children = self[this].children.as_ref().unwrap().clone();
@@ -269,43 +274,22 @@ impl Tree {
 
         pairs.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
 
-        let mut uct_total: f64 = pairs.iter().map(|x| x.1).sum();
-
         // Iterate over children
-        for (child, uct) in pairs {
-            let remaining = allocated.checked_sub(total_batch_size).unwrap_or(0);
-
-            if remaining == 0 {
-                break;
-            }
-
-            let mut child_alloc = (remaining as f64 * (uct / uct_total)).ceil() as usize;
-            uct_total -= uct;
-
-            if child_alloc == 0 {
-                continue;
-            }
-
-            if child_alloc > remaining {
-                child_alloc = remaining;
-            }
-
+        for (child, _) in pairs {
             // Perform child action
             assert!(self.pos.make_move(self[child].action.unwrap()));
 
-            // Allocate batches
-            let (child_batches, child_terminals) = self.build_batch(b, child, child_alloc);
+            // Try MCTS iteration
+            let result = self.mcts(b, child);
 
-            total_batch_size += child_batches;
-            total_batch_size += child_terminals; // include terminals in allocated batches (?)
-
-            total_terminals += child_terminals;
-
-            // Unmake child move
             self.pos.unmake_move();
+
+            if result {
+                return true;
+            }
         }
 
-        (total_batch_size, total_terminals)
+        return false;
     }
 
     /// Backpropagates a value up through the tree.
