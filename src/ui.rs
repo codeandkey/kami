@@ -218,7 +218,7 @@ impl Ui {
                             // Compute layout areas
                             let rects = Layout::default()
                                 .direction(Direction::Horizontal)
-                                .constraints([Constraint::Length(63), Constraint::Percentage(100)])
+                                .constraints([Constraint::Length(71), Constraint::Percentage(100)])
                                 .split(f.size());
 
                             let tree_rect = rects[0];
@@ -262,7 +262,7 @@ impl Ui {
 
                             // Render tree status, if there is one.
                             let header_cells =
-                                ["Action", "N_normalized", "N_actual", "P", "Q", "depth"]
+                                ["Action", "N_normalized", "N_actual", "P", "Q", "depth", "T"]
                                     .iter()
                                     .map(|h| {
                                         Cell::from(*h).style(Style::default().fg(Color::Blue))
@@ -292,6 +292,7 @@ impl Ui {
                                     format!("{:.2}%", nd.p_pct * 100.0),
                                     format!("{:+.2}", nd.q),
                                     format!("{}", nd.depth),
+                                    format!("{}%", if nd.n <= 0 { 0 } else { nd.tn * 100 / nd.n })
                                 ])
                             });
 
@@ -302,6 +303,7 @@ impl Ui {
                                     Constraint::Length(10),
                                     Constraint::Length(14),
                                     Constraint::Length(10),
+                                    Constraint::Length(8),
                                     Constraint::Length(8),
                                     Constraint::Length(8),
                                     Constraint::Length(8),

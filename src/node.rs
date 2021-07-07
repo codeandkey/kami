@@ -10,6 +10,7 @@ pub enum TerminalStatus {
 pub struct Node {
     pub p: f64,
     pub n: u32,
+    pub tn: u32,
     pub w: f32,
     pub p_total: f64,
     pub maxdepth: usize,
@@ -30,6 +31,7 @@ impl Node {
             p: 0.0,
             p_total: 0.0,
             n: 0,
+            tn: 0,
             w: 0.0,
             children: None,
             claim: false,
@@ -49,6 +51,7 @@ impl Node {
             p: policy,
             p_total: 0.0,
             n: 0,
+            tn: 0,
             w: 0.0,
             children: None,
             claim: false,

@@ -21,6 +21,7 @@ const P_NOISE_DIRICHLET: f64 = 0.285; // Dirichlet noise to add to P before PUCT
 pub struct StatusNode {
     pub action: String,
     pub n: u32,
+    pub tn: u32,
     pub nn: f64,
     pub p_pct: f64,
     pub w: f32,
@@ -133,7 +134,7 @@ impl Tree {
                                 output.get_policy(i),
                                 batch.get_inner().get_moves(i),
                             );
-                            self.backprop(batch.get_selected(i), output.get_value(i), 0);
+                            self.backprop(batch.get_selected(i), output.get_value(i), 0, 0);
                         }
                     }
                     TreeReq::RequestStop => stop_requested = true,
@@ -161,6 +162,7 @@ impl Tree {
             .map(|&c| StatusNode {
                 action: self[c].action.unwrap().to_string(), // action string
                 n: self[c].n,                                // visit count
+                tn: self[c].tn,                              // terminal count
                 nn: (self[c].n as f64).powf(1.0 / self.temperature), // normalized visit count
                 w: self[c].w,                                // total value
                 p_pct: self[c].p / p_total,                  // normalized policy
@@ -224,7 +226,7 @@ impl Tree {
                     res = 1.0; // If the position is checkmate, then this node (decision) has a high value.
                 }
 
-                self.backprop(this, res, 0);
+                self.backprop(this, res, 0, 1);
                 return true;
             } else {
                 // Nonterminal, claim the node and add to the batch.
@@ -293,10 +295,11 @@ impl Tree {
     }
 
     /// Backpropagates a value up through the tree.
-    fn backprop(&mut self, idx: usize, value: f32, depth: usize) {
+    fn backprop(&mut self, idx: usize, value: f32, depth: usize, terminal: u32) {
         let mut node = &mut self[idx];
 
         node.n += 1;
+        node.tn += terminal;
         node.w += value;
 
         if depth > node.maxdepth {
@@ -304,7 +307,7 @@ impl Tree {
         }
 
         if let Some(pidx) = node.parent {
-            self.backprop(pidx, -value, depth + 1);
+            self.backprop(pidx, -value, depth + 1, terminal);
         }
     }
 
