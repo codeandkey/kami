@@ -17,12 +17,6 @@ mod tree;
 mod ui;
 mod worker;
 
-use crossterm::{
-    execute,
-    terminal::{enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-    event::{self, Event, KeyCode},
-};
-
 use std::error::Error;
 use std::fs;
 use std::io::{stdout, stdin, Read, Write};
