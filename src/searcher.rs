@@ -254,19 +254,12 @@ mod test {
     /// Tests that a search can be started and immediately stopped.
     #[test]
     fn search_can_run_short() {
-        let mut search = Searcher::new();
-        let rx = search
-            .start(Some(500), None, mock(), Position::new(), 1.0, 4)
-            .unwrap();
-
-        loop {
-            match rx.recv().expect("rx failed") {
-                SearchStatus::Done => break,
-                _ => (),
-            }
-        }
-
-        search.wait();
+        Searcher::new()
+            .maxtime(500)
+            .model(mock())
+            .batch_size(4)
+            .run(|_| ())
+            .expect("search failed");
     }
 
     /// Tests that a short search will select a mate in 1 (with low temperature)
@@ -279,22 +272,17 @@ mod test {
         pos.make_move(ChessMove::from_str("a2a4").expect("move parse fail"));
         pos.make_move(ChessMove::from_str("g7g5").expect("move parse fail"));
 
-        let mut search = Searcher::new();
-        let rx = search.start(Some(10000), None, mock(), pos, 0.1, 16).unwrap();
-
-        loop {
-            match rx.recv().expect("rx failed") {
-                SearchStatus::Done => break,
-                _ => (),
-            }
-        }
-
-        let final_tree = search.wait().expect("no tree returned");
+        let tree = Searcher::new()
+            .position(pos)
+            .model(mock())
+            .maxtime(10000)
+            .run(|_| ())
+            .expect("search failed");
 
         assert_eq!(
-            final_tree.select(),
+            tree.select(),
             ChessMove::from_str("d1h5").expect("move parse fail"),
-            "tree: \n{}", serde_json::to_string_pretty(&final_tree.get_status().unwrap()).expect("serialize failed"),
+            "tree: \n{}", serde_json::to_string_pretty(&tree.get_status().unwrap()).expect("serialize failed"),
         );
     }
 
