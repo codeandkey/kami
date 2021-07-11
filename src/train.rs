@@ -146,6 +146,18 @@ fn generate_training_set(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>>
         // Finalize game if it is over.
         if let Some(result) = position.is_game_over() {
             game.finalize(result);
+
+            ui.lock().unwrap().log(format!("Game over, {}",
+                if result > 0.0 {
+                    "1-0"
+                } else {
+                    if result < 0.0 {
+                        "0-1"
+                    } else {
+                        "1/2-1/2"
+                    }
+                }
+            ));
         }
 
         // Write game to disk.
