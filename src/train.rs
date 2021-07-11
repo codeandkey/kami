@@ -128,11 +128,15 @@ fn generate_training_set(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>>
             assert!(position.make_move(*mv), "Invalid move in resumed game!");
         }
 
+        ui.lock().unwrap().reset();
+
         // Start searching until game is over.
         while position.is_game_over().is_none() {
             if ui.lock().unwrap().should_exit() {
                 break;
             }
+
+            ui.lock().unwrap().position(position.clone());
 
             let (selected_move, mcts) = do_search(model.clone(), ui.clone(), &position)?;
             assert!(position.make_move(selected_move));
