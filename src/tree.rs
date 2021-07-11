@@ -368,6 +368,24 @@ impl Tree {
         return actions[index.sample(&mut rng)];
     }
 
+    /// Gets the predicted current score.
+    pub fn score(&self) -> f64 {
+        // Find move with best n
+        let mut best_n = 0;
+        let mut best_score: Option<f64> = None;
+
+        if let Some(children) = &self[0].children {
+            for &nd in children {
+                if self[nd].n > best_n {
+                    best_n = self[nd].n;
+                    best_score = Some(self[nd].q());
+                }
+            }
+        }
+
+        return best_score.unwrap_or(0.0);
+    }
+
     /// Gets MCTS visit counts for the root children in pair format.
     /// Output is normalized with temperature + softmax function.
     pub fn get_mcts_data(&self) -> Vec<(ChessMove, f64)> {

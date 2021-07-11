@@ -1,5 +1,6 @@
 use crate::model;
 use chess::{Board, ChessMove, Color, File, MoveGen, Piece, Rank, Square};
+use serde::ser::{Serialize, Serializer};
 
 #[derive(Clone)]
 struct State {
@@ -354,6 +355,13 @@ impl Position {
             })
             .collect::<Vec<String>>()
             .join("\n")
+    }
+}
+
+impl Serialize for Position {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where S: Serializer {
+        serializer.serialize_str(&self.get_fen())
     }
 }
 

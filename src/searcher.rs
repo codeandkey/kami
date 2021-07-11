@@ -5,6 +5,7 @@ use crate::tree::{self, StatusResponse, Tree, TreeReq};
 use crate::worker::{self, Worker};
 
 use serde::Serialize;
+use std::error::Error;
 use std::sync::mpsc::{channel, Receiver};
 use std::sync::{Arc, Mutex};
 use std::thread::{spawn, JoinHandle};
@@ -14,7 +15,6 @@ use std::time::Duration;
 #[derive(Serialize, Clone)]
 pub enum SearchStatus {
     Searching(Status),
-    Stopping,
     Done,
 }
 
@@ -30,9 +30,30 @@ pub struct Status {
     pub bps: f32,
 }
 
+impl Status {
+    pub fn new() -> Self {
+        Status {
+            tree: None,
+            workers: Vec::new(),
+            elapsed_ms: 0,
+            rootfen: "(no position)".to_string(),
+            total_nodes: 0,
+            total_batches: 0,
+            nps: 0.0,
+            bps: 0.0,
+        }
+    }
+}
+
 pub struct Searcher {
     workers: Arc<Mutex<Vec<Worker>>>,
     handle: Option<JoinHandle<Tree>>,
+    position: Position,
+    maxnodes: usize,
+    maxtime: usize,
+    batch_size: usize,
+    temperature: f64,
+    model: Option<Arc<Model>>,
 }
 
 impl Searcher {
@@ -40,30 +61,67 @@ impl Searcher {
         Searcher {
             workers: Arc::new(Mutex::new(Vec::new())),
             handle: None,
+            model: None,
+            position: Position::new(),
+            maxnodes: constants::SEARCH_MAXNODES,
+            maxtime: constants::SEARCH_TIME,
+            batch_size: constants::SEARCH_BATCH_SIZE,
+            temperature: constants::TEMPERATURE,
         }
     }
 
-    pub fn start(
+    pub fn model(mut self, model: Arc<Model>) -> Self {
+        self.model = Some(model);
+        self
+    }
+
+    pub fn position(mut self, position: Position) -> Self {
+        self.position = position;
+        self
+    }
+
+    pub fn maxnodes(mut self, maxnodes: usize) -> Self {
+        self.maxnodes = maxnodes;
+        self
+    }
+
+    pub fn maxtime(mut self, maxtime: usize) -> Self {
+        self.maxtime = maxtime;
+        self
+    }
+
+    pub fn temperature(mut self, temperature: f64) -> Self {
+        self.temperature = temperature;
+        self
+    }
+
+    pub fn batch_size(mut self, batch_size: usize) -> Self {
+        self.batch_size = batch_size;
+        self
+    }
+
+    pub fn run<F>(
         &mut self,
-        thr_stime: Option<usize>,
-        model: Arc<Model>,
-        thr_pos: Position,
-        temp: f64,
-        batch_size: usize,
-    ) -> Option<Receiver<SearchStatus>> {
+        f: F
+    ) -> Result<Tree, Box<dyn Error>>
+    where F: Fn(Status) {
         if self.handle.is_some() {
-            println!("Search is already running!");
-            return None;
+            return Err("Search is already running!".into());
         }
 
-        let (search_status_tx, search_status_rx) = channel();
-
-        let thr_model = model.clone();
+        let thr_model = self.model.as_ref().unwrap().clone();
         let thr_workers = self.workers.clone();
-        let thr_rootfen = thr_pos.get_fen();
+        let thr_rootfen = self.position.get_fen();
+        let thr_position = self.position.clone();
+        let thr_temperature = self.temperature.clone();
+        let thr_batch_size = self.batch_size.clone();
+        let thr_maxtime = self.maxtime.clone();
+        let thr_maxnodes = self.maxnodes.clone();
+
+        let (status_tx, status_rx) = channel();
 
         self.handle = Some(spawn(move || {
-            let (thr_tree_tx, thr_tree_handle) = Tree::new(thr_pos.clone(), temp, batch_size).run();
+            let (thr_tree_tx, thr_tree_handle) = Tree::new(thr_position, thr_temperature, thr_batch_size).run();
 
             for _ in 0..num_cpus::get() {
                 let mut new_worker = Worker::new(thr_tree_tx.clone(), thr_model.clone());
@@ -79,12 +137,12 @@ impl Searcher {
                 elapsed = start_point.elapsed().unwrap().as_millis() as u64;
 
                 // Get tree status
-                let (status_tx, status_rx) = channel();
+                let (tree_status_tx, tree_status_rx) = channel();
                 thr_tree_tx
-                    .send(TreeReq::GetStatus(status_tx))
+                    .send(TreeReq::GetStatus(tree_status_tx))
                     .expect("failed sending status req to tree");
 
-                let tree_status = match status_rx.recv().expect("failed receiving status from tree")
+                let tree_status = match tree_status_rx.recv().expect("failed receiving status from tree")
                 {
                     StatusResponse::NextStatus(s) => s,
                     StatusResponse::Stop => {
@@ -111,7 +169,7 @@ impl Searcher {
                     .fold((0, 0), |(a1, a2), (n, b)| (a1 + n, a2 + b));
 
                 // Send status to clients
-                let _ = search_status_tx.send(SearchStatus::Searching(Status {
+                status_tx.send(SearchStatus::Searching(Status {
                     elapsed_ms: elapsed,
                     tree: tree_status,
                     rootfen: thr_rootfen.clone(),
@@ -120,21 +178,16 @@ impl Searcher {
                     total_batches: total_batches,
                     nps: (total_nodes as f32 / (elapsed + 1) as f32) * 1000.0,
                     bps: (total_batches as f32 / (elapsed + 1) as f32) * 1000.0,
-                }));
+                })).expect("search status tx failed");
 
-                if let Some(t) = thr_stime {
-                    if elapsed >= t as u64 {
-                        break;
-                    }
+                if elapsed >= thr_maxtime as u64 {
+                    break;
                 }
 
-                if total_nodes >= constants::SEARCH_MAXNODES {
+                if total_nodes >= thr_maxnodes {
                     break;
                 }
             }
-
-            // Send search stopping signal
-            let _ = search_status_tx.send(SearchStatus::Stopping);
 
             // Send stop request to tree
             thr_tree_tx
@@ -158,17 +211,16 @@ impl Searcher {
             let tree_ret = thr_tree_handle.join().expect("failed to join tree");
 
             // Send search stop signal
-            let _ = search_status_tx.send(SearchStatus::Done);
+            status_tx.send(SearchStatus::Done).expect("search status tx failed");
 
             return tree_ret;
         }));
 
-        return Some(search_status_rx);
-    }
-
-    pub fn wait(&mut self) -> Option<Tree> {
-        if !self.handle.is_some() {
-            return None;
+        loop {
+            match status_rx.recv().expect("search status rx failed") {
+                SearchStatus::Searching(stat) => f(stat),
+                SearchStatus::Done => break,
+            }
         }
 
         let ret = self
@@ -178,7 +230,7 @@ impl Searcher {
             .join()
             .expect("failed joining search thread");
 
-        return Some(ret);
+        return Ok(ret);
     }
 }
 
@@ -204,7 +256,7 @@ mod test {
     fn search_can_run_short() {
         let mut search = Searcher::new();
         let rx = search
-            .start(Some(500), mock(), Position::new(), 1.0, 4)
+            .start(Some(500), None, mock(), Position::new(), 1.0, 4)
             .unwrap();
 
         loop {
@@ -228,7 +280,7 @@ mod test {
         pos.make_move(ChessMove::from_str("g7g5").expect("move parse fail"));
 
         let mut search = Searcher::new();
-        let rx = search.start(Some(10000), mock(), pos, 0.1, 16).unwrap();
+        let rx = search.start(Some(10000), None, mock(), pos, 0.1, 16).unwrap();
 
         loop {
             match rx.recv().expect("rx failed") {
@@ -260,10 +312,10 @@ mod test {
         let pos = Position::new();
 
         search
-            .start(Some(200), mock(), pos.clone(), 1.0, 4)
+            .start(Some(200), None, mock(), pos.clone(), 1.0, 4)
             .unwrap();
 
-        assert!(search.start(Some(200), mock(), pos, 1.0, 4).is_none());
+        assert!(search.start(Some(200), None, mock(), pos, 1.0, 4).is_none());
 
         search.wait().expect("no tree returned");
     }
@@ -274,7 +326,7 @@ mod test {
         let pos = Position::new();
 
         let mut search = Searcher::new();
-        let rx = search.start(Some(200), mock(), pos, 1.0, 4).unwrap();
+        let rx = search.start(Some(200), None, mock(), pos, 1.0, 4).unwrap();
 
         loop {
             match rx.recv().expect("rx failed") {
