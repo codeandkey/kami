@@ -197,6 +197,8 @@ fn evaluate_elo(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
     return Ok(true);
 }
 
+/// Searches a position.
+/// Returns the selected move along with the search MCTS counts.
 fn do_search(model: Arc<Model>, ui: Arc<Mutex<ui::Ui>>, position: &Position) -> Result<(ChessMove, Vec<(ChessMove, f64)>), Box<dyn Error>> {
     // Run search.
     let search_ui = ui.clone();
