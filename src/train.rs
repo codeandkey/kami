@@ -43,16 +43,17 @@ pub fn train() -> Result<(), Box<dyn Error>> {
     execute!(stdout(), EnterAlternateScreen)
         .expect("failed starting alternate screen");
 
-    let mut ui = Arc::new(Mutex::new(Ui::new()));
+    let ui = Arc::new(Mutex::new(Ui::new()));
     ui.lock().unwrap().start(CrosstermBackend::new(stdout()));
 
-    // Start event thread.
-    let should_stop = Arc::new(Mutex::new(false));
-            
+    // Start event thread.   
     let inp_ui = ui.clone();
-    let inp_should_stop = should_stop.clone();
     let inp_thread = spawn(move || {
-        while !*inp_should_stop.lock().unwrap() {
+        while !inp_ui.lock().unwrap().should_exit() {
+            if !event::poll(Duration::from_millis(100)).expect("event poll failed") {
+                continue;
+            }
+
             match event::read().unwrap() {
                 Event::Key(e) => match e.code {
                     KeyCode::Char('q') | KeyCode::Esc => {
@@ -89,7 +90,6 @@ pub fn train() -> Result<(), Box<dyn Error>> {
     }
 
     // Stop input thread.
-    *should_stop.lock().unwrap() = true;
     inp_thread.join().unwrap();
 
     // Stop ui thread.
@@ -143,8 +143,15 @@ fn generate_training_set(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>>
             game.make_move(selected_move, mcts);
         }
 
+        // Finalize game if it is over.
+        if let Some(result) = position.is_game_over() {
+            game.finalize(result);
+        }
+
         // Write game to disk.
         game.save(&next_game)?;
+
+        ui.lock().unwrap().log(format!("Wrote game to {}", next_game.display()));
 
         // If user wants to quit, stop here.
         if ui.lock().unwrap().should_exit() {
@@ -158,7 +165,8 @@ fn generate_training_set(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>>
 }
 
 fn evaluate_elo(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
-    ui.lock().unwrap().log("Skipping ELO evaluation!");
+    ui.lock().unwrap().log("Starting ELO evaluation.");
+
     // Start stockfish process.
     let stockfish_path = "scripts/stockfish_14_x64_avx2";
 
@@ -171,6 +179,8 @@ fn evaluate_elo(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
 
     let sf_stdin = stockfish.stdin.take().unwrap();
     let sf_stdout = stockfish.stdin.take().unwrap();
+
+
 
     return Ok(true);
 }
