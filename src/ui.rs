@@ -60,8 +60,16 @@ impl Ui {
         self.tx.as_ref().unwrap().send(Event::Status(status)).expect("ui tx failed");
     }
 
+    pub fn position(&self, position: Position) {
+        self.tx.as_ref().unwrap().send(Event::Position(position)).expect("ui tx failed");
+    }
+
     pub fn pause(&self) {
         self.tx.as_ref().unwrap().send(Event::Pause).expect("ui tx failed");
+    }
+
+    pub fn reset(&self) {
+        self.tx.as_ref().unwrap().send(Event::Reset).expect("ui tx failed");
     }
 
     pub fn request_exit(&mut self) {
@@ -497,11 +505,6 @@ impl Ui {
         }));
     }
 
-    /// Gets an event sender handle for this TUI.
-    pub fn tx(&self) -> Sender<Event> {
-        self.tx.as_ref().expect("TUI not running").clone()
-    }
-
     /// Joins the TUI thread.
     pub fn join(&mut self) {
         self.tx.as_ref().unwrap().send(Event::Stop).expect("ui tx failed");
@@ -530,7 +533,6 @@ mod test {
 
         sleep(Duration::from_secs(1));
 
-        t.tx().send(Event::Stop).unwrap();
         t.join();
     }
 }
