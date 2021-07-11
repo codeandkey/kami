@@ -14,6 +14,8 @@ pub const TRAINING_BATCH_SIZE: usize = 32; // number of decisions in each traini
 pub const TRAINING_BATCH_COUNT: usize = 32; // number of training batches
 pub const TUI_FRAME_RATE: u64 = 15; // TUI framerate (frames/second)
 pub const MOVETIME_ELO: usize = 2000; // MS per move during ELO evaluation
+pub const ELO_EVALUATION_NUM_GAMES: usize = 10;
+pub const STOCKFISH_ELO: [usize; ELO_EVALUATION_NUM_GAMES] = [200, 400, 600, 800, 1000, 1200, 1400, 1600, 1800, 2000]; // stockfish elo settings for ELO evaluation
 pub const ELO_EVALUATION_INTERVAL: usize = 25; // Perform ELO evaluation every n generations
 
 #[cfg(feature = "tch")]

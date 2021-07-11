@@ -16,12 +16,14 @@ use crossterm::{
     event::{self, Event, KeyCode},
 };
 
+use rand::{thread_rng, prelude::*};
+
 use std::path::Path;
 use std::process::{Command, Stdio};
 
 use std::error::Error;
 use std::fs;
-use std::io::{stdout, stdin, Read, Write};
+use std::io::{stdout, stdin, Read, Write, BufReader, BufRead};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::thread::{sleep, spawn};
@@ -76,13 +78,10 @@ pub fn train() -> Result<(), Box<dyn Error>> {
         }
 
         // Archive and train model.
-        ui.lock().unwrap().log("Training model.");
         advance_model(ui.clone())?;
 
         // Perform ELO evaluation if ready.
         if generation % constants::ELO_EVALUATION_INTERVAL == 0 {
-            ui.lock().unwrap().log(format!("Evaluating engine ELO after generation {}.", generation + 1));
-
             if !evaluate_elo(ui.clone())? {
                 break;
             }
@@ -177,7 +176,10 @@ fn generate_training_set(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>>
 }
 
 fn evaluate_elo(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
-    ui.lock().unwrap().log("Starting ELO evaluation.");
+    ui.lock().unwrap().log(format!("Starting ELO evaluation on generation {}", dir::current_generation()?));
+
+    // Load the current model.
+    let model = Arc::new(model::load(&dir::model_dir()?, true)?);
 
     // Start stockfish process.
     let stockfish_path = "scripts/stockfish_14_x64_avx2";
@@ -189,10 +191,184 @@ fn evaluate_elo(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
 
     ui.lock().unwrap().log(format!("Started stockfish: {}", stockfish_path));
 
-    let sf_stdin = stockfish.stdin.take().unwrap();
-    let sf_stdout = stockfish.stdin.take().unwrap();
+    let mut sf_stdin = stockfish.stdin.take().unwrap();
+    let mut sf_stdout = BufReader::new(stockfish.stdout.take().unwrap());
+    
+    let mut sf_input;
 
+    let sf_read = |sf: &mut BufReader<_>| -> Result<String, Box<dyn Error>> {
+        let mut input = String::new();
+        sf.read_line(&mut input)?;
+        Ok(input.trim().to_string())
+    };
 
+    // Perform UCI handshake
+    sf_stdin.write(b"uci\n")?;
+
+    // Wait for uciok
+    loop {
+        sf_input = sf_read(&mut sf_stdout)?;
+
+        if sf_input == "uciok" {
+            ui.lock().unwrap().log("Stockfish ready.");
+            break;
+        }
+    }
+
+    let mut rng = thread_rng();
+    let mut kami_move = rng.next_u32() % 2 == 0;
+
+    // Enable stockfish strength tuning
+    sf_stdin.write(b"setoption UCI_LimitStrength value true\n")?;
+
+    // Start playing games.
+    while let Some((next_game, game_id)) = dir::next_elo_game()? {
+        // Set initial position
+        let mut position = Position::new();
+
+        let mut game = if next_game.exists() {
+            ui.lock().unwrap().log(format!("Resuming game {}", next_game.display()));
+            Game::load(&next_game)?
+        } else {
+            ui.lock().unwrap().log(format!("Generating game {}", next_game.display()));
+            Game::new()
+        };
+
+        // Get game back up to current position
+        let actions = game.get_actions();
+
+        for mv in &actions {
+            assert!(position.make_move(*mv), "Invalid move in resumed game!");
+        }
+
+        if actions.len() > 0 {
+            // Resuming game, figure out whose turn it is by the MCTS counts.
+            kami_move = game.get_mcts().last().unwrap().len() == 0;
+        }
+
+        // Set stockfish ELO rating
+        let sf_elo = constants::STOCKFISH_ELO[game_id];
+
+        sf_stdin.write(format!("setoption UCI_Elo value {}\n", sf_elo).as_bytes())?;
+
+        if kami_move ^ (position.side_to_move() == Color::Black) {
+            ui.lock().unwrap().log(format!("Kami generation {} VS. Stockfish [{}]", dir::current_generation()?, sf_elo));
+        } else {
+            ui.lock().unwrap().log(format!("Stockfish [{}] VS. Kami generation {}", sf_elo, dir::current_generation()?));
+        }
+        
+        if kami_move {
+            ui.lock().unwrap().log("Kami to move. GLHF!");
+        } else {
+            ui.lock().unwrap().log("Stockfish to move. GLHF!");
+        }
+
+        ui.lock().unwrap().reset();
+
+        while position.is_game_over().is_none() {
+            // Make a move!
+            ui.lock().unwrap().position(position.clone());
+
+            if kami_move {
+                // Kami's turn.
+
+                if ui.lock().unwrap().should_exit() {
+                    break;
+                }
+    
+                let (selected_move, mcts) = do_search(model.clone(), ui.clone(), &position)?;
+                assert!(position.make_move(selected_move));
+                game.make_move(selected_move, mcts);
+            } else {
+                // Stockfish's turn.
+                // Load position into uci
+
+                sf_stdin.write(format!("position startpos moves {}\n", game.get_actions().iter().map(|x| x.to_string()).collect::<Vec<String>>().join(" ")).as_bytes())?;
+                sf_stdin.write(format!("go movetime {}\n", constants::MOVETIME_ELO).as_bytes())?;
+
+                // Wait for selected move
+
+                loop {
+                    sf_input = sf_read(&mut sf_stdout)?;
+
+                    let parts: Vec<&str> = sf_input.split(" ").collect();
+
+                    if parts.len() > 0 {
+                        if parts[0] == "bestmove" {
+                            let selected_move = ChessMove::from_str(parts[1]).expect("bad move from stockfish?");
+
+                            assert!(position.make_move(selected_move));
+                            game.make_move(selected_move, Vec::new());
+
+                            sf_stdin.write(b"stop\n")?;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Switch sides.
+            kami_move = !kami_move;
+        }
+
+        // Finalize game if it is over.
+        if let Some(result) = position.is_game_over() {
+            game.finalize(result);
+
+            ui.lock().unwrap().log(format!("Game over, {} ({})",
+                if result > 0.0 {
+                    "1-0"
+                } else {
+                    if result < 0.0 {
+                        "0-1"
+                    } else {
+                        "1/2-1/2"
+                    }
+                },
+                if result != 0.0 {
+                    if kami_move {
+                        "Stockfish wins"
+                    } else {
+                        "Kami wins"
+                    }
+                } else {
+                    "draw"
+                }
+            ));
+        }
+
+        // Write game to disk.
+        game.save(&next_game)?;
+
+        ui.lock().unwrap().log(format!("Wrote game to {}", next_game.display()));
+
+        // If user wants to quit, stop here.
+        if ui.lock().unwrap().should_exit() {
+            return Ok(false);
+        }
+    }
+
+    // All games generated, compute final ELO result.
+    let game_set = dir::elo_game_set()?;
+    let mut results = Vec::new();
+
+    for game in &game_set {
+        if game.get_mcts()[0].len() > 0 {
+            results.push(game.get_result().unwrap());
+        } else {
+            results.push(-game.get_result().unwrap());
+        }
+    }
+
+    // Compute ELO
+    let score: f32 = results.iter().sum();
+    let elo = (constants::STOCKFISH_ELO.iter().sum::<usize>() as f32 + 400.0 * score) / constants::ELO_EVALUATION_NUM_GAMES as f32;
+
+    ui.lock().unwrap().log(format!("Finished ELO evaluation. Total score: {}", score));
+    ui.lock().unwrap().log(format!("ELO estimate for generation {}: {}", dir::current_generation()?, elo));
+
+    // Write ELO results.
+    fs::write(dir::games_dir()?.join("elo"), format!("{}", elo).as_bytes())?;
 
     return Ok(true);
 }
@@ -221,14 +397,14 @@ fn do_search(model: Arc<Model>, ui: Arc<Mutex<ui::Ui>>, position: &Position) -> 
 /// Advances the model generation.
 /// Expects a complete training batch to be ready.
 fn advance_model(ui: Arc<Mutex<ui::Ui>>) -> Result<(), Box<dyn Error>> {
-    // Archive current generation.
-    ui.lock().unwrap().log("Archiving model.");
-    ui.lock().unwrap().log(format!("Archived as generation {}.", dir::archive()?));
-    
     // Generate training batches.
     let training_batches: Vec<TrainBatch> = (0..constants::TRAINING_BATCH_COUNT)
         .map(|_| TrainBatch::generate(&dir::games_dir()?))
         .collect::<Result<Vec<TrainBatch>, _>>()?;
+
+    // Archive current generation.
+    ui.lock().unwrap().log("Archiving model.");
+    ui.lock().unwrap().log(format!("Archived as generation {}.", dir::archive()?));
 
     // Train the model in place.
     ui.lock().unwrap().log("Training model.");

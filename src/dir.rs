@@ -1,7 +1,7 @@
 /// Methods for manipulating kami paths and directories.
 
 use crate::constants;
-use crate::game;
+use crate::game::Game;
 
 use dirs;
 use fs_extra;
@@ -49,15 +49,7 @@ pub fn games_dir() -> Result<PathBuf, Box<dyn Error>> {
     Ok(out)
 }
 
-/// Returns the path to the ELO evaluation directory. Panics if the directory cannot be located or initialized.
-pub fn elo_dir() -> Result<PathBuf, Box<dyn Error>> {
-    let out = data_dir()?.join("elo");
-    fs::create_dir_all(&out)?;
-
-    Ok(out)
-}
-
-/// Returns the current model generation number. Panics if an error occurs, or returns 0 if no models are archived.
+/// Returns the current model generation number.
 pub fn current_generation() -> Result<usize, Box<dyn Error>> {
     let mut current = 0;
     let archive_path = archive_dir()?;
@@ -104,7 +96,7 @@ pub fn next_game() -> Result<Option<PathBuf>, Box<dyn Error>> {
                 return Err(format!("Game {} exists but is not a file!", gpath.display()).into());
             }
 
-            if !game::Game::load(&gpath)?.is_complete() {
+            if !Game::load(&gpath)?.is_complete() {
                 return Ok(Some(gpath));
             }
 
@@ -115,4 +107,43 @@ pub fn next_game() -> Result<Option<PathBuf>, Box<dyn Error>> {
     }
 
     return Ok(None);
+}
+
+/// Gets the path for the next ELO eval game to be generated, otherwise returns None
+pub fn next_elo_game() -> Result<Option<(PathBuf, usize)>, Box<dyn Error>> {
+    let gdir = games_dir()?;
+
+    for i in 0..constants::ELO_EVALUATION_NUM_GAMES {
+        let gpath = gdir.join(format!("{}.elo_game", i));
+
+        if gpath.exists() {
+            if !gpath.is_file() {
+                return Err(format!("Game {} exists but is not a file!", gpath.display()).into());
+            }
+
+            if !Game::load(&gpath)?.is_complete() {
+                return Ok(Some((gpath, i)));
+            }
+
+            continue;
+        }
+        
+        return Ok(Some((gpath, i)));
+    }
+
+    return Ok(None);
+}
+
+/// Returns all generated ELO games.
+pub fn elo_game_set() -> Result<Vec<Game>, Box<dyn Error>> {
+    let gdir = games_dir()?;
+    let mut out = Vec::new();
+
+    for i in 0..constants::ELO_EVALUATION_NUM_GAMES {
+        let gpath = gdir.join(format!("{}.elo_game", i));
+
+        out.push(Game::load(&gpath)?);
+    }
+
+    return Ok(out);
 }
