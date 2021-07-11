@@ -47,7 +47,6 @@ impl Status {
 
 pub struct Searcher {
     workers: Arc<Mutex<Vec<Worker>>>,
-    handle: Option<JoinHandle<Tree>>,
     position: Position,
     maxnodes: usize,
     maxtime: usize,
@@ -60,7 +59,6 @@ impl Searcher {
     pub fn new() -> Self {
         Searcher {
             workers: Arc::new(Mutex::new(Vec::new())),
-            handle: None,
             model: None,
             position: Position::new(),
             maxnodes: constants::SEARCH_MAXNODES,
@@ -100,15 +98,11 @@ impl Searcher {
         self
     }
 
-    pub fn run<F>(
-        &mut self,
+    pub fn run<F, R>(
+        self,
         f: F
     ) -> Result<Tree, Box<dyn Error>>
-    where F: Fn(Status) {
-        if self.handle.is_some() {
-            return Err("Search is already running!".into());
-        }
-
+    where F: Fn(Status) -> R {
         let thr_model = self.model.as_ref().unwrap().clone();
         let thr_workers = self.workers.clone();
         let thr_rootfen = self.position.get_fen();
@@ -120,7 +114,7 @@ impl Searcher {
 
         let (status_tx, status_rx) = channel();
 
-        self.handle = Some(spawn(move || {
+        let handle = spawn(move || {
             let (thr_tree_tx, thr_tree_handle) = Tree::new(thr_position, thr_temperature, thr_batch_size).run();
 
             for _ in 0..num_cpus::get() {
@@ -214,19 +208,16 @@ impl Searcher {
             status_tx.send(SearchStatus::Done).expect("search status tx failed");
 
             return tree_ret;
-        }));
+        });
 
         loop {
             match status_rx.recv().expect("search status rx failed") {
-                SearchStatus::Searching(stat) => f(stat),
+                SearchStatus::Searching(stat) => { f(stat); },
                 SearchStatus::Done => break,
             }
         }
 
-        let ret = self
-            .handle
-            .take()
-            .unwrap()
+        let ret = handle
             .join()
             .expect("failed joining search thread");
 
@@ -286,47 +277,13 @@ mod test {
         );
     }
 
-    /// Tests that a stopped search cannot stop again.
-    #[test]
-    fn search_stop_already_stopped() {
-        let mut search = Searcher::new();
-        assert!(search.wait().is_none());
-    }
-
-    /// Tests that a started search cannot start again.
-    #[test]
-    fn search_start_already_started() {
-        let mut search = Searcher::new();
-        let pos = Position::new();
-
-        search
-            .start(Some(200), None, mock(), pos.clone(), 1.0, 4)
-            .unwrap();
-
-        assert!(search.start(Some(200), None, mock(), pos, 1.0, 4).is_none());
-
-        search.wait().expect("no tree returned");
-    }
-
     /// Tests that a searcher status can serialize.
     #[test]
     fn search_status_can_serialize() {
-        let pos = Position::new();
-
-        let mut search = Searcher::new();
-        let rx = search.start(Some(200), None, mock(), pos, 1.0, 4).unwrap();
-
-        loop {
-            match rx.recv().expect("rx failed") {
-                SearchStatus::Done => break,
-                SearchStatus::Searching(stat) => print!(
-                    "{}",
-                    serde_json::to_string_pretty(&stat).expect("serialize failed")
-                ),
-                _ => (),
-            }
-        }
-
-        search.wait().expect("no tree returned");
+        Searcher::new()
+            .maxtime(1000)
+            .model(mock())
+            .run(|stat| serde_json::to_string_pretty(&stat).expect("serialize failed"))
+            .expect("search failed");
     }
 }
