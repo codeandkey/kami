@@ -17,6 +17,9 @@ pub const MOVETIME_ELO: usize = 2000; // MS per move during ELO evaluation
 pub const ELO_EVALUATION_NUM_GAMES: usize = 10;
 pub const STOCKFISH_ELO: [usize; ELO_EVALUATION_NUM_GAMES] = [200, 400, 600, 800, 1000, 1200, 1400, 1600, 1800, 2000]; // stockfish elo settings for ELO evaluation
 pub const ELO_EVALUATION_INTERVAL: usize = 25; // Perform ELO evaluation every n generations
+pub const PUCT_POLICY_WEIGHT: f64 = 4.0; // Weight of policy in PUCT calculation
+pub const PUCT_NOISE_ALPHA: f64 = 0.285; // Dirichlet noise parameter to add to P before PUCT calculation
+pub const PUCT_NOISE_WEIGHT: f64 = 0.25; // Weight of noise vs. network policy
 
 #[cfg(feature = "tch")]
 pub const DEFAULT_MODEL_TYPE: model::Type = model::Type::Torch; // model type to initialize

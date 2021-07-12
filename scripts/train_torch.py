@@ -14,6 +14,7 @@ FRAME_SIZE=14
 HEADER_SIZE=18
 EPOCHS = 10
 POLICY_EPSILON=1e-6
+L2_REG_WEIGHT = 1e-4
 DROPOUT = 0.3
 
 # Load module from path
@@ -71,7 +72,7 @@ def train_loop():
         for p in module.parameters():
             l2_reg += 0.5 * (p ** 2).sum()
 
-        current_loss = loss(policy, value, mcts, result)
+        current_loss = loss(policy, value, mcts, result) + l2_reg * L2_REG_WEIGHT
 
         #print("BEGIN")
         #print("policy: {}", policy)
