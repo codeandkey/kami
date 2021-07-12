@@ -256,7 +256,7 @@ impl Tree {
             .map(|(&cidx, noise)| {
                 let child = &mut self[cidx];
                 let uct = child.q()
-                    + (((child.p / cur_ptotal) * (1 - constants::PUCT_NOISE_WEIGHT)) + constants::PUCT_NOISE_WEIGHT * noise) * constants::PUCT_POLICY_WEIGHT * (cur_n as f64).sqrt()
+                    + (((child.p / cur_ptotal) * (1.0 - constants::PUCT_NOISE_WEIGHT)) + constants::PUCT_NOISE_WEIGHT * noise) * constants::PUCT_POLICY_WEIGHT * (cur_n as f64).sqrt()
                         / (child.n as f64 + 1.0);
 
                 assert!(
