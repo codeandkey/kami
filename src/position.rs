@@ -193,7 +193,9 @@ impl Position {
         let all_pieces = b.color_combined(Color::White) | b.color_combined(Color::Black);
 
         // K(N)(B)vK(N)(B)
-        if b.pieces(Piece::King) | b.pieces(Piece::Knight) | b.pieces(Piece::Bishop) == all_pieces && (b.pieces(Piece::Knight) | b.pieces(Piece::Bishop)).popcnt() < 3 {
+        if b.pieces(Piece::King) | b.pieces(Piece::Knight) | b.pieces(Piece::Bishop) == all_pieces
+            && (b.pieces(Piece::Knight) | b.pieces(Piece::Bishop)).popcnt() < 3
+        {
             return Some(0.0);
         }
 
@@ -360,7 +362,9 @@ impl Position {
 
 impl Serialize for Position {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where S: Serializer {
+    where
+        S: Serializer,
+    {
         serializer.serialize_str(&self.get_fen())
     }
 }

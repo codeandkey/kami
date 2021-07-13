@@ -6,9 +6,9 @@ use crate::worker::{self, Worker};
 
 use serde::Serialize;
 use std::error::Error;
-use std::sync::mpsc::{channel, Receiver};
+use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex};
-use std::thread::{spawn, JoinHandle};
+use std::thread::spawn;
 use std::time::Duration;
 
 /// Used
@@ -98,11 +98,10 @@ impl Searcher {
         self
     }
 
-    pub fn run<F, R>(
-        self,
-        f: F
-    ) -> Result<Tree, Box<dyn Error>>
-    where F: Fn(Status) -> R {
+    pub fn run<F, R>(self, f: F) -> Result<Tree, Box<dyn Error>>
+    where
+        F: Fn(Status) -> R,
+    {
         let thr_model = self.model.as_ref().unwrap().clone();
         let thr_workers = self.workers.clone();
         let thr_rootfen = self.position.get_fen();
@@ -115,7 +114,8 @@ impl Searcher {
         let (status_tx, status_rx) = channel();
 
         let handle = spawn(move || {
-            let (thr_tree_tx, thr_tree_handle) = Tree::new(thr_position, thr_temperature, thr_batch_size).run();
+            let (thr_tree_tx, thr_tree_handle) =
+                Tree::new(thr_position, thr_temperature, thr_batch_size).run();
 
             for _ in 0..num_cpus::get() {
                 let mut new_worker = Worker::new(thr_tree_tx.clone(), thr_model.clone());
@@ -136,7 +136,9 @@ impl Searcher {
                     .send(TreeReq::GetStatus(tree_status_tx))
                     .expect("failed sending status req to tree");
 
-                let tree_status = match tree_status_rx.recv().expect("failed receiving status from tree")
+                let tree_status = match tree_status_rx
+                    .recv()
+                    .expect("failed receiving status from tree")
                 {
                     StatusResponse::NextStatus(s) => s,
                     StatusResponse::Stop => {
@@ -163,16 +165,18 @@ impl Searcher {
                     .fold((0, 0), |(a1, a2), (n, b)| (a1 + n, a2 + b));
 
                 // Send status to clients
-                status_tx.send(SearchStatus::Searching(Status {
-                    elapsed_ms: elapsed,
-                    tree: tree_status,
-                    rootfen: thr_rootfen.clone(),
-                    workers: worker_status,
-                    total_nodes: total_nodes,
-                    total_batches: total_batches,
-                    nps: (total_nodes as f32 / (elapsed + 1) as f32) * 1000.0,
-                    bps: (total_batches as f32 / (elapsed + 1) as f32) * 1000.0,
-                })).expect("search status tx failed");
+                status_tx
+                    .send(SearchStatus::Searching(Status {
+                        elapsed_ms: elapsed,
+                        tree: tree_status,
+                        rootfen: thr_rootfen.clone(),
+                        workers: worker_status,
+                        total_nodes: total_nodes,
+                        total_batches: total_batches,
+                        nps: (total_nodes as f32 / (elapsed + 1) as f32) * 1000.0,
+                        bps: (total_batches as f32 / (elapsed + 1) as f32) * 1000.0,
+                    }))
+                    .expect("search status tx failed");
 
                 if elapsed >= thr_maxtime as u64 {
                     break;
@@ -205,21 +209,23 @@ impl Searcher {
             let tree_ret = thr_tree_handle.join().expect("failed to join tree");
 
             // Send search stop signal
-            status_tx.send(SearchStatus::Done).expect("search status tx failed");
+            status_tx
+                .send(SearchStatus::Done)
+                .expect("search status tx failed");
 
             return tree_ret;
         });
 
         loop {
             match status_rx.recv().expect("search status rx failed") {
-                SearchStatus::Searching(stat) => { f(stat); },
+                SearchStatus::Searching(stat) => {
+                    f(stat);
+                }
                 SearchStatus::Done => break,
             }
         }
 
-        let ret = handle
-            .join()
-            .expect("failed joining search thread");
+        let ret = handle.join().expect("failed joining search thread");
 
         return Ok(ret);
     }
@@ -273,7 +279,8 @@ mod test {
         assert_eq!(
             tree.select(),
             ChessMove::from_str("d1h5").expect("move parse fail"),
-            "tree: \n{}", serde_json::to_string_pretty(&tree.get_status().unwrap()).expect("serialize failed"),
+            "tree: \n{}",
+            serde_json::to_string_pretty(&tree.get_status().unwrap()).expect("serialize failed"),
         );
     }
 

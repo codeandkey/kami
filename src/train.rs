@@ -1,32 +1,30 @@
 /// Routines for evaluating model ELO
-
 use crate::constants;
 use crate::dir;
-use crate::input::trainbatch::TrainBatch;
 use crate::game::Game;
+use crate::input::trainbatch::TrainBatch;
 use crate::model::{self, Model};
 use crate::position::Position;
+use crate::searcher::Searcher;
 use crate::ui::{self, Ui};
-use crate::searcher::{Searcher, SearchStatus};
 
 use chess::{ChessMove, Color};
 use crossterm::{
+    event::{self, Event, KeyCode},
     execute,
     terminal::{enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-    event::{self, Event, KeyCode},
 };
 
-use rand::{thread_rng, prelude::*};
+use rand::{prelude::*, thread_rng};
 
-use std::path::Path;
 use std::process::{Command, Stdio};
 
 use std::error::Error;
 use std::fs;
-use std::io::{stdout, stdin, Read, Write, BufReader, BufRead};
+use std::io::{stdout, BufRead, BufReader, Read, Write};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
-use std::thread::{sleep, spawn};
+use std::thread::spawn;
 use std::time::Duration;
 use tui::backend::CrosstermBackend;
 
@@ -42,13 +40,12 @@ pub fn train() -> Result<(), Box<dyn Error>> {
     // Switch to TUI screen.
     enable_raw_mode().expect("failed setting raw mode");
 
-    execute!(stdout(), EnterAlternateScreen)
-        .expect("failed starting alternate screen");
+    execute!(stdout(), EnterAlternateScreen).expect("failed starting alternate screen");
 
     let ui = Arc::new(Mutex::new(Ui::new()));
     ui.lock().unwrap().start(CrosstermBackend::new(stdout()));
 
-    // Start event thread.   
+    // Start event thread.
     let inp_ui = ui.clone();
     let inp_thread = spawn(move || {
         while !inp_ui.lock().unwrap().should_exit() {
@@ -61,7 +58,7 @@ pub fn train() -> Result<(), Box<dyn Error>> {
                     KeyCode::Char('q') | KeyCode::Esc => {
                         inp_ui.lock().unwrap().request_exit();
                         inp_ui.lock().unwrap().log("Requested exit.");
-                    },
+                    }
                     KeyCode::Char('p') => inp_ui.lock().unwrap().pause(),
                     _ => (),
                 },
@@ -95,8 +92,7 @@ pub fn train() -> Result<(), Box<dyn Error>> {
     ui.lock().unwrap().join();
 
     // Leave TUI screen and reset terminal.
-    execute!(stdout(), LeaveAlternateScreen)
-        .expect("failed leaving alternate screen");
+    execute!(stdout(), LeaveAlternateScreen).expect("failed leaving alternate screen");
 
     return Ok(());
 }
@@ -115,10 +111,14 @@ fn generate_training_set(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>>
         let mut position = Position::new();
 
         let mut game = if next_game.exists() {
-            ui.lock().unwrap().log(format!("Resuming game {}", next_game.display()));
+            ui.lock()
+                .unwrap()
+                .log(format!("Resuming game {}", next_game.display()));
             Game::load(&next_game)?
         } else {
-            ui.lock().unwrap().log(format!("Generating game {}", next_game.display()));
+            ui.lock()
+                .unwrap()
+                .log(format!("Generating game {}", next_game.display()));
             Game::new()
         };
 
@@ -146,7 +146,8 @@ fn generate_training_set(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>>
         if let Some(result) = position.is_game_over() {
             game.finalize(result);
 
-            ui.lock().unwrap().log(format!("Game over, {}",
+            ui.lock().unwrap().log(format!(
+                "Game over, {}",
                 if result > 0.0 {
                     "1-0"
                 } else {
@@ -162,7 +163,9 @@ fn generate_training_set(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>>
         // Write game to disk.
         game.save(&next_game)?;
 
-        ui.lock().unwrap().log(format!("Wrote game to {}", next_game.display()));
+        ui.lock()
+            .unwrap()
+            .log(format!("Wrote game to {}", next_game.display()));
 
         // If user wants to quit, stop here.
         if ui.lock().unwrap().should_exit() {
@@ -170,13 +173,19 @@ fn generate_training_set(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>>
         }
     }
 
-    ui.lock().unwrap().log(format!("Training set complete, {} games total", constants::TRAINING_SET_SIZE));
+    ui.lock().unwrap().log(format!(
+        "Training set complete, {} games total",
+        constants::TRAINING_SET_SIZE
+    ));
 
     return Ok(true);
 }
 
 fn evaluate_elo(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
-    ui.lock().unwrap().log(format!("Starting ELO evaluation on generation {}", dir::current_generation()?));
+    ui.lock().unwrap().log(format!(
+        "Starting ELO evaluation on generation {}",
+        dir::current_generation()?
+    ));
 
     // Load the current model.
     let model = Arc::new(model::load(&dir::model_dir()?, true)?);
@@ -189,11 +198,13 @@ fn evaluate_elo(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
         .stdout(Stdio::piped())
         .spawn()?;
 
-    ui.lock().unwrap().log(format!("Started stockfish: {}", stockfish_path));
+    ui.lock()
+        .unwrap()
+        .log(format!("Started stockfish: {}", stockfish_path));
 
     let mut sf_stdin = stockfish.stdin.take().unwrap();
     let mut sf_stdout = BufReader::new(stockfish.stdout.take().unwrap());
-    
+
     let mut sf_input;
 
     let sf_read = |sf: &mut BufReader<_>| -> Result<String, Box<dyn Error>> {
@@ -227,10 +238,14 @@ fn evaluate_elo(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
         let mut position = Position::new();
 
         let mut game = if next_game.exists() {
-            ui.lock().unwrap().log(format!("Resuming game {}", next_game.display()));
+            ui.lock()
+                .unwrap()
+                .log(format!("Resuming game {}", next_game.display()));
             Game::load(&next_game)?
         } else {
-            ui.lock().unwrap().log(format!("Generating game {}", next_game.display()));
+            ui.lock()
+                .unwrap()
+                .log(format!("Generating game {}", next_game.display()));
             Game::new()
         };
 
@@ -252,11 +267,19 @@ fn evaluate_elo(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
         sf_stdin.write(format!("setoption UCI_Elo value {}\n", sf_elo).as_bytes())?;
 
         if kami_move ^ (position.side_to_move() == Color::Black) {
-            ui.lock().unwrap().log(format!("Kami generation {} VS. Stockfish [{}]", dir::current_generation()?, sf_elo));
+            ui.lock().unwrap().log(format!(
+                "Kami generation {} VS. Stockfish [{}]",
+                dir::current_generation()?,
+                sf_elo
+            ));
         } else {
-            ui.lock().unwrap().log(format!("Stockfish [{}] VS. Kami generation {}", sf_elo, dir::current_generation()?));
+            ui.lock().unwrap().log(format!(
+                "Stockfish [{}] VS. Kami generation {}",
+                sf_elo,
+                dir::current_generation()?
+            ));
         }
-        
+
         if kami_move {
             ui.lock().unwrap().log("Kami to move. GLHF!");
         } else {
@@ -275,7 +298,7 @@ fn evaluate_elo(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
                 if ui.lock().unwrap().should_exit() {
                     break;
                 }
-    
+
                 let (selected_move, mcts) = do_search(model.clone(), ui.clone(), &position)?;
                 assert!(position.make_move(selected_move));
                 game.make_move(selected_move, mcts);
@@ -283,7 +306,17 @@ fn evaluate_elo(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
                 // Stockfish's turn.
                 // Load position into uci
 
-                sf_stdin.write(format!("position startpos moves {}\n", game.get_actions().iter().map(|x| x.to_string()).collect::<Vec<String>>().join(" ")).as_bytes())?;
+                sf_stdin.write(
+                    format!(
+                        "position startpos moves {}\n",
+                        game.get_actions()
+                            .iter()
+                            .map(|x| x.to_string())
+                            .collect::<Vec<String>>()
+                            .join(" ")
+                    )
+                    .as_bytes(),
+                )?;
                 sf_stdin.write(format!("go movetime {}\n", constants::MOVETIME_ELO).as_bytes())?;
 
                 // Wait for selected move
@@ -295,7 +328,8 @@ fn evaluate_elo(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
 
                     if parts.len() > 0 {
                         if parts[0] == "bestmove" {
-                            let selected_move = ChessMove::from_str(parts[1]).expect("bad move from stockfish?");
+                            let selected_move =
+                                ChessMove::from_str(parts[1]).expect("bad move from stockfish?");
 
                             assert!(position.make_move(selected_move));
                             game.make_move(selected_move, Vec::new());
@@ -315,7 +349,8 @@ fn evaluate_elo(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
         if let Some(result) = position.is_game_over() {
             game.finalize(result);
 
-            ui.lock().unwrap().log(format!("Game over, {} ({})",
+            ui.lock().unwrap().log(format!(
+                "Game over, {} ({})",
                 if result > 0.0 {
                     "1-0"
                 } else {
@@ -340,7 +375,9 @@ fn evaluate_elo(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
         // Write game to disk.
         game.save(&next_game)?;
 
-        ui.lock().unwrap().log(format!("Wrote game to {}", next_game.display()));
+        ui.lock()
+            .unwrap()
+            .log(format!("Wrote game to {}", next_game.display()));
 
         // If user wants to quit, stop here.
         if ui.lock().unwrap().should_exit() {
@@ -362,10 +399,17 @@ fn evaluate_elo(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
 
     // Compute ELO
     let score: f32 = results.iter().sum();
-    let elo = (constants::STOCKFISH_ELO.iter().sum::<usize>() as f32 + 400.0 * score) / constants::ELO_EVALUATION_NUM_GAMES as f32;
+    let elo = (constants::STOCKFISH_ELO.iter().sum::<usize>() as f32 + 400.0 * score)
+        / constants::ELO_EVALUATION_NUM_GAMES as f32;
 
-    ui.lock().unwrap().log(format!("Finished ELO evaluation. Total score: {}", score));
-    ui.lock().unwrap().log(format!("ELO estimate for generation {}: {}", dir::current_generation()?, elo));
+    ui.lock()
+        .unwrap()
+        .log(format!("Finished ELO evaluation. Total score: {}", score));
+    ui.lock().unwrap().log(format!(
+        "ELO estimate for generation {}: {}",
+        dir::current_generation()?,
+        elo
+    ));
 
     // Write ELO results.
     fs::write(dir::games_dir()?.join("elo"), format!("{}", elo).as_bytes())?;
@@ -375,7 +419,11 @@ fn evaluate_elo(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
 
 /// Searches a position.
 /// Returns the selected move along with the search MCTS counts.
-fn do_search(model: Arc<Model>, ui: Arc<Mutex<ui::Ui>>, position: &Position) -> Result<(ChessMove, Vec<(ChessMove, f64)>), Box<dyn Error>> {
+fn do_search(
+    model: Arc<Model>,
+    ui: Arc<Mutex<ui::Ui>>,
+    position: &Position,
+) -> Result<(ChessMove, Vec<(ChessMove, f64)>), Box<dyn Error>> {
     // Run search.
     let search_ui = ui.clone();
     let tree = Searcher::new()
@@ -404,12 +452,18 @@ fn advance_model(ui: Arc<Mutex<ui::Ui>>) -> Result<(), Box<dyn Error>> {
 
     // Archive current generation.
     ui.lock().unwrap().log("Archiving model.");
-    ui.lock().unwrap().log(format!("Archived as generation {}.", dir::archive()?));
+    ui.lock()
+        .unwrap()
+        .log(format!("Archived as generation {}.", dir::archive()?));
 
     // Train the model in place.
     ui.lock().unwrap().log("Training model.");
     let model = model::load(&dir::model_dir()?, true)?;
-    model::train(&dir::model_dir()?, training_batches, model::get_type(&model))?;
+    model::train(
+        &dir::model_dir()?,
+        training_batches,
+        model::get_type(&model),
+    )?;
     ui.lock().unwrap().log("Finished training model.");
 
     return Ok(());

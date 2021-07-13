@@ -1,5 +1,4 @@
 /// Methods for manipulating kami paths and directories.
-
 use crate::constants;
 use crate::game::Game;
 
@@ -34,10 +33,14 @@ pub fn model_dir() -> Result<PathBuf, Box<dyn Error>> {
 
     if out.exists() {
         if !out.is_dir() {
-            return Err(format!("Model path {} exists but is not a directory!", out.display()).into());
+            return Err(format!(
+                "Model path {} exists but is not a directory!",
+                out.display()
+            )
+            .into());
         }
     }
-    
+
     return Ok(out);
 }
 
@@ -63,7 +66,11 @@ pub fn current_generation() -> Result<usize, Box<dyn Error>> {
                 continue;
             }
 
-            return Err(format!("Generation path {} exists but is not a directory!", genpath.display()).into());
+            return Err(format!(
+                "Generation path {} exists but is not a directory!",
+                genpath.display()
+            )
+            .into());
         } else {
             break;
         }
@@ -102,7 +109,7 @@ pub fn next_game() -> Result<Option<PathBuf>, Box<dyn Error>> {
 
             continue;
         }
-        
+
         return Ok(Some(gpath));
     }
 
@@ -127,7 +134,7 @@ pub fn next_elo_game() -> Result<Option<(PathBuf, usize)>, Box<dyn Error>> {
 
             continue;
         }
-        
+
         return Ok(Some((gpath, i)));
     }
 

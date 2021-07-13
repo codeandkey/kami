@@ -18,20 +18,9 @@ mod ui;
 mod worker;
 
 use std::error::Error;
-use std::fs;
-use std::io::{stdout, stdin, Read, Write};
-use std::path::Path;
-use std::str::FromStr;
-use std::sync::{Arc, Mutex};
-use std::thread::{sleep, spawn};
-use std::time::Duration;
-use tui::backend::CrosstermBackend;
 
-use game::Game;
-use input::trainbatch::TrainBatch;
-use position::Position;
-use searcher::{SearchStatus, Searcher};
-use ui::Ui;
+use std::thread::sleep;
+use std::time::Duration;
 
 /**
  * Server entry point
@@ -47,10 +36,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("================================================================");
 
     // Set data dir
-    let data_dir = dirs::data_dir().expect("Error getting data directory!").join("kami");
+    let _data_dir = dirs::data_dir()
+        .expect("Error getting data directory!")
+        .join("kami");
 
     sleep(Duration::from_secs(1));
-    
+
     train::train()?;
 
     println!("Shutdown complete, goodbye :)");
