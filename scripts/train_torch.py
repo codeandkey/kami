@@ -53,7 +53,7 @@ def loss(policy, value, mcts, result):
 
 # Train model!
 
-optimizer = torch.optim.SGD(module.parameters(), lr = LEARNING_RATE)
+optimizer = torch.optim.Adadelta(module.parameters())
 first_avg_loss = None
 last_avg_loss = None
 
@@ -68,11 +68,11 @@ def train_loop():
 
         policy, value = module(headers, frames, lmm)
 
-        l2_reg = 0
-        for p in module.parameters():
-            l2_reg += 0.5 * (p ** 2).sum()
+        #l2_reg = 0
+        #for p in module.parameters():
+        #    l2_reg += 0.5 * (p ** 2).sum()
 
-        current_loss = loss(policy, value, mcts, result) + l2_reg * L2_REG_WEIGHT
+        current_loss = loss(policy, value, mcts, result) # + l2_reg * L2_REG_WEIGHT
 
         #print("BEGIN")
         #print("policy: {}", policy)
