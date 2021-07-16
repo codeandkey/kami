@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-LEARNING_RATE=0.0005
+LEARNING_RATE=1e-5
 FRAME_COUNT=6
 FRAME_SIZE=14
 HEADER_SIZE=18
@@ -53,7 +53,7 @@ def loss(policy, value, mcts, result):
 
 # Train model!
 
-optimizer = torch.optim.Adadelta(module.parameters())
+optimizer = torch.optim.RMSprop(module.parameters(), lr=LEARNING_RATE, weight_decay=0.01)
 first_avg_loss = None
 last_avg_loss = None
 
@@ -68,11 +68,7 @@ def train_loop():
 
         policy, value = module(headers, frames, lmm)
 
-        #l2_reg = 0
-        #for p in module.parameters():
-        #    l2_reg += 0.5 * (p ** 2).sum()
-
-        current_loss = loss(policy, value, mcts, result) # + l2_reg * L2_REG_WEIGHT
+        current_loss = loss(policy, value, mcts, result)
 
         #print("BEGIN")
         #print("policy: {}", policy)
