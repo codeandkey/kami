@@ -44,9 +44,11 @@ def games(gen):
         current_game += 1
 
 # Walks through generations and returns data for display.
-# Returns (mean game ply / generation), elo_y, elo_x
+# Returns (mean game ply / generation), elo_y, elo_x, data_loss_difference, data_loss_after_training
 def generate_datasets():
     data_mean = []
+    data_loss_diff = []
+    data_loss_after = []
     elo_x = []
     elo_y = []
 
@@ -67,15 +69,21 @@ def generate_datasets():
 
         data_mean.append(total / n)
 
-    return data_mean, elo_x, elo_y
+        with open(path.join(genpath, 'loss')) as f:
+            parts = f.read().split(' ')
+            
+            data_loss_diff.append(float(parts[0]) - float(parts[1]))
+            data_loss_after.append(float(parts[1]))
+
+    return data_mean, elo_x, elo_y, data_loss_diff, data_loss_after
 
 # Collects data and renders it on the screen.
 def render_plots():
-    fig, (elo, ply_mean) = plt.subplots(2, 1)
+    fig, ((elo, ply_mean), (loss_diff, loss_after)) = plt.subplots(2, 2)
     fig.suptitle('Kami model evolution statistics')
 
     # Render average game ply
-    ply_mean_y, elo_x, elo_y = generate_datasets()
+    ply_mean_y, elo_x, elo_y, d_loss_diff, d_loss_after = generate_datasets()
     ply_x = list(range(len(ply_mean_y)))
 
     ply_mean.plot(ply_x, ply_mean_y, '.-')
@@ -89,6 +97,18 @@ def render_plots():
     elo.set_ylabel('Estimated ELO rating')
     elo.set(ylim=(0, 2500), xlim=(0, len(ply_mean_y)))
     elo.grid()
+
+    loss_diff.plot(ply_x, d_loss_diff, '.-')
+    loss_diff.set_xlabel('Generation #')
+    loss_diff.set_ylabel('Loss decrease')
+    loss_diff.set(ylim=(0, 100), xlim=(0, len(ply_x)))
+    loss_diff.grid()
+
+    loss_after.plot(ply_x, d_loss_after, '.-')
+    loss_after.set_xlabel('Generation #')
+    loss_after.set_ylabel('Actual loss, post-train')
+    loss_after.set(ylim=(0, 100), xlim=(0, len(ply_x)))
+    loss_after.grid()
 
     plt.show()
 
