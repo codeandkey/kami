@@ -301,7 +301,7 @@ fn evaluate_elo(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
                     break;
                 }
 
-                let (selected_move, mcts) = do_search(model.clone(), ui.clone(), &position, Some(usize::MAX), Some(constants::MOVETIME_ELO))?;
+                let (selected_move, mcts) = do_search(model.clone(), ui.clone(), &position, None, Some(constants::MOVETIME_ELO))?;
                 assert!(position.make_move(selected_move));
                 game.make_move(selected_move, mcts);
             } else {

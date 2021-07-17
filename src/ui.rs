@@ -481,14 +481,14 @@ impl Ui {
                                 f.render_widget(maxtime_widget, prog_rect);
                             }
                             
-                            if let Some(maxtime) = cstatus.maxnodes {
+                            if let Some(maxtime) = cstatus.maxtime {
                                 prog_rect.y -= 2;
 
                                 let label =
                                     format!("{:.1}/{:.1}", cstatus.elapsed_ms as f32 / 1000.0, maxtime as f32 / 1000.0);
 
                                 let maxtime_widget = Gauge::default()
-                                .block(Block::default().title("NODE progress"))
+                                .block(Block::default().title("TIME progress"))
                                 .gauge_style(
                                     Style::default()
                                         .fg(Color::Blue)
@@ -496,7 +496,7 @@ impl Ui {
                                         .add_modifier(Modifier::BOLD),
                                 )
                                 .percent(
-                                    ((cstatus.elapsed_ms as f32
+                                    ((cstatus.elapsed_ms as f32 * 100.0
                                         / maxtime as f32)
                                         as u16)
                                         .min(100),
