@@ -44,13 +44,13 @@ def games(gen):
         current_game += 1
 
 # Walks through generations and returns data for display.
-# Returns (mean game ply / generation), (total ply / generation)
+# Returns (mean game ply / generation), elo_y, elo_x
 def generate_datasets():
-    print('Computing average ply .. ', end='')
     data_mean = []
-    data_total = []
+    elo_x = []
+    elo_y = []
 
-    for genpath in generations():
+    for gen, genpath in enumerate(generations()):
         total = 0
         n = 0
 
@@ -58,18 +58,24 @@ def generate_datasets():
             total += len(game['actions'])
             n += 1
 
+        elo_path = path.join(genpath, 'games', 'elo')
+        if path.exists(elo_path):
+            elo_x.append(gen)
+
+            with open(elo_path) as f:
+                elo_y.append(int(f.read()))
+
         data_mean.append(total / n)
-        data_total.append(total)
-    print('done')
-    return data_mean, data_total
+
+    return data_mean, elo_x, elo_y
 
 # Collects data and renders it on the screen.
 def render_plots():
-    fig, (ply_total, ply_mean) = plt.subplots(2, 1)
+    fig, (elo, ply_mean) = plt.subplots(2, 1)
     fig.suptitle('Kami model evolution statistics')
 
     # Render average game ply
-    ply_mean_y, ply_total_y = generate_datasets()
+    ply_mean_y, elo_x, elo_y = generate_datasets()
     ply_x = list(range(len(ply_mean_y)))
 
     ply_mean.plot(ply_x, ply_mean_y, '.-')
@@ -78,11 +84,11 @@ def render_plots():
     ply_mean.set(ylim=(0, 400))
     ply_mean.grid()
 
-    ply_total.plot(ply_x, ply_total_y, '.-')
-    ply_total.set(ylim=(0, 2500))
-    ply_total.set_xlabel('Generation #')
-    ply_total.set_ylabel('Total training set ply')
-    ply_total.grid()
+    elo.plot(elo_x, elo_y, '.-')
+    elo.set_xlabel('Generation #')
+    elo.set_ylabel('Estimated ELO rating')
+    elo.set(ylim=(0, 2500), xlim=(0, len(ply_mean_y)))
+    elo.grid()
 
     plt.show()
 
