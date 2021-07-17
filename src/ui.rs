@@ -578,6 +578,8 @@ mod test {
     use super::*;
     use std::thread::sleep;
     use tui::backend::TestBackend;
+    use crate::model::Model;
+    use std::sync::Arc;
 
     /// Tests the TUI can be initialized.
     #[test]
@@ -650,9 +652,7 @@ mod test {
     pub fn ui_can_reset() {
         let mut t = Ui::new();
         t.start(TestBackend::new(800, 600));
-
         t.reset();
-
         t.join();
     }
 
@@ -665,6 +665,7 @@ mod test {
         t.log("Test log!");
 
         searcher::Searcher::new()
+            .model(Arc::new(Model::Mock))
             .maxnodes(Some(1000))
             .maxtime(Some(1000))
             .run(|stat| {
