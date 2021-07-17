@@ -596,4 +596,82 @@ mod test {
 
         t.join();
     }
+
+    #[test]
+    /// Tests the TUI exit request works.
+    pub fn ui_can_request_exit() {
+        let mut t = Ui::new();
+
+        t.start(TestBackend::new(800, 600));
+        t.request_exit();
+
+        sleep(Duration::from_secs(1));
+
+        assert!(t.should_exit());
+        t.join();
+    }
+
+    #[test]
+    /// Tests the TUI log request does not crash.
+    pub fn ui_can_log() {
+        let mut t = Ui::new();
+
+        t.start(TestBackend::new(800, 600));
+        t.log("Test log!");
+
+        t.join();
+    }
+
+    #[test]
+    /// Tests the TUI position tx does not crash.
+    pub fn ui_can_send_position() {
+        let mut t = Ui::new();
+
+        t.start(TestBackend::new(800, 600));
+        t.position(Position::new());
+
+        t.join();
+    }
+
+    #[test]
+    /// Tests the TUI pause/unpause does not crash.
+    pub fn ui_can_pause_unpause() {
+        let mut t = Ui::new();
+        t.start(TestBackend::new(800, 600));
+
+        t.pause();
+        t.pause();
+
+        t.join();
+    }
+
+    #[test]
+    /// Tests the TUI rest does not crash.
+    pub fn ui_can_reset() {
+        let mut t = Ui::new();
+        t.start(TestBackend::new(800, 600));
+
+        t.reset();
+
+        t.join();
+    }
+
+    #[test]
+    /// Tests the TUI status send does not crash.
+    pub fn ui_can_send_status() {
+        let mut t = Ui::new();
+
+        t.start(TestBackend::new(800, 600));
+        t.log("Test log!");
+
+        searcher::Searcher::new()
+            .maxnodes(Some(1000))
+            .maxtime(Some(1000))
+            .run(|stat| {
+                t.status(stat);
+            })
+            .expect("search failed");
+
+        t.join();
+    }
 }
