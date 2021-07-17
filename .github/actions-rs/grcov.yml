@@ -1,6 +1,7 @@
 output-path: ./lcov.info
 ignore:
   - "src/main.rs"
+  - "src/dir.rs"
   - "src/model/*.rs"
   - "../*"
   - "/*"
