@@ -1,6 +1,5 @@
 use crate::model;
 use chess::{Board, ChessMove, Color, File, MoveGen, Piece, Rank, Square};
-use serde::ser::{Serialize, Serializer};
 
 #[derive(Clone)]
 struct State {
@@ -193,9 +192,7 @@ impl Position {
         let all_pieces = b.color_combined(Color::White) | b.color_combined(Color::Black);
 
         // K(N)(B)vK(N)(B)
-        if b.pieces(Piece::King) | b.pieces(Piece::Knight) | b.pieces(Piece::Bishop) == all_pieces
-            && (b.pieces(Piece::Knight) | b.pieces(Piece::Bishop)).popcnt() < 3
-        {
+        if b.pieces(Piece::King) | b.pieces(Piece::Knight) | b.pieces(Piece::Bishop) == all_pieces && (b.pieces(Piece::Knight) | b.pieces(Piece::Bishop)).popcnt() < 3 {
             return Some(0.0);
         }
 
@@ -332,11 +329,6 @@ impl Position {
         }
     }
 
-    /// Gets the number of moves made in the game.
-    pub fn ply(&self) -> usize {
-        self.states.len() - 1
-    }
-
     /// Returns a pretty-printed board representation.
     pub fn to_string_pretty(&self) -> String {
         (0..8)
@@ -357,15 +349,6 @@ impl Position {
             })
             .collect::<Vec<String>>()
             .join("\n")
-    }
-}
-
-impl Serialize for Position {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(&self.get_fen())
     }
 }
 
@@ -434,19 +417,6 @@ mod test {
         for m in moves {
             assert!(expected_moves.contains(&m));
         }
-    }
-
-    /// Tests the position returns the correct ply count.
-    #[test]
-    fn position_can_get_ply() {
-        let mut p = Position::new();
-        assert_eq!(p.ply(), 0);
-
-        assert!(p.make_move(ChessMove::from_str("e2e4").expect("Failed to parse move.")));
-        assert_eq!(p.ply(), 1);
-
-        assert!(p.make_move(ChessMove::from_str("e7e5").expect("Failed to parse move.")));
-        assert_eq!(p.ply(), 2);
     }
 
     /// Tests the initial position input layer.
