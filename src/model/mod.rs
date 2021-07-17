@@ -4,11 +4,10 @@ use crate::input::{batch::Batch, trainbatch::TrainBatch};
 use rand::{prelude::*, thread_rng};
 use std::error::Error;
 use std::fs::{self, File};
-use std::io::{Write, BufReader, BufRead};
 use std::path::Path;
 
 #[cfg(feature = "tch")]
-use tch::{CModule, Device, IValue, Tensor};
+mod torch;
 
 /// Model input layer constants (TODO move to input)
 pub const PLY_FRAME_SIZE: usize = 14;
@@ -49,7 +48,7 @@ pub enum Model {
     Mock,
 
     #[cfg(feature = "tch")]
-    Torch(CModule, bool),
+    Torch(torch::Model),
 }
 
 /// Types used for generating new models.
@@ -65,52 +64,28 @@ pub fn get_type(m: &Model) -> Type {
         Model::Mock => Type::Mock,
 
         #[cfg(feature = "tch")]
-        Model::Torch(_, _) => Type::Torch,
+        Model::Torch(_) => Type::Torch,
     }
 }
 
 /// Generates a new model on the disk.
 pub fn generate(p: &Path, nt: Type) -> Result<(), Box<dyn Error>> {
+    if p.exists() && !p.is_dir() {
+        return Err(
+            "Will not generate model, destination exists and is not a dir".into(),
+        );
+    }
+
+    fs::create_dir_all(p)?;
+
     match nt {
         Type::Mock => {
-            if p.exists() && !p.is_dir() {
-                return Err(
-                    "Will not generate mock model, destination exists and is not a dir".into(),
-                );
-            }
-
-            fs::create_dir_all(p)?;
             File::create(p.join("mock.type"))?;
             Ok(())
         }
 
         #[cfg(feature = "tch")]
-        Type::Torch => {
-            if p.exists() && !p.is_dir() {
-                return Err(
-                    "Will not generate torch model, destination exists and is not a dir".into(),
-                );
-            }
-
-            fs::create_dir_all(p)?;
-            File::create(p.join("torch.type"))?;
-
-            let status = std::process::Command::new("python")
-                .args(&[
-                    "scripts/init_torch.py",
-                    p.join("model.pt").to_str().unwrap(),
-                ])
-                .spawn()?
-                .wait()?
-                .success();
-
-            if !status {
-                return Err("Torch init script returned failure status.".into());
-            }
-
-            println!("Torch init script returned success.");
-            Ok(())
-        }
+        Type::Torch => torch::generate(p),
     }
 }
 
@@ -141,33 +116,7 @@ pub fn load(p: &Path, quiet: bool) -> Result<Model, Box<dyn Error>> {
 
     #[cfg(feature = "tch")]
     if p.join("torch.type").exists() {
-        // Load torch model.
-        if !quiet {
-            println!("Detected model type torch");
-        }
-
-        let mut cmod = CModule::load(p.join("model.pt"))?;
-
-        tch::maybe_init_cuda();
-
-        if tch::Cuda::is_available() {
-            if !quiet {
-                println!("CUDA support enabled");
-                println!("{} CUDA devices available", tch::Cuda::device_count());
-
-                if tch::Cuda::cudnn_is_available() {
-                    println!("CUDNN acceleration enabled");
-                }
-            }
-
-            cmod.to(Device::Cuda(0), tch::Kind::Float, false);
-        } else {
-            if !quiet {
-                println!("CUDA is not available, using CPU for evaluation");
-            }
-        }
-
-        return Ok(Model::Torch(cmod, tch::Cuda::is_available()));
+        return Ok(Model::Torch(torch::load(p, quiet)?));
     }
 
     return Err(
@@ -196,51 +145,7 @@ pub fn execute(m: &Model, b: &Batch) -> Output {
         }
 
         #[cfg(feature = "tch")]
-        Model::Torch(cmod, cuda) => {
-            let mut headers_tensor = Tensor::of_slice(b.get_headers())
-                .reshape(&[b.get_size() as i64, SQUARE_HEADER_SIZE as i64]);
-
-            let mut frames_tensor = Tensor::of_slice(b.get_frames()).reshape(&[
-                b.get_size() as i64,
-                8,
-                8,
-                (PLY_FRAME_COUNT * PLY_FRAME_SIZE) as i64,
-            ]);
-
-            let mut lmm_tensor =
-                Tensor::of_slice(b.get_lmm()).reshape(&[b.get_size() as i64, 4096]);
-
-            if *cuda {
-                headers_tensor = headers_tensor.to(Device::Cuda(0));
-                frames_tensor = frames_tensor.to(Device::Cuda(0));
-                lmm_tensor = lmm_tensor.to(Device::Cuda(0));
-            }
-
-            let headers_tensor = IValue::Tensor(headers_tensor);
-            let frames_tensor = IValue::Tensor(frames_tensor);
-            let lmm_tensor = IValue::Tensor(lmm_tensor);
-
-            let nn_result = tch::no_grad(|| {
-                cmod
-                    .forward_is(&[headers_tensor, frames_tensor, lmm_tensor])
-                    .expect("network eval failed")
-            });
-
-            let (policy, value): (Vec<f64>, Vec<f32>) = match nn_result {
-                IValue::Tuple(v) => match &v[..] {
-                    [IValue::Tensor(policy), IValue::Tensor(value)] => {
-                        (policy.into(), value.into())
-                    }
-                    _ => panic!("Unexpected network output tuple size"),
-                },
-                _ => panic!("Unexpected network output type"),
-            };
-
-            assert_eq!(policy.len(), b.get_size() * 4096);
-            assert_eq!(value.len(), b.get_size());
-
-            Output::new(policy, value)
-        }
+        Model::Torch(tmod) => torch::execute(b, &tmod),
     }
 }
 
@@ -248,55 +153,13 @@ pub fn execute(m: &Model, b: &Batch) -> Output {
 /// Returns the entire contents of stdout.
 pub fn train<F>(p: &Path, tb: Vec<TrainBatch>, mtype: Type, sout: F, loss_path: &Path) -> Result<Vec<String>, Box<dyn Error>> 
     where F: Fn(&String) {
+
     match mtype {
-        Type::Mock => (),
+        Type::Mock => Ok(Vec::new()),
 
         #[cfg(feature = "tch")]
-        Type::Torch => {
-            let tdata_path = p.join("train_data.json");
-            let mut tdata = File::create(&tdata_path)?;
-
-            tdata.write(serde_json::to_string(&tb)?.as_bytes())?;
-            tdata.flush()?;
-
-            let mut output = std::process::Command::new("python")
-                .stdout(std::process::Stdio::piped())
-                .args(&[
-                    "scripts/train_torch.py",
-                    p.join("model.pt").to_str().unwrap(),
-                    tdata_path
-                        .to_str()
-                        .expect("failed to get str from tdata pathbuf"),
-                    loss_path
-                        .to_str()
-                        .expect("failed to get str from loss pathbuf"),
-                ])
-                .spawn()?;
-
-            let stdout_reader = BufReader::new(output.stdout.take().unwrap());
-            let mut stdout_lines = Vec::new();
-
-            for line in stdout_reader.lines() {
-                match line {
-                    Ok(line) => {
-                        sout(&line);
-                        stdout_lines.push(line);
-                    },
-                    Err(_) => break,
-                }
-            }
-
-            let output = output.wait()?;
-
-            if !output.success() {
-                return Err("Torch init script returned failure status.".into());
-            }
-
-            return Ok(stdout_lines);
-        }
+        Type::Torch => torch::train(p, tb, sout, loss_path),
     }
-
-    Ok(Vec::new())
 }
 
 /// Archives the current model.
