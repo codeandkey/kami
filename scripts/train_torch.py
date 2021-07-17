@@ -117,8 +117,7 @@ print('Final average loss: {} ---> {}'.format(first_avg_loss, last_avg_loss))
 
 # Write initial and ending average loss
 with open(sys.argv[3], 'w') as f:
-    f.write(str(first_avg_loss) + '\n')
-    f.write(str(last_avg_loss) + '\n')
+    f.write('{} {}\n'.format(first_avg_loss, last_avg_loss))
 
 # Write trained model back to source.
 module.save(sys.argv[1])
