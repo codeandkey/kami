@@ -445,7 +445,7 @@ fn do_search(
         .position(position.clone());
 
     if let Some(maxnodes) = maxnodes {
-        tree.maxnodes(maxnodes);
+        tree = tree.maxnodes(maxnodes);
     }
 
     let tree = tree
