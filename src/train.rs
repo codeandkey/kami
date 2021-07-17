@@ -139,7 +139,7 @@ fn generate_training_set(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>>
 
             ui.lock().unwrap().position(position.clone());
 
-            let (selected_move, mcts) = do_search(model.clone(), ui.clone(), &position)?;
+            let (selected_move, mcts) = do_search(model.clone(), ui.clone(), &position, None)?;
             assert!(position.make_move(selected_move));
             game.make_move(selected_move, mcts);
         }
@@ -301,7 +301,7 @@ fn evaluate_elo(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
                     break;
                 }
 
-                let (selected_move, mcts) = do_search(model.clone(), ui.clone(), &position)?;
+                let (selected_move, mcts) = do_search(model.clone(), ui.clone(), &position, Some(usize::MAX))?;
                 assert!(position.make_move(selected_move));
                 game.make_move(selected_move, mcts);
             } else {
@@ -436,12 +436,19 @@ fn do_search(
     model: Arc<Model>,
     ui: Arc<Mutex<ui::Ui>>,
     position: &Position,
+    maxnodes: Option<usize>,
 ) -> Result<(ChessMove, Vec<(ChessMove, f64)>), Box<dyn Error>> {
     // Run search.
     let search_ui = ui.clone();
-    let tree = Searcher::new()
+    let mut tree = Searcher::new()
         .model(model)
-        .position(position.clone())
+        .position(position.clone());
+
+    if let Some(maxnodes) = maxnodes {
+        tree.maxnodes(maxnodes);
+    }
+
+    let tree = tree
         .run(move |status| {
             search_ui.lock().unwrap().status(status);
         })?;
