@@ -466,7 +466,7 @@ fn advance_model(ui: Arc<Mutex<ui::Ui>>) -> Result<(), Box<dyn Error>> {
     // Train the model in place.
     ui.lock().unwrap().log("Training model.");
     let model = model::load(&dir::model_dir()?, true)?;
-    model::train(
+    let train_output = model::train(
         &dir::model_dir()?,
         training_batches,
         model::get_type(&model),
@@ -474,6 +474,9 @@ fn advance_model(ui: Arc<Mutex<ui::Ui>>) -> Result<(), Box<dyn Error>> {
         &dir::get_generation_archive()?.join("loss")
     )?;
     ui.lock().unwrap().log("Finished training model.");
+
+    // Write training log to archive.
+    fs::write(dir::get_generation_archive()?.join("train.stdout"), train_output.join("\n").as_bytes())?;
 
     // Advance generation number.
     dir::new_generation()?;
