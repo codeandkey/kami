@@ -49,6 +49,7 @@ def generate_datasets():
     data_mean = []
     data_loss_diff = []
     data_loss_after = []
+    data_loss_x = []
     elo_x = []
     elo_y = []
 
@@ -59,6 +60,9 @@ def generate_datasets():
         for game in games(genpath):
             total += len(game['actions'])
             n += 1
+        
+        if n == 0:
+            break
 
         elo_path = path.join(genpath, 'games', 'elo')
         if path.exists(elo_path):
@@ -69,13 +73,17 @@ def generate_datasets():
 
         data_mean.append(total / n)
 
-        with open(path.join(genpath, 'loss')) as f:
-            parts = f.read().split(' ')
-            
-            data_loss_diff.append(float(parts[0]) - float(parts[1]))
-            data_loss_after.append(float(parts[1]))
+        loss_path = path.join(genpath, 'loss')
 
-    return data_mean, elo_x, elo_y, data_loss_diff, data_loss_after
+        if path.exists(loss_path):
+            with open(path.join(genpath, 'loss')) as f:
+                parts = f.read().split(' ')
+                
+                data_loss_diff.append(float(parts[0]) - float(parts[1]))
+                data_loss_after.append(float(parts[1]))
+                data_loss_x.append(gen)
+
+    return data_mean, elo_x, elo_y, data_loss_diff, data_loss_after, data_loss_x
 
 # Collects data and renders it on the screen.
 def render_plots():
@@ -83,7 +91,7 @@ def render_plots():
     fig.suptitle('Kami model evolution statistics')
 
     # Render average game ply
-    ply_mean_y, elo_x, elo_y, d_loss_diff, d_loss_after = generate_datasets()
+    ply_mean_y, elo_x, elo_y, d_loss_diff, d_loss_after, d_loss_x = generate_datasets()
     ply_x = list(range(len(ply_mean_y)))
 
     ply_mean.plot(ply_x, ply_mean_y, '.-')
@@ -95,19 +103,19 @@ def render_plots():
     elo.plot(elo_x, elo_y, '.-')
     elo.set_xlabel('Generation #')
     elo.set_ylabel('Estimated ELO rating')
-    elo.set(ylim=(0, 2500), xlim=(0, len(ply_mean_y)))
+    elo.set(ylim=(-20, max(elo_y) + 200), xlim=(0, len(ply_x) - 1))
     elo.grid()
 
-    loss_diff.plot(ply_x, d_loss_diff, '.-')
+    loss_diff.plot(d_loss_x, d_loss_diff, '.-')
     loss_diff.set_xlabel('Generation #')
     loss_diff.set_ylabel('Loss decrease')
-    loss_diff.set(ylim=(0, 100), xlim=(0, len(ply_x)))
+    loss_diff.set(ylim=(0, max(d_loss_diff) * 1.25), xlim=(0, len(ply_x) - 1))
     loss_diff.grid()
 
-    loss_after.plot(ply_x, d_loss_after, '.-')
+    loss_after.plot(d_loss_x, d_loss_after, '.-')
     loss_after.set_xlabel('Generation #')
     loss_after.set_ylabel('Actual loss, post-train')
-    loss_after.set(ylim=(0, 100), xlim=(0, len(ply_x)))
+    loss_after.set(ylim=(0, max(d_loss_after) * 1.25), xlim=(0, len(ply_x) - 1))
     loss_after.grid()
 
     plt.show()
