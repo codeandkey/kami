@@ -452,14 +452,17 @@ impl Ui {
                             // Render search progress
                             let mut prog_rect = board_rect.clone();
 
-                            prog_rect.y += prog_rect.height - 2;
+                            prog_rect.y += prog_rect.height;
                             prog_rect.height = 2;
 
-                            let label =
-                                format!("{}/{}", cstatus.total_nodes, constants::SEARCH_MAXNODES);
+                            if let Some(maxnodes) = cstatus.maxnodes {
+                                prog_rect.y -= 2;
 
-                            let prog_widget = Gauge::default()
-                                .block(Block::default().title("Progress"))
+                                let label =
+                                    format!("{}/{}", cstatus.total_nodes, maxnodes);
+
+                                let maxtime_widget = Gauge::default()
+                                .block(Block::default().title("NODE progress"))
                                 .gauge_style(
                                     Style::default()
                                         .fg(Color::Green)
@@ -468,14 +471,41 @@ impl Ui {
                                 )
                                 .percent(
                                     ((cstatus.total_nodes as f32 * 100.0
-                                        / constants::SEARCH_MAXNODES as f32)
+                                        / maxnodes as f32)
                                         as u16)
                                         .min(100),
                                 )
                                 .label(label)
                                 .use_unicode(true);
 
-                            f.render_widget(prog_widget, prog_rect);
+                                f.render_widget(maxtime_widget, prog_rect);
+                            }
+                            
+                            if let Some(maxtime) = cstatus.maxnodes {
+                                prog_rect.y -= 2;
+
+                                let label =
+                                    format!("{:.1}/{:.1}", cstatus.elapsed_ms as f32 / 1000.0, maxtime as f32 / 1000.0);
+
+                                let maxtime_widget = Gauge::default()
+                                .block(Block::default().title("NODE progress"))
+                                .gauge_style(
+                                    Style::default()
+                                        .fg(Color::Blue)
+                                        .bg(Color::Black)
+                                        .add_modifier(Modifier::BOLD),
+                                )
+                                .percent(
+                                    ((cstatus.elapsed_ms as f32
+                                        / maxtime as f32)
+                                        as u16)
+                                        .min(100),
+                                )
+                                .label(label)
+                                .use_unicode(true);
+
+                                f.render_widget(maxtime_widget, prog_rect);
+                            }
 
                             // Render search score
                             Ui::render_score(f, score_rect, &score_buf);
