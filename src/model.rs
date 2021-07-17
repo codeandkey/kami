@@ -220,9 +220,11 @@ pub fn execute(m: &Model, b: &Batch) -> Output {
             let frames_tensor = IValue::Tensor(frames_tensor);
             let lmm_tensor = IValue::Tensor(lmm_tensor);
 
-            let nn_result = cmod
-                .forward_is(&[headers_tensor, frames_tensor, lmm_tensor])
-                .expect("network eval failed");
+            let nn_result = tch::no_grad(|| {
+                cmod
+                    .forward_is(&[headers_tensor, frames_tensor, lmm_tensor])
+                    .expect("network eval failed")
+            });
 
             let (policy, value): (Vec<f64>, Vec<f32>) = match nn_result {
                 IValue::Tuple(v) => match &v[..] {
