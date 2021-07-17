@@ -5,16 +5,16 @@ use crate::tree::{self, StatusResponse, Tree, TreeReq};
 use crate::worker::{self, Worker};
 
 use serde::Serialize;
-use std::sync::mpsc::{channel, Receiver};
+use std::error::Error;
+use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex};
-use std::thread::{spawn, JoinHandle};
+use std::thread::spawn;
 use std::time::Duration;
 
 /// Used
 #[derive(Serialize, Clone)]
 pub enum SearchStatus {
     Searching(Status),
-    Stopping,
     Done,
 }
 
@@ -26,44 +26,84 @@ pub struct Status {
     pub rootfen: String,
     pub total_nodes: usize,
     pub total_batches: usize,
+    pub maxnodes: Option<usize>,
+    pub maxtime: Option<usize>,
     pub nps: f32,
     pub bps: f32,
 }
 
+impl Status {
+    pub fn new() -> Self {
+        Status {
+            tree: None,
+            workers: Vec::new(),
+            elapsed_ms: 0,
+            rootfen: "(no position)".to_string(),
+            total_nodes: 0,
+            total_batches: 0,
+            maxnodes: None,
+            maxtime: None,
+            nps: 0.0,
+            bps: 0.0,
+        }
+    }
+}
+
 pub struct Searcher {
     workers: Arc<Mutex<Vec<Worker>>>,
-    handle: Option<JoinHandle<Tree>>,
+    position: Position,
+    maxnodes: Option<usize>,
+    maxtime: Option<usize>,
+    model: Option<Arc<Model>>,
 }
 
 impl Searcher {
     pub fn new() -> Self {
         Searcher {
             workers: Arc::new(Mutex::new(Vec::new())),
-            handle: None,
+            model: None,
+            position: Position::new(),
+            maxnodes: Some(constants::SEARCH_MAXNODES),
+            maxtime: None,
         }
     }
 
-    pub fn start(
-        &mut self,
-        thr_stime: Option<usize>,
-        model: Arc<Model>,
-        thr_pos: Position,
-        temp: f64,
-        batch_size: usize,
-    ) -> Option<Receiver<SearchStatus>> {
-        if self.handle.is_some() {
-            println!("Search is already running!");
-            return None;
-        }
+    pub fn model(mut self, model: Arc<Model>) -> Self {
+        self.model = Some(model);
+        self
+    }
 
-        let (search_status_tx, search_status_rx) = channel();
+    pub fn position(mut self, position: Position) -> Self {
+        self.position = position;
+        self
+    }
 
-        let thr_model = model.clone();
+    pub fn maxnodes(mut self, maxnodes: Option<usize>) -> Self {
+        self.maxnodes = maxnodes;
+        self
+    }
+
+    pub fn maxtime(mut self, maxtime: Option<usize>) -> Self {
+        self.maxtime = maxtime;
+        self
+    }
+
+    pub fn run<F, R>(self, f: F) -> Result<Tree, Box<dyn Error>>
+    where
+        F: Fn(Status) -> R,
+    {
+        let thr_model = self.model.as_ref().unwrap().clone();
         let thr_workers = self.workers.clone();
-        let thr_rootfen = thr_pos.get_fen();
+        let thr_rootfen = self.position.get_fen();
+        let thr_position = self.position.clone();
+        let thr_maxtime = self.maxtime.clone();
+        let thr_maxnodes = self.maxnodes.clone();
 
-        self.handle = Some(spawn(move || {
-            let (thr_tree_tx, thr_tree_handle) = Tree::new(thr_pos.clone(), temp, batch_size).run();
+        let (status_tx, status_rx) = channel();
+
+        let handle = spawn(move || {
+            let (thr_tree_tx, thr_tree_handle) =
+                Tree::new(thr_position, constants::TEMPERATURE, constants::SEARCH_BATCH_SIZE).run();
 
             for _ in 0..num_cpus::get() {
                 let mut new_worker = Worker::new(thr_tree_tx.clone(), thr_model.clone());
@@ -79,12 +119,14 @@ impl Searcher {
                 elapsed = start_point.elapsed().unwrap().as_millis() as u64;
 
                 // Get tree status
-                let (status_tx, status_rx) = channel();
+                let (tree_status_tx, tree_status_rx) = channel();
                 thr_tree_tx
-                    .send(TreeReq::GetStatus(status_tx))
+                    .send(TreeReq::GetStatus(tree_status_tx))
                     .expect("failed sending status req to tree");
 
-                let tree_status = match status_rx.recv().expect("failed receiving status from tree")
+                let tree_status = match tree_status_rx
+                    .recv()
+                    .expect("failed receiving status from tree")
                 {
                     StatusResponse::NextStatus(s) => s,
                     StatusResponse::Stop => {
@@ -111,30 +153,33 @@ impl Searcher {
                     .fold((0, 0), |(a1, a2), (n, b)| (a1 + n, a2 + b));
 
                 // Send status to clients
-                let _ = search_status_tx.send(SearchStatus::Searching(Status {
-                    elapsed_ms: elapsed,
-                    tree: tree_status,
-                    rootfen: thr_rootfen.clone(),
-                    workers: worker_status,
-                    total_nodes: total_nodes,
-                    total_batches: total_batches,
-                    nps: (total_nodes as f32 / (elapsed + 1) as f32) * 1000.0,
-                    bps: (total_batches as f32 / (elapsed + 1) as f32) * 1000.0,
-                }));
+                status_tx
+                    .send(SearchStatus::Searching(Status {
+                        elapsed_ms: elapsed,
+                        tree: tree_status,
+                        rootfen: thr_rootfen.clone(),
+                        workers: worker_status,
+                        total_nodes: total_nodes,
+                        total_batches: total_batches,
+                        maxnodes: thr_maxnodes,
+                        maxtime: thr_maxtime,
+                        nps: (total_nodes as f32 / (elapsed + 1) as f32) * 1000.0,
+                        bps: (total_batches as f32 / (elapsed + 1) as f32) * 1000.0,
+                    }))
+                    .expect("search status tx failed");
 
-                if let Some(t) = thr_stime {
-                    if elapsed >= t as u64 {
+                if let Some(maxtime) = thr_maxtime {
+                    if elapsed >= maxtime as u64 {
                         break;
                     }
                 }
-
-                if total_nodes >= constants::SEARCH_MAXNODES {
-                    break;
+                
+                if let Some(maxnodes) = thr_maxnodes {
+                    if total_nodes >= maxnodes {
+                        break;
+                    }
                 }
             }
-
-            // Send search stopping signal
-            let _ = search_status_tx.send(SearchStatus::Stopping);
 
             // Send stop request to tree
             thr_tree_tx
@@ -158,27 +203,25 @@ impl Searcher {
             let tree_ret = thr_tree_handle.join().expect("failed to join tree");
 
             // Send search stop signal
-            let _ = search_status_tx.send(SearchStatus::Done);
+            status_tx
+                .send(SearchStatus::Done)
+                .expect("search status tx failed");
 
             return tree_ret;
-        }));
+        });
 
-        return Some(search_status_rx);
-    }
-
-    pub fn wait(&mut self) -> Option<Tree> {
-        if !self.handle.is_some() {
-            return None;
+        loop {
+            match status_rx.recv().expect("search status rx failed") {
+                SearchStatus::Searching(stat) => {
+                    f(stat);
+                }
+                SearchStatus::Done => break,
+            }
         }
 
-        let ret = self
-            .handle
-            .take()
-            .unwrap()
-            .join()
-            .expect("failed joining search thread");
+        let ret = handle.join().expect("failed joining search thread");
 
-        return Some(ret);
+        return Ok(ret);
     }
 }
 
@@ -202,19 +245,11 @@ mod test {
     /// Tests that a search can be started and immediately stopped.
     #[test]
     fn search_can_run_short() {
-        let mut search = Searcher::new();
-        let rx = search
-            .start(Some(500), mock(), Position::new(), 1.0, 4)
-            .unwrap();
-
-        loop {
-            match rx.recv().expect("rx failed") {
-                SearchStatus::Done => break,
-                _ => (),
-            }
-        }
-
-        search.wait();
+        Searcher::new()
+            .maxtime(Some(500))
+            .model(mock())
+            .run(|_| ())
+            .expect("search failed");
     }
 
     /// Tests that a short search will select a mate in 1 (with low temperature)
@@ -227,66 +262,28 @@ mod test {
         pos.make_move(ChessMove::from_str("a2a4").expect("move parse fail"));
         pos.make_move(ChessMove::from_str("g7g5").expect("move parse fail"));
 
-        let mut search = Searcher::new();
-        let rx = search.start(Some(10000), mock(), pos, 0.1, 16).unwrap();
-
-        loop {
-            match rx.recv().expect("rx failed") {
-                SearchStatus::Done => break,
-                _ => (),
-            }
-        }
-
-        let final_tree = search.wait().expect("no tree returned");
+        let tree = Searcher::new()
+            .position(pos)
+            .model(mock())
+            .maxnodes(Some(10000))
+            .run(|_| ())
+            .expect("search failed");
 
         assert_eq!(
-            final_tree.select(),
+            tree.select(),
             ChessMove::from_str("d1h5").expect("move parse fail"),
-            "tree: \n{}", serde_json::to_string_pretty(&final_tree.get_status().unwrap()).expect("serialize failed"),
+            "tree: \n{}",
+            serde_json::to_string_pretty(&tree.get_status().unwrap()).expect("serialize failed"),
         );
-    }
-
-    /// Tests that a stopped search cannot stop again.
-    #[test]
-    fn search_stop_already_stopped() {
-        let mut search = Searcher::new();
-        assert!(search.wait().is_none());
-    }
-
-    /// Tests that a started search cannot start again.
-    #[test]
-    fn search_start_already_started() {
-        let mut search = Searcher::new();
-        let pos = Position::new();
-
-        search
-            .start(Some(200), mock(), pos.clone(), 1.0, 4)
-            .unwrap();
-
-        assert!(search.start(Some(200), mock(), pos, 1.0, 4).is_none());
-
-        search.wait().expect("no tree returned");
     }
 
     /// Tests that a searcher status can serialize.
     #[test]
     fn search_status_can_serialize() {
-        let pos = Position::new();
-
-        let mut search = Searcher::new();
-        let rx = search.start(Some(200), mock(), pos, 1.0, 4).unwrap();
-
-        loop {
-            match rx.recv().expect("rx failed") {
-                SearchStatus::Done => break,
-                SearchStatus::Searching(stat) => print!(
-                    "{}",
-                    serde_json::to_string_pretty(&stat).expect("serialize failed")
-                ),
-                _ => (),
-            }
-        }
-
-        search.wait().expect("no tree returned");
+        Searcher::new()
+            .maxnodes(Some(50))
+            .model(mock())
+            .run(|stat| serde_json::to_string_pretty(&stat).expect("serialize failed"))
+            .expect("search failed");
     }
 }

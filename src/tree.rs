@@ -1,3 +1,4 @@
+use crate::constants;
 use crate::input::treebatch::TreeBatch;
 use crate::model::Output;
 use crate::node::{Node, TerminalStatus};
@@ -11,10 +12,6 @@ use std::cmp::Ordering;
 use std::ops::{Index, IndexMut};
 use std::sync::mpsc::{channel, Sender};
 use std::thread::{spawn, JoinHandle};
-
-const Q_SCALE: f64 = 1.0; // MCTS parameter ; how important is avg. value
-const PUCT: f64 = 4.0; // MCTS parameter, effect of policy on exploration component
-const P_NOISE_DIRICHLET: f64 = 0.285; // Dirichlet noise to add to P before PUCT calculation
 
 /// Status of a single node.
 #[derive(Clone, Serialize, Deserialize)]
@@ -247,7 +244,10 @@ impl Tree {
         let p_noise = match children.len() {
             1 => vec![1.0],
             len => {
-                let dist = rand::distributions::Dirichlet::new_with_param(P_NOISE_DIRICHLET, len);
+                let dist = rand::distributions::Dirichlet::new_with_param(
+                    constants::PUCT_NOISE_ALPHA,
+                    len,
+                );
                 let mut rng = rand::thread_rng();
                 dist.sample(&mut rng)
             }
@@ -258,8 +258,11 @@ impl Tree {
             .zip(p_noise)
             .map(|(&cidx, noise)| {
                 let child = &mut self[cidx];
-                let uct = child.q() * Q_SCALE
-                    + (child.p / cur_ptotal) * noise * PUCT * (cur_n as f64).sqrt()
+                let uct = child.q()
+                    + (((child.p / cur_ptotal) * (1.0 - constants::PUCT_NOISE_WEIGHT))
+                        + constants::PUCT_NOISE_WEIGHT * noise)
+                        * constants::PUCT_POLICY_WEIGHT
+                        * (cur_n as f64).sqrt()
                         / (child.n as f64 + 1.0);
 
                 assert!(
@@ -366,6 +369,24 @@ impl Tree {
         let mut rng = thread_rng();
 
         return actions[index.sample(&mut rng)];
+    }
+
+    /// Gets the predicted current score.
+    pub fn score(&self) -> f64 {
+        // Find move with best n
+        let mut best_n = 0;
+        let mut best_score: Option<f64> = None;
+
+        if let Some(children) = &self[0].children {
+            for &nd in children {
+                if self[nd].n > best_n {
+                    best_n = self[nd].n;
+                    best_score = Some(self[nd].q());
+                }
+            }
+        }
+
+        return best_score.unwrap_or(0.0);
     }
 
     /// Gets MCTS visit counts for the root children in pair format.

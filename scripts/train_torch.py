@@ -8,12 +8,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-LEARNING_RATE=0.001
+LEARNING_RATE=1e-5
 FRAME_COUNT=6
 FRAME_SIZE=14
 HEADER_SIZE=18
 EPOCHS = 10
 POLICY_EPSILON=1e-6
+L2_REG_WEIGHT = 1e-4
 DROPOUT = 0.3
 
 # Load module from path
@@ -52,7 +53,7 @@ def loss(policy, value, mcts, result):
 
 # Train model!
 
-optimizer = torch.optim.SGD(module.parameters(), lr = LEARNING_RATE)
+optimizer = torch.optim.RMSprop(module.parameters(), lr=LEARNING_RATE, weight_decay=0.01)
 first_avg_loss = None
 last_avg_loss = None
 
@@ -66,10 +67,6 @@ def train_loop():
         # don't apply dropout to LMM
 
         policy, value = module(headers, frames, lmm)
-
-        l2_reg = 0
-        for p in module.parameters():
-            l2_reg += 0.5 * (p ** 2).sum()
 
         current_loss = loss(policy, value, mcts, result)
 
@@ -117,6 +114,10 @@ for i in range(EPOCHS):
 
 print('Finished model training!')
 print('Final average loss: {} ---> {}'.format(first_avg_loss, last_avg_loss))
+
+# Write initial and ending average loss
+with open(sys.argv[3], 'w') as f:
+    f.write('{} {}\n'.format(first_avg_loss, last_avg_loss))
 
 # Write trained model back to source.
 module.save(sys.argv[1])

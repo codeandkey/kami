@@ -329,11 +329,6 @@ impl Position {
         }
     }
 
-    /// Gets the number of moves made in the game.
-    pub fn ply(&self) -> usize {
-        self.states.len() - 1
-    }
-
     /// Returns a pretty-printed board representation.
     pub fn to_string_pretty(&self) -> String {
         (0..8)
@@ -422,19 +417,6 @@ mod test {
         for m in moves {
             assert!(expected_moves.contains(&m));
         }
-    }
-
-    /// Tests the position returns the correct ply count.
-    #[test]
-    fn position_can_get_ply() {
-        let mut p = Position::new();
-        assert_eq!(p.ply(), 0);
-
-        assert!(p.make_move(ChessMove::from_str("e2e4").expect("Failed to parse move.")));
-        assert_eq!(p.ply(), 1);
-
-        assert!(p.make_move(ChessMove::from_str("e7e5").expect("Failed to parse move.")));
-        assert_eq!(p.ply(), 2);
     }
 
     /// Tests the initial position input layer.

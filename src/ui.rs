@@ -1,14 +1,8 @@
 use crate::constants;
 use crate::position::Position;
-use crate::searcher::SearchStatus;
+use crate::searcher;
 
-use std::sync::{
-    mpsc::{
-        channel,
-        Sender,
-        RecvTimeoutError::Timeout,
-    },
-};
+use std::sync::mpsc::{channel, RecvTimeoutError::Timeout, Sender};
 
 use std::thread::{spawn, JoinHandle};
 use std::time::{Duration, Instant};
@@ -18,12 +12,14 @@ use tui::{
     style::{Color, Modifier, Style},
     symbols,
     text::Span,
-    widgets::{Axis, Block, Borders, Cell, Chart, Dataset, Gauge, Paragraph, Row, Table, Wrap, GraphType},
+    widgets::{
+        Axis, Block, Borders, Cell, Chart, Dataset, Gauge, GraphType, Paragraph, Row, Table, Wrap,
+    },
     Terminal,
 };
 
 pub enum Event {
-    Status(SearchStatus),
+    Status(searcher::Status),
     Log(String),
     Score(f64),
     Position(Position),
@@ -35,6 +31,7 @@ pub enum Event {
 pub struct Ui {
     tx: Option<Sender<Event>>,
     handle: Option<JoinHandle<()>>,
+    should_exit: bool,
 }
 
 impl Ui {
@@ -43,12 +40,70 @@ impl Ui {
         Self {
             tx: None,
             handle: None,
+            should_exit: false,
         }
+    }
+
+    pub fn log(&self, msg: impl ToString) {
+        self.tx
+            .as_ref()
+            .unwrap()
+            .send(Event::Log(msg.to_string()))
+            .expect("ui tx failed");
+    }
+
+    pub fn score(&self, score: f64) {
+        self.tx
+            .as_ref()
+            .unwrap()
+            .send(Event::Score(score))
+            .expect("ui tx failed");
+    }
+
+    pub fn status(&self, status: searcher::Status) {
+        self.tx
+            .as_ref()
+            .unwrap()
+            .send(Event::Status(status))
+            .expect("ui tx failed");
+    }
+
+    pub fn position(&self, position: Position) {
+        self.tx
+            .as_ref()
+            .unwrap()
+            .send(Event::Position(position))
+            .expect("ui tx failed");
+    }
+
+    pub fn pause(&self) {
+        self.tx
+            .as_ref()
+            .unwrap()
+            .send(Event::Pause)
+            .expect("ui tx failed");
+    }
+
+    pub fn reset(&self) {
+        self.tx
+            .as_ref()
+            .unwrap()
+            .send(Event::Reset)
+            .expect("ui tx failed");
+    }
+
+    pub fn request_exit(&mut self) {
+        self.should_exit = true;
+    }
+
+    pub fn should_exit(&self) -> bool {
+        self.should_exit
     }
 
     /// Renders the NPS history graph.
     fn render_nps<T>(f: &mut tui::Frame<T>, rect: tui::layout::Rect, data: &Vec<f64>)
-    where T: tui::backend::Backend
+    where
+        T: tui::backend::Backend,
     {
         const NPS_BACKTIME: u64 = 15000;
         const MAX_FRAMES: u64 = NPS_BACKTIME / constants::SEARCH_STATUS_RATE;
@@ -90,30 +145,27 @@ impl Ui {
                     .style(Style::default().fg(Color::Gray))
                     .bounds([0.0, data.len() as f64])
                     .labels(
-                        [format!("T-{}ms", data.len() as u64 * constants::SEARCH_STATUS_RATE), "T-0ms".to_string()]
-                            .iter()
-                            .cloned()
-                            .map(Span::from)
-                            .collect(),
+                        [
+                            format!("T-{}ms", data.len() as u64 * constants::SEARCH_STATUS_RATE),
+                            "T-0ms".to_string(),
+                        ]
+                        .iter()
+                        .cloned()
+                        .map(Span::from)
+                        .collect(),
                     ),
             )
             .y_axis(
                 Axis::default()
                     .title("nodes/s")
                     .style(Style::default().fg(Color::Gray))
-                    .bounds([
-                        0.0,
-                        nps_max * 1.25,
-                    ])
+                    .bounds([0.0, nps_max * 1.25])
                     .labels(
-                        [
-                            0.0,
-                            nps_max * 1.25,
-                        ]
-                        .iter()
-                        .cloned()
-                        .map(|x| Span::from(format!("{}", x as usize)))
-                        .collect(),
+                        [0.0, nps_max * 1.25]
+                            .iter()
+                            .cloned()
+                            .map(|x| Span::from(format!("{}", x as usize)))
+                            .collect(),
                     ),
             );
 
@@ -122,7 +174,8 @@ impl Ui {
 
     /// Renders the value graph.
     fn render_score<T>(f: &mut tui::Frame<T>, rect: tui::layout::Rect, data: &Vec<f64>)
-    where T: tui::backend::Backend
+    where
+        T: tui::backend::Backend,
     {
         let mut data: Vec<(f64, f64)> = data
             .iter()
@@ -143,9 +196,7 @@ impl Ui {
             .data(&data);
 
         let baseline_data: Vec<(f64, f64)> = (0..rect.width)
-            .map(|x| {
-                (x as f64 / rect.width as f64 * data.len() as f64, 0.0)
-            })
+            .map(|x| (x as f64 / rect.width as f64 * data.len() as f64, 0.0))
             .collect();
 
         let baseline_dataset = Dataset::default()
@@ -196,7 +247,8 @@ impl Ui {
 
     /// Starts the TUI thread and begins displaying status data.
     pub fn start<T>(&mut self, backend: T)
-    where T: tui::backend::Backend + Send + 'static
+    where
+        T: tui::backend::Backend + Send + 'static,
     {
         let (tx, rx) = channel();
         self.tx = Some(tx);
@@ -206,7 +258,7 @@ impl Ui {
             let mut nps_history: Vec<f64> = vec![0.0];
 
             let mut paused = false;
-            let mut cstatus = SearchStatus::Done;
+            let mut cstatus = searcher::Status::new();
             let mut cposition = Position::new();
             let mut log_buf: Vec<String> = Vec::new();
             let mut score_buf: Vec<f64> = Vec::new();
@@ -272,16 +324,12 @@ impl Ui {
 
                             let mut total_nn = 0.0;
 
-                            let nodes = match &cstatus {
-                                SearchStatus::Searching(s) => match &s.tree {
-                                    Some(t) => {
-                                        total_nn = t.total_nn;
-                                        t.nodes.clone()
-                                    }
-                                    None => Vec::new(),
-                                },
-                                SearchStatus::Stopping => Vec::new(),
-                                SearchStatus::Done => Vec::new(),
+                            let nodes = match &cstatus.tree {
+                                Some(t) => {
+                                    total_nn = t.total_nn;
+                                    t.nodes.clone()
+                                }
+                                None => Vec::new(),
                             };
 
                             let rows = nodes.iter().map(|nd| {
@@ -292,7 +340,7 @@ impl Ui {
                                     format!("{:.2}%", nd.p_pct * 100.0),
                                     format!("{:+.2}", nd.q),
                                     format!("{}", nd.depth),
-                                    format!("{}%", if nd.n <= 0 { 0 } else { nd.tn * 100 / nd.n })
+                                    format!("{}%", if nd.n <= 0 { 0 } else { nd.tn * 100 / nd.n }),
                                 ])
                             });
 
@@ -346,28 +394,24 @@ impl Ui {
                             f.render_widget(board_widget, board_rect);
 
                             // Render perf summary
-                            let summary_lines = match &cstatus {
-                                SearchStatus::Stopping => "Search stopping.".to_string(),
-                                SearchStatus::Done => "Search done.".to_string(),
-                                SearchStatus::Searching(stat) => format!(
-                                    "FEN: {}\nNPS: {:.1}\nBPS: {:.1}",
-                                    stat.rootfen,
-                                    (stat
-                                        .workers
-                                        .iter()
-                                        .map(|w| w.total_nodes as f64)
-                                        .sum::<f64>()
-                                        / stat.elapsed_ms as f64)
-                                        * 1000.0,
-                                    (stat
-                                        .workers
-                                        .iter()
-                                        .map(|w| w.batch_sizes.len() as f64)
-                                        .sum::<f64>()
-                                        / stat.elapsed_ms as f64)
-                                        * 1000.0
-                                ),
-                            };
+                            let summary_lines = format!(
+                                "FEN: {}\nNPS: {:.1}\nBPS: {:.1}",
+                                cstatus.rootfen,
+                                (cstatus
+                                    .workers
+                                    .iter()
+                                    .map(|w| w.total_nodes as f64)
+                                    .sum::<f64>()
+                                    / (cstatus.elapsed_ms + 1) as f64)
+                                    * 1000.0,
+                                (cstatus
+                                    .workers
+                                    .iter()
+                                    .map(|w| w.batch_sizes.len() as f64)
+                                    .sum::<f64>()
+                                    / (cstatus.elapsed_ms + 1) as f64)
+                                    * 1000.0
+                            );
 
                             let summary_widget = Paragraph::new(summary_lines)
                                 .block(Block::default().title("Performance").borders(Borders::ALL))
@@ -383,19 +427,15 @@ impl Ui {
                             let perf_header =
                                 Row::new(perf_header_cells).height(1).bottom_margin(1);
 
-                            let workers = match &cstatus {
-                                SearchStatus::Searching(stat) => stat.workers.clone(),
-                                _ => Vec::new(),
-                            };
-
-                            let perf_rows = workers.iter().enumerate().map(|(id, w)| {
-                                Row::new([
-                                    id.to_string(),
-                                    w.state.clone(),
-                                    w.total_nodes.to_string(),
-                                    w.batch_sizes.len().to_string(),
-                                ])
-                            });
+                            let perf_rows =
+                                cstatus.workers.iter().cloned().enumerate().map(|(id, w)| {
+                                    Row::new([
+                                        id.to_string(),
+                                        w.state.clone(),
+                                        w.total_nodes.to_string(),
+                                        w.batch_sizes.len().to_string(),
+                                    ])
+                                });
 
                             let t = Table::new(perf_rows)
                                 .header(perf_header)
@@ -412,19 +452,17 @@ impl Ui {
                             // Render search progress
                             let mut prog_rect = board_rect.clone();
 
-                            prog_rect.y += prog_rect.height - 2;
+                            prog_rect.y += prog_rect.height;
                             prog_rect.height = 2;
 
-                            let prog_total_nodes = match &cstatus {
-                                SearchStatus::Searching(stat) => stat.total_nodes,
-                                _ => 0,
-                            };
+                            if let Some(maxnodes) = cstatus.maxnodes {
+                                prog_rect.y -= 2;
 
-                            let label =
-                                format!("{}/{}", prog_total_nodes, constants::SEARCH_MAXNODES);
+                                let label =
+                                    format!("{}/{}", cstatus.total_nodes, maxnodes);
 
-                            let prog_widget = Gauge::default()
-                                .block(Block::default().title("Progress"))
+                                let maxtime_widget = Gauge::default()
+                                .block(Block::default().title("NODE progress"))
                                 .gauge_style(
                                     Style::default()
                                         .fg(Color::Green)
@@ -432,23 +470,48 @@ impl Ui {
                                         .add_modifier(Modifier::BOLD),
                                 )
                                 .percent(
-                                    ((prog_total_nodes as f32 * 100.0
-                                        / constants::SEARCH_MAXNODES as f32)
+                                    ((cstatus.total_nodes as f32 * 100.0
+                                        / maxnodes as f32)
                                         as u16)
                                         .min(100),
                                 )
                                 .label(label)
                                 .use_unicode(true);
 
-                            f.render_widget(prog_widget, prog_rect);
+                                f.render_widget(maxtime_widget, prog_rect);
+                            }
+                            
+                            if let Some(maxtime) = cstatus.maxnodes {
+                                prog_rect.y -= 2;
+
+                                let label =
+                                    format!("{:.1}/{:.1}", cstatus.elapsed_ms as f32 / 1000.0, maxtime as f32 / 1000.0);
+
+                                let maxtime_widget = Gauge::default()
+                                .block(Block::default().title("NODE progress"))
+                                .gauge_style(
+                                    Style::default()
+                                        .fg(Color::Blue)
+                                        .bg(Color::Black)
+                                        .add_modifier(Modifier::BOLD),
+                                )
+                                .percent(
+                                    ((cstatus.elapsed_ms as f32
+                                        / maxtime as f32)
+                                        as u16)
+                                        .min(100),
+                                )
+                                .label(label)
+                                .use_unicode(true);
+
+                                f.render_widget(maxtime_widget, prog_rect);
+                            }
 
                             // Render search score
                             Ui::render_score(f, score_rect, &score_buf);
 
                             // Render NPS history
-                            if let SearchStatus::Searching(stat) = &cstatus {
-                                nps_history.push(stat.nps as f64);
-                            }
+                            nps_history.push(cstatus.nps as f64);
 
                             Ui::render_nps(f, nps_rect, &nps_history);
                         })
@@ -460,8 +523,12 @@ impl Ui {
                 let mut stop = false;
 
                 // Process TUI events
-                while frame_timer.elapsed().as_millis() < (1000 / constants::TUI_FRAME_RATE) as u128 {
-                    match rx.recv_timeout(Duration::from_millis((1000 / constants::TUI_FRAME_RATE) - frame_timer.elapsed().as_millis() as u64)) {
+                while frame_timer.elapsed().as_millis() < (1000 / constants::TUI_FRAME_RATE) as u128
+                {
+                    match rx.recv_timeout(Duration::from_millis(
+                        (1000 / constants::TUI_FRAME_RATE)
+                            - frame_timer.elapsed().as_millis() as u64,
+                    )) {
                         Ok(evt) => match evt {
                             Event::Stop => stop = true,
                             Event::Log(s) => log_buf.push(s),
@@ -475,9 +542,9 @@ impl Ui {
                                 } else {
                                     log_buf.push("Paused display.".to_string());
                                 }
-                                
+
                                 paused = !paused;
-                            },
+                            }
                         },
                         Err(Timeout) => (),
                         Err(e) => Err(e).expect("unexpected recv fail"),
@@ -491,14 +558,18 @@ impl Ui {
         }));
     }
 
-    /// Gets an event sender handle for this TUI.
-    pub fn tx(&self) -> Sender<Event> {
-        self.tx.as_ref().expect("TUI not running").clone()
-    }
-
     /// Joins the TUI thread.
-    pub fn join(mut self) {
-        self.handle.take().expect("TUI not running").join().expect("TUI thread failed to join")
+    pub fn join(&mut self) {
+        self.tx
+            .as_ref()
+            .unwrap()
+            .send(Event::Stop)
+            .expect("ui tx failed");
+        self.handle
+            .take()
+            .expect("TUI not running")
+            .join()
+            .expect("TUI thread failed to join")
     }
 }
 
@@ -507,6 +578,8 @@ mod test {
     use super::*;
     use std::thread::sleep;
     use tui::backend::TestBackend;
+    use crate::model::Model;
+    use std::sync::Arc;
 
     /// Tests the TUI can be initialized.
     #[test]
@@ -523,7 +596,83 @@ mod test {
 
         sleep(Duration::from_secs(1));
 
-        t.tx().send(Event::Stop).unwrap();
+        t.join();
+    }
+
+    #[test]
+    /// Tests the TUI exit request works.
+    pub fn ui_can_request_exit() {
+        let mut t = Ui::new();
+
+        t.start(TestBackend::new(800, 600));
+        t.request_exit();
+
+        sleep(Duration::from_secs(1));
+
+        assert!(t.should_exit());
+        t.join();
+    }
+
+    #[test]
+    /// Tests the TUI log request does not crash.
+    pub fn ui_can_log() {
+        let mut t = Ui::new();
+
+        t.start(TestBackend::new(800, 600));
+        t.log("Test log!");
+
+        t.join();
+    }
+
+    #[test]
+    /// Tests the TUI position tx does not crash.
+    pub fn ui_can_send_position() {
+        let mut t = Ui::new();
+
+        t.start(TestBackend::new(800, 600));
+        t.position(Position::new());
+
+        t.join();
+    }
+
+    #[test]
+    /// Tests the TUI pause/unpause does not crash.
+    pub fn ui_can_pause_unpause() {
+        let mut t = Ui::new();
+        t.start(TestBackend::new(800, 600));
+
+        t.pause();
+        t.pause();
+
+        t.join();
+    }
+
+    #[test]
+    /// Tests the TUI rest does not crash.
+    pub fn ui_can_reset() {
+        let mut t = Ui::new();
+        t.start(TestBackend::new(800, 600));
+        t.reset();
+        t.join();
+    }
+
+    #[test]
+    /// Tests the TUI status send does not crash.
+    pub fn ui_can_send_status() {
+        let mut t = Ui::new();
+
+        t.start(TestBackend::new(800, 600));
+        t.log("Test log!");
+
+        searcher::Searcher::new()
+            .model(Arc::new(Model::Mock))
+            .maxnodes(Some(1000))
+            .maxtime(Some(1000))
+            .run(|stat| {
+                t.status(stat);
+            })
+            .expect("search failed");
+
         t.join();
     }
 }

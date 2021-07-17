@@ -71,6 +71,16 @@ impl Game {
             .collect()
     }
 
+    /// Gets the MCTS frames from this game.
+    pub fn get_mcts(&self) -> Vec<Vec<(String, f64)>> {
+        self.mcts.clone()
+    }
+
+    /// Gets the result for this game.
+    pub fn get_result(&self) -> Option<f32> {
+        self.result.clone()
+    }
+
     /// Extends a TrainBatch from a random position in this game.
     pub fn add_to_batch(&self, tb: &mut TrainBatch) {
         let mut rng = thread_rng();
