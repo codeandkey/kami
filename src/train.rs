@@ -139,7 +139,7 @@ fn generate_training_set(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>>
 
             ui.lock().unwrap().position(position.clone());
 
-            let (selected_move, mcts) = do_search(model.clone(), ui.clone(), &position, None)?;
+            let (selected_move, mcts) = do_search(model.clone(), ui.clone(), &position, None, None)?;
             assert!(position.make_move(selected_move));
             game.make_move(selected_move, mcts);
         }
@@ -301,7 +301,7 @@ fn evaluate_elo(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
                     break;
                 }
 
-                let (selected_move, mcts) = do_search(model.clone(), ui.clone(), &position, Some(usize::MAX))?;
+                let (selected_move, mcts) = do_search(model.clone(), ui.clone(), &position, Some(usize::MAX), Some(constants::MOVETIME_ELO))?;
                 assert!(position.make_move(selected_move));
                 game.make_move(selected_move, mcts);
             } else {
@@ -437,6 +437,7 @@ fn do_search(
     ui: Arc<Mutex<ui::Ui>>,
     position: &Position,
     maxnodes: Option<usize>,
+    maxtime: Option<usize>,
 ) -> Result<(ChessMove, Vec<(ChessMove, f64)>), Box<dyn Error>> {
     // Run search.
     let search_ui = ui.clone();
@@ -444,8 +445,13 @@ fn do_search(
         .model(model)
         .position(position.clone());
 
+    // Apply node/time limits
     if let Some(maxnodes) = maxnodes {
         tree = tree.maxnodes(maxnodes);
+    }
+
+    if let Some(maxtime) = maxtime {
+        tree = tree.maxtime(maxtime);
     }
 
     let tree = tree
