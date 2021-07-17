@@ -3,7 +3,6 @@ use crate::constants;
 use crate::game::Game;
 
 use dirs;
-use fs_extra;
 use std::error::Error;
 use std::fs;
 use std::path::PathBuf;
