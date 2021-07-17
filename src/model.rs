@@ -4,7 +4,7 @@ use crate::input::{batch::Batch, trainbatch::TrainBatch};
 use rand::{prelude::*, thread_rng};
 use std::error::Error;
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{Write, BufReader, BufRead};
 use std::path::Path;
 
 #[cfg(feature = "tch")]
@@ -243,7 +243,9 @@ pub fn execute(m: &Model, b: &Batch) -> Output {
 }
 
 /// Trains a model at a path.
-pub fn train(p: &Path, tb: Vec<TrainBatch>, mtype: Type) -> Result<(), Box<dyn Error>> {
+/// Returns the entire contents of stdout.
+pub fn train<F>(p: &Path, tb: Vec<TrainBatch>, mtype: Type, sout: F, loss_path: &Path) -> Result<Vec<String>, Box<dyn Error>> 
+    where F: Fn(&String) {
     match mtype {
         Type::Mock => (),
 
@@ -255,32 +257,44 @@ pub fn train(p: &Path, tb: Vec<TrainBatch>, mtype: Type) -> Result<(), Box<dyn E
             tdata.write(serde_json::to_string(&tb)?.as_bytes())?;
             tdata.flush()?;
 
-            let output = std::process::Command::new("python")
+            let mut output = std::process::Command::new("python")
                 .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
                 .args(&[
                     "scripts/train_torch.py",
                     p.join("model.pt").to_str().unwrap(),
                     tdata_path
                         .to_str()
                         .expect("failed to get str from tdata pathbuf"),
+                    loss_path
+                        .to_str()
+                        .expect("failed to get str from loss pathbuf"),
                 ])
-                .spawn()?
-                .wait_with_output()?;
+                .spawn()?;
 
-            let mut tlog = File::create(&p.join("train.stdout"))?;
-            tlog.write(&output.stdout)?;
+            let stdout_reader = BufReader::new(output.stdout.take().unwrap());
+            let mut stdout_lines = Vec::new();
 
-            let mut terr = File::create(&p.join("train.stderr"))?;
-            terr.write(&output.stderr)?;
+            for line in stdout_reader.lines() {
+                match line {
+                    Ok(line) => {
+                        sout(&line);
+                        stdout_lines.push(line);
+                    },
+                    Err(_) => break,
+                }
+            }
 
-            if !output.status.success() {
+            let output = output.wait()?;
+
+            if !output.success() {
                 return Err("Torch init script returned failure status.".into());
             }
+
+            return Ok(stdout_lines);
         }
     }
 
-    Ok(())
+    Ok(Vec::new())
 }
 
 /// Archives the current model.
@@ -351,7 +365,7 @@ mod test {
         let dst = tdir();
 
         generate(&dst, Type::Mock).expect("generate failed");
-        train(&dst, vec![TrainBatch::new(1)], Type::Mock).expect("train failed");
+        train(&dst, vec![TrainBatch::new(1)], Type::Mock, |_| (), &dst.join("loss")).expect("train failed");
     }
 
     /// Tests that the mock model type can be loaded.

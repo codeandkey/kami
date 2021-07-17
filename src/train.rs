@@ -470,6 +470,8 @@ fn advance_model(ui: Arc<Mutex<ui::Ui>>) -> Result<(), Box<dyn Error>> {
         &dir::model_dir()?,
         training_batches,
         model::get_type(&model),
+        |sout| ui.lock().unwrap().log(sout),
+        &dir::get_generation_archive()?.join("loss")
     )?;
     ui.lock().unwrap().log("Finished training model.");
 

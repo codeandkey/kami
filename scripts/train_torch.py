@@ -115,6 +115,11 @@ for i in range(EPOCHS):
 print('Finished model training!')
 print('Final average loss: {} ---> {}'.format(first_avg_loss, last_avg_loss))
 
+# Write initial and ending average loss
+with open(sys.argv[3], 'w') as f:
+    f.write(str(first_avg_loss) + '\n')
+    f.write(str(last_avg_loss) + '\n')
+
 # Write trained model back to source.
 module.save(sys.argv[1])
 print('Saved model to {}'.format(sys.argv[1]))
