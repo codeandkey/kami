@@ -88,16 +88,6 @@ impl Searcher {
         self
     }
 
-    pub fn temperature(mut self, temperature: f64) -> Self {
-        self.temperature = temperature;
-        self
-    }
-
-    pub fn batch_size(mut self, batch_size: usize) -> Self {
-        self.batch_size = batch_size;
-        self
-    }
-
     pub fn run<F, R>(self, f: F) -> Result<Tree, Box<dyn Error>>
     where
         F: Fn(Status) -> R,
@@ -254,7 +244,6 @@ mod test {
         Searcher::new()
             .maxtime(500)
             .model(mock())
-            .batch_size(4)
             .run(|_| ())
             .expect("search failed");
     }
