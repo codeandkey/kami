@@ -26,6 +26,8 @@ pub struct Status {
     pub rootfen: String,
     pub total_nodes: usize,
     pub total_batches: usize,
+    pub maxnodes: Option<usize>,
+    pub maxtime: Option<usize>,
     pub nps: f32,
     pub bps: f32,
 }
@@ -39,6 +41,8 @@ impl Status {
             rootfen: "(no position)".to_string(),
             total_nodes: 0,
             total_batches: 0,
+            maxnodes: None,
+            maxtime: None,
             nps: 0.0,
             bps: 0.0,
         }
@@ -48,10 +52,8 @@ impl Status {
 pub struct Searcher {
     workers: Arc<Mutex<Vec<Worker>>>,
     position: Position,
-    maxnodes: usize,
-    maxtime: usize,
-    batch_size: usize,
-    temperature: f64,
+    maxnodes: Option<usize>,
+    maxtime: Option<usize>,
     model: Option<Arc<Model>>,
 }
 
@@ -61,8 +63,8 @@ impl Searcher {
             workers: Arc::new(Mutex::new(Vec::new())),
             model: None,
             position: Position::new(),
-            maxnodes: constants::SEARCH_MAXNODES,
-            maxtime: constants::SEARCH_TIME,
+            maxnodes: Some(constants::SEARCH_MAXNODES),
+            maxtime: None,
         }
     }
 
@@ -76,12 +78,12 @@ impl Searcher {
         self
     }
 
-    pub fn maxnodes(mut self, maxnodes: usize) -> Self {
+    pub fn maxnodes(mut self, maxnodes: Option<usize>) -> Self {
         self.maxnodes = maxnodes;
         self
     }
 
-    pub fn maxtime(mut self, maxtime: usize) -> Self {
+    pub fn maxtime(mut self, maxtime: Option<usize>) -> Self {
         self.maxtime = maxtime;
         self
     }
@@ -159,17 +161,23 @@ impl Searcher {
                         workers: worker_status,
                         total_nodes: total_nodes,
                         total_batches: total_batches,
+                        maxnodes: thr_maxnodes,
+                        maxtime: thr_maxtime,
                         nps: (total_nodes as f32 / (elapsed + 1) as f32) * 1000.0,
                         bps: (total_batches as f32 / (elapsed + 1) as f32) * 1000.0,
                     }))
                     .expect("search status tx failed");
 
-                if elapsed >= thr_maxtime as u64 {
-                    break;
+                if let Some(maxtime) = thr_maxtime {
+                    if elapsed >= maxtime as u64 {
+                        break;
+                    }
                 }
-
-                if total_nodes >= thr_maxnodes {
-                    break;
+                
+                if let Some(maxnodes) = thr_maxnodes {
+                    if total_nodes >= maxnodes {
+                        break;
+                    }
                 }
             }
 
@@ -238,7 +246,7 @@ mod test {
     #[test]
     fn search_can_run_short() {
         Searcher::new()
-            .maxtime(500)
+            .maxtime(Some(500))
             .model(mock())
             .run(|_| ())
             .expect("search failed");
@@ -257,7 +265,7 @@ mod test {
         let tree = Searcher::new()
             .position(pos)
             .model(mock())
-            .maxtime(10000)
+            .maxnodes(Some(10000))
             .run(|_| ())
             .expect("search failed");
 
@@ -273,7 +281,7 @@ mod test {
     #[test]
     fn search_status_can_serialize() {
         Searcher::new()
-            .maxtime(1000)
+            .maxnodes(Some(50))
             .model(mock())
             .run(|stat| serde_json::to_string_pretty(&stat).expect("serialize failed"))
             .expect("search failed");
