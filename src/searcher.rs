@@ -63,8 +63,6 @@ impl Searcher {
             position: Position::new(),
             maxnodes: constants::SEARCH_MAXNODES,
             maxtime: constants::SEARCH_TIME,
-            batch_size: constants::SEARCH_BATCH_SIZE,
-            temperature: constants::TEMPERATURE,
         }
     }
 
@@ -96,8 +94,6 @@ impl Searcher {
         let thr_workers = self.workers.clone();
         let thr_rootfen = self.position.get_fen();
         let thr_position = self.position.clone();
-        let thr_temperature = self.temperature.clone();
-        let thr_batch_size = self.batch_size.clone();
         let thr_maxtime = self.maxtime.clone();
         let thr_maxnodes = self.maxnodes.clone();
 
@@ -105,7 +101,7 @@ impl Searcher {
 
         let handle = spawn(move || {
             let (thr_tree_tx, thr_tree_handle) =
-                Tree::new(thr_position, thr_temperature, thr_batch_size).run();
+                Tree::new(thr_position, constants::TEMPERATURE, constants::SEARCH_BATCH_SIZE).run();
 
             for _ in 0..num_cpus::get() {
                 let mut new_worker = Worker::new(thr_tree_tx.clone(), thr_model.clone());
