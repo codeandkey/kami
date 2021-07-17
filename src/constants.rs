@@ -3,12 +3,12 @@ use crate::model;
 
 pub const TRAINING_SET_SIZE: usize = 4; // number of games played per generation
 pub const SEARCH_TIME: usize = 10000; // milliseconds per move (if node target not reached)
-pub const SEARCH_MAXNODES: usize = 8000; // maximum nodes searched per move
+pub const SEARCH_MAXNODES: usize = 4000; // maximum nodes searched per move
 pub const SEARCH_STATUS_RATE: u64 = 100; // milliseconds between search status reports
 pub const TEMPERATURE: f64 = 1.0; // MCTS initial temperature
 pub const SEARCH_BATCH_SIZE: usize = 16; // number of nodes to expand at once on a single thread
-pub const TRAINING_BATCH_SIZE: usize = 32; // numb of decisions in each training batch
-pub const TRAINING_BATCH_COUNT: usize = 32; // number of training batches
+pub const TRAINING_BATCH_SIZE: usize = 16; // numb of decisions in each training batch
+pub const TRAINING_BATCH_COUNT: usize = 16; // number of training batches
 pub const TUI_FRAME_RATE: u64 = 15; // TUI framerate (frames/second)
 pub const MOVETIME_ELO: usize = 2000; // MS per move during ELO evaluation
 pub const ELO_EVALUATION_NUM_GAMES: usize = 6;
