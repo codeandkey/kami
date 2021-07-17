@@ -69,7 +69,7 @@ pub fn new_generation() -> Result<(), Box<dyn Error>> {
 
     assert!(p.exists(), "No previous generation");
 
-    fs::write(&p, get_generation()?.to_string())?;
+    fs::write(&p, (get_generation()? + 1).to_string())?;
 
     Ok(())
 }
