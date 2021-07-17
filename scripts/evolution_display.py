@@ -100,22 +100,22 @@ def render_plots():
     ply_mean.set(ylim=(0, 400))
     ply_mean.grid()
 
-    elo.plot(elo_x, elo_y, '.-')
+    elo.plot(elo_x, elo_y, 'b.-')
     elo.set_xlabel('Generation #')
     elo.set_ylabel('Estimated ELO rating')
     elo.set(ylim=(-20, max(elo_y) + 200), xlim=(0, len(ply_x) - 1))
     elo.grid()
 
-    loss_diff.plot(d_loss_x, d_loss_diff, '.-')
+    loss_diff.plot(d_loss_x, d_loss_diff, 'g.-')
     loss_diff.set_xlabel('Generation #')
     loss_diff.set_ylabel('Loss decrease')
-    loss_diff.set(ylim=(0, max(d_loss_diff) * 1.25), xlim=(0, len(ply_x) - 1))
+    loss_diff.set(ylim=(0, max(d_loss_diff) * 1.25), xlim=(0, len(d_loss_x) - 1))
     loss_diff.grid()
 
-    loss_after.plot(d_loss_x, d_loss_after, '.-')
+    loss_after.plot(d_loss_x, d_loss_after, 'r.-')
     loss_after.set_xlabel('Generation #')
     loss_after.set_ylabel('Actual loss, post-train')
-    loss_after.set(ylim=(0, max(d_loss_after) * 1.25), xlim=(0, len(ply_x) - 1))
+    loss_after.set(ylim=(0, max(d_loss_after) * 1.25), xlim=(0, len(d_loss_x) - 1))
     loss_after.grid()
 
     plt.show()
