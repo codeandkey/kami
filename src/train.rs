@@ -102,7 +102,7 @@ pub fn train() -> Result<(), Box<dyn Error>> {
 /// Generates a training set. Returns true if the training set is complete, or false if the user requested an exit.
 /// Returns Err() if something fails.
 fn generate_training_set(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
-    ui.lock().unwrap().log("Generating training set.");
+    ui.lock().unwrap().log(format!("Generating training set for generation {}.", dir::get_generation()?));
 
     // Load the current model.
     let model = Arc::new(model::load(&dir::model_dir()?, true)?);
@@ -400,13 +400,24 @@ fn evaluate_elo(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
     }
 
     // Compute ELO
-    let score: f32 = results.iter().sum();
-    let elo = (constants::STOCKFISH_ELO.iter().sum::<usize>() as f32 + 400.0 * score)
-        / constants::ELO_EVALUATION_NUM_GAMES as f32;
+    let mut elo = constants::ELO_EVALUATION_INITIAL;
+
+    for (score, opp) in results.iter().zip(constants::STOCKFISH_ELO) {
+        let r1 = 10f32.powf(elo as f32 / 400.0);
+        let r2 = 10f32.powf(opp as f32 / 400.0);
+
+        let expected = r1 / (r1 + r2);
+        let s = (score + 1.0) / 2.0;
+
+        let last_elo = elo;
+        elo += (constants::ELO_EVALUATION_K * (s - expected)) as i32;
+
+        ui.lock().unwrap().log(format!("{}: result {}, ELO {} -> {}", opp, score, last_elo, elo));
+    }
 
     ui.lock()
         .unwrap()
-        .log(format!("Finished ELO evaluation. Total score: {}", score));
+        .log("Finished ELO evaluation.");
     ui.lock().unwrap().log(format!(
         "ELO estimate for generation {}: {}",
         dir::get_generation()?,
