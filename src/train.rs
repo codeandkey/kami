@@ -441,20 +441,11 @@ fn do_search(
 ) -> Result<(ChessMove, Vec<(ChessMove, f64)>), Box<dyn Error>> {
     // Run search.
     let search_ui = ui.clone();
-    let mut tree = Searcher::new()
+    let tree = Searcher::new()
         .model(model)
-        .position(position.clone());
-
-    // Apply node/time limits
-    if let Some(maxnodes) = maxnodes {
-        tree = tree.maxnodes(maxnodes);
-    }
-
-    if let Some(maxtime) = maxtime {
-        tree = tree.maxtime(maxtime);
-    }
-
-    let tree = tree
+        .position(position.clone())
+        .maxnodes(maxnodes)
+        .maxtime(maxtime)
         .run(move |status| {
             search_ui.lock().unwrap().status(status);
         })?;
