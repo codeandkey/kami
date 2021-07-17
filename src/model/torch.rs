@@ -147,7 +147,7 @@ pub fn train<F>(p: &Path, tb: Vec<TrainBatch>, sout: F, loss_path: &Path) -> Res
                 sout(&line);
                 stdout_lines.push(line);
             },
-            Err(_) => break,
+            Err(e) => sout(format!("sout err: {}", e)),
         }
     }
 
