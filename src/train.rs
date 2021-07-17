@@ -115,12 +115,12 @@ fn generate_training_set(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>>
         let mut game = if next_game.exists() {
             ui.lock()
                 .unwrap()
-                .log(format!("Resuming game {}", next_game.display()));
+                .log(format!("Resuming self-play game {}.", next_game.file_name().unwrap().to_str().unwrap()));
             Game::load(&next_game)?
         } else {
             ui.lock()
                 .unwrap()
-                .log(format!("Generating game {}", next_game.display()));
+                .log(format!("Generating self-play game {}.", next_game.file_name().unwrap().to_str().unwrap()));
             Game::new()
         };
 
@@ -164,10 +164,6 @@ fn generate_training_set(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>>
 
         // Write game to disk.
         game.save(&next_game)?;
-
-        ui.lock()
-            .unwrap()
-            .log(format!("Wrote game to {}", next_game.display()));
 
         // If user wants to quit, stop here.
         if ui.lock().unwrap().should_exit() {
