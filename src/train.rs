@@ -21,7 +21,7 @@ use std::process::{Command, Stdio};
 
 use std::error::Error;
 use std::fs;
-use std::io::{stdout, BufRead, BufReader, Read, Write};
+use std::io::{stdout, BufRead, BufReader, Write};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::thread::spawn;
