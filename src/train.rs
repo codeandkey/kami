@@ -139,7 +139,7 @@ fn generate_training_set(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>>
 
             ui.lock().unwrap().position(position.clone());
 
-            let (selected_move, mcts) = do_search(model.clone(), ui.clone(), &position, None, None)?;
+            let (selected_move, mcts) = do_search(model.clone(), ui.clone(), &position, Some(constants::SEARCH_MAXNODES), None)?;
             assert!(position.make_move(selected_move));
             game.make_move(selected_move, mcts);
         }
