@@ -68,14 +68,8 @@ pub fn train() -> Result<(), Box<dyn Error>> {
     });
 
     // Start training loop.
-    for generation in dir::current_generation()?..usize::MAX {
-        // Generate training set.
-        if !generate_training_set(ui.clone())? {
-            break;
-        }
-
-        // Archive and train model.
-        advance_model(ui.clone())?;
+    for generation in dir::get_generation()?..usize::MAX {
+        ui.lock().unwrap().log(format!("Resuming generation {}", generation));
 
         // Perform ELO evaluation if ready.
         if generation % constants::ELO_EVALUATION_INTERVAL == 0 {
@@ -83,6 +77,14 @@ pub fn train() -> Result<(), Box<dyn Error>> {
                 break;
             }
         }
+
+        // Generate training set.
+        if !generate_training_set(ui.clone())? {
+            break;
+        }
+
+        // Archive and train model.
+        advance_model(ui.clone())?;
     }
 
     // Stop input thread.
@@ -184,7 +186,7 @@ fn generate_training_set(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>>
 fn evaluate_elo(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
     ui.lock().unwrap().log(format!(
         "Starting ELO evaluation on generation {}",
-        dir::current_generation()?
+        dir::get_generation()?
     ));
 
     // Load the current model.
@@ -269,14 +271,14 @@ fn evaluate_elo(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
         if kami_move ^ (position.side_to_move() == Color::Black) {
             ui.lock().unwrap().log(format!(
                 "Kami generation {} VS. Stockfish [{}]",
-                dir::current_generation()?,
+                dir::get_generation()?,
                 sf_elo
             ));
         } else {
             ui.lock().unwrap().log(format!(
                 "Stockfish [{}] VS. Kami generation {}",
                 sf_elo,
-                dir::current_generation()?
+                dir::get_generation()?
             ));
         }
 
@@ -407,7 +409,7 @@ fn evaluate_elo(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
         .log(format!("Finished ELO evaluation. Total score: {}", score));
     ui.lock().unwrap().log(format!(
         "ELO estimate for generation {}: {}",
-        dir::current_generation()?,
+        dir::get_generation()?,
         elo
     ));
 
@@ -450,12 +452,6 @@ fn advance_model(ui: Arc<Mutex<ui::Ui>>) -> Result<(), Box<dyn Error>> {
         .map(|_| TrainBatch::generate(&dir::games_dir()?))
         .collect::<Result<Vec<TrainBatch>, _>>()?;
 
-    // Archive current generation.
-    ui.lock().unwrap().log("Archiving model.");
-    ui.lock()
-        .unwrap()
-        .log(format!("Archived as generation {}.", dir::archive()?));
-
     // Train the model in place.
     ui.lock().unwrap().log("Training model.");
     let model = model::load(&dir::model_dir()?, true)?;
@@ -465,6 +461,10 @@ fn advance_model(ui: Arc<Mutex<ui::Ui>>) -> Result<(), Box<dyn Error>> {
         model::get_type(&model),
     )?;
     ui.lock().unwrap().log("Finished training model.");
+
+    // Advance generation number.
+    dir::new_generation()?;
+    ui.lock().unwrap().log("Incremented generation.");
 
     return Ok(());
 }

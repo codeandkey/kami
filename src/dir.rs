@@ -44,51 +44,43 @@ pub fn model_dir() -> Result<PathBuf, Box<dyn Error>> {
     return Ok(out);
 }
 
-/// Returns the path to the games directory.
+/// Returns the path to the current games directory.
 pub fn games_dir() -> Result<PathBuf, Box<dyn Error>> {
-    let out = data_dir()?.join("games");
-    fs::create_dir_all(&out)?;
+    let out = get_generation_archive()?.join("games");
 
+    fs::create_dir_all(&out)?;
     Ok(out)
 }
 
-/// Returns the current model generation number.
-pub fn current_generation() -> Result<usize, Box<dyn Error>> {
-    let mut current = 0;
-    let archive_path = archive_dir()?;
+/// Returns the current generation (regardless of completeness).
+pub fn get_generation() -> Result<usize, Box<dyn Error>> {
+    let p = data_dir()?.join("generation");
 
-    loop {
-        let genpath = archive_path.join(format!("generation_{}", current));
-
-        if genpath.exists() {
-            if genpath.is_dir() {
-                current += 1;
-                continue;
-            }
-
-            return Err(format!(
-                "Generation path {} exists but is not a directory!",
-                genpath.display()
-            )
-            .into());
-        } else {
-            break;
-        }
+    if p.exists() {
+        Ok(fs::read_to_string(&p)?.parse::<usize>()?)
+    } else {
+        fs::write(&p, b"0")?;
+        Ok(0)
     }
-
-    return Ok(current);
 }
 
-/// Archives the current model and games. Returns the archived generation number.
-pub fn archive() -> Result<usize, Box<dyn Error>> {
-    let current = current_generation()?;
+/// Increments the generation number.
+pub fn new_generation() -> Result<(), Box<dyn Error>> {
+    let p = data_dir()?.join("generation");
 
-    let dest = archive_dir()?.join(format!("generation_{}", current));
-    fs::create_dir_all(&dest)?;
+    assert!(p.exists(), "No previous generation");
 
-    fs_extra::move_items(&[&games_dir()?], dest, &fs_extra::dir::CopyOptions::new())?;
+    fs::write(&p, get_generation()?.to_string())?;
 
-    Ok(current)
+    Ok(())
+}
+
+/// Gets the path to the current generation archive dir.
+pub fn get_generation_archive() -> Result<PathBuf, Box<dyn Error>> {
+    let p = archive_dir()?.join(format!("generation_{}", get_generation()?));
+
+    fs::create_dir_all(&p)?;
+    Ok(p)
 }
 
 /// Gets the path for the next game to be generated (or resumed), otherwise returns None
