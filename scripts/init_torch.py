@@ -11,8 +11,8 @@ FRAME_COUNT=6
 FRAME_SIZE=14
 HEADER_SIZE=18
 
-RESIDUAL_CONV_FILTERS=0
-RESIDUAL_LAYERS=1
+RESIDUAL_CONV_FILTERS=128
+RESIDUAL_LAYERS=6
 CHANNELS = 14 * FRAME_COUNT + HEADER_SIZE
 
 class KamiResidual(nn.Module):
@@ -22,12 +22,11 @@ class KamiResidual(nn.Module):
         self.conv1 = []
         self.conv2 = []
 
-        for _ in range(RESIDUAL_CONV_FILTERS):
-            self.conv1.append(nn.Conv2d(CHANNELS, CHANNELS, (3, 3), padding=(1, 1)))
-            self.conv2.append(nn.Conv2d(CHANNELS, CHANNELS, (3, 3), padding=(1, 1)))
+        self.conv1 = nn.Conv2d(RESIDUAL_CONV_FILTERS, RESIDUAL_CONV_FILTERS, (3, 3), padding=(1, 1))
+        self.conv2 = nn.Conv2d(RESIDUAL_CONV_FILTERS, RESIDUAL_CONV_FILTERS, (3, 3), padding=(1, 1))
 
-        self.bn1 = nn.BatchNorm2d(CHANNELS)
-        self.bn2 = nn.BatchNorm2d(CHANNELS)
+        self.bn1 = nn.BatchNorm2d(RESIDUAL_CONV_FILTERS)
+        self.bn2 = nn.BatchNorm2d(RESIDUAL_CONV_FILTERS)
 
         self.relu1 = nn.ReLU()
         self.relu2 = nn.ReLU()
@@ -35,9 +34,8 @@ class KamiResidual(nn.Module):
     def forward(self, x):
         skip = x
 
-        # N convolutional filters
-        for conv in self.conv1:
-            x = conv(x)
+        # First convolution
+        x = self.conv1(x)
 
         # Batch norm
         x = self.bn1(x)
@@ -45,9 +43,8 @@ class KamiResidual(nn.Module):
         # ReLU activation
         x = self.relu1(x)
 
-        # N convolutional filters
-        for conv in self.conv2:
-            x = conv(x)
+        # Second convolution
+        x = self.conv2(x)
 
         # Batch norm
         x = self.bn2(x)
@@ -65,8 +62,8 @@ class KamiNet(nn.Module):
         super(KamiNet, self).__init__()
 
         # Pre-residual convolution
-        self.pr_conv = nn.Conv2d(CHANNELS, CHANNELS, (3, 3), padding=(1, 1))
-        self.pr_bn = nn.BatchNorm2d(CHANNELS)
+        self.pr_conv = nn.Conv2d(CHANNELS, RESIDUAL_CONV_FILTERS, (3, 3), padding=(1, 1))
+        self.pr_bn = nn.BatchNorm2d(RESIDUAL_CONV_FILTERS)
         self.pr_relu = nn.ReLU()
 
         # Residual layers
@@ -76,21 +73,21 @@ class KamiNet(nn.Module):
             self.add_module('residual{}'.format(i), KamiResidual())
 
         # Policy head layers
-        self.ph_conv1 = nn.Conv2d(CHANNELS, CHANNELS, (1, 1))
-        self.ph_conv2 = nn.Conv2d(CHANNELS, CHANNELS, (1, 1))
-        self.ph_bn = nn.BatchNorm2d(CHANNELS)
+        self.ph_conv1 = nn.Conv2d(RESIDUAL_CONV_FILTERS, RESIDUAL_CONV_FILTERS, (1, 1))
+        self.ph_conv2 = nn.Conv2d(RESIDUAL_CONV_FILTERS, RESIDUAL_CONV_FILTERS, (1, 1))
+        self.ph_bn = nn.BatchNorm2d(RESIDUAL_CONV_FILTERS)
         self.ph_relu = nn.ReLU()
         self.ph_flat = nn.Flatten()
-        self.ph_fc = nn.Linear(8 * 8 * CHANNELS, 4096)
+        self.ph_fc = nn.Linear(8 * 8 * RESIDUAL_CONV_FILTERS, 4096)
         self.ph_out = nn.Softmax(-1)
 
         # Value head layers
-        self.vh_conv = nn.Conv2d(CHANNELS, CHANNELS, (1, 1))
-        self.vh_bn = nn.BatchNorm2d(CHANNELS)
+        self.vh_conv = nn.Conv2d(RESIDUAL_CONV_FILTERS, RESIDUAL_CONV_FILTERS, (1, 1))
+        self.vh_bn = nn.BatchNorm2d(RESIDUAL_CONV_FILTERS)
         self.vh_relu1 = nn.ReLU()
         self.vh_flat = nn.Flatten()
 
-        self.vh_fc1 = nn.Linear(8 * 8 * CHANNELS, 256)
+        self.vh_fc1 = nn.Linear(8 * 8 * RESIDUAL_CONV_FILTERS, 256)
         self.vh_relu2 = nn.ReLU()
         self.vh_fc2 = nn.Linear(256, 256)
         self.vh_fc3 = nn.Linear(256, 1)
