@@ -120,9 +120,6 @@ def render_plots():
 
     plt.show()
 
-UPDATE_INTERVAL = 60 # display update interval, in seconds
-
 # Start rendering data.
 while True:
     render_plots()
-    time.sleep(UPDATE_INTERVAL)
