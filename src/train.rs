@@ -149,7 +149,7 @@ fn generate_training_set(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>>
             game.finalize(result);
 
             ui.lock().unwrap().log(format!(
-                "Game over, {}",
+                "Game over, {} in {} ply",
                 if result > 0.0 {
                     "1-0"
                 } else {
@@ -158,7 +158,8 @@ fn generate_training_set(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>>
                     } else {
                         "1/2-1/2"
                     }
-                }
+                },
+                game.get_actions().len()
             ));
         }
 
@@ -348,7 +349,7 @@ fn evaluate_elo(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
             game.finalize(result);
 
             ui.lock().unwrap().log(format!(
-                "Game over, {} ({})",
+                "Game over, {} ({}) in {} ply",
                 if result > 0.0 {
                     "1-0"
                 } else {
@@ -366,7 +367,8 @@ fn evaluate_elo(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
                     }
                 } else {
                     "draw"
-                }
+                },
+                game.get_actions().len()
             ));
         }
 
