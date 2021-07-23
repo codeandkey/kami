@@ -1,5 +1,6 @@
 # Displays live updates on network statistics.
 
+#from scripts.train_torch import loss
 import appdirs
 import json
 import matplotlib.pyplot as plt
@@ -44,21 +45,22 @@ def games(gen):
         current_game += 1
 
 # Walks through generations and returns data for display.
-# Returns (mean game ply / generation), elo_y, elo_x, data_loss_difference, data_loss_after_training
+# Returns (mean game ply / generation), elo_y, elo_x, data_loss_difference, data_loss_before_training, data_loss_after_training
 def generate_datasets():
-    data_mean = []
-    data_loss_diff = []
-    data_loss_after = []
-    data_loss_x = []
+    p_loss_diff = []
+    p_loss_pre = []
+    p_loss_post = []
+    v_loss_diff = []
+    v_loss_pre = []
+    v_loss_post = []
+    loss_x = []
     elo_x = []
     elo_y = []
 
     for gen, genpath in enumerate(generations()):
-        total = 0
         n = 0
 
         for game in games(genpath):
-            total += len(game['actions'])
             n += 1
         
         if n == 0:
@@ -71,52 +73,59 @@ def generate_datasets():
             with open(elo_path) as f:
                 elo_y.append(int(f.read()))
 
-        data_mean.append(total / n)
-
         loss_path = path.join(genpath, 'loss')
 
         if path.exists(loss_path):
             with open(path.join(genpath, 'loss')) as f:
                 parts = f.read().split(' ')
                 
-                data_loss_diff.append(float(parts[0]) - float(parts[1]))
-                data_loss_after.append(float(parts[1]))
-                data_loss_x.append(gen)
+                p_loss_diff.append(float(parts[0]) - float(parts[1]))
+                v_loss_diff.append(float(parts[2]) - float(parts[3]))
+                p_loss_pre.append(float(parts[0]))
+                v_loss_pre.append(float(parts[2]))
+                p_loss_post.append(float(parts[1]))
+                v_loss_post.append(float(parts[3]))
+                loss_x.append(gen)
 
-    return data_mean, elo_x, elo_y, data_loss_diff, data_loss_after, data_loss_x
+    return elo_x, elo_y, p_loss_pre, p_loss_post, p_loss_diff, v_loss_pre, v_loss_post, v_loss_diff, loss_x
 
 # Collects data and renders it on the screen.
 def render_plots():
-    fig, ((elo, ply_mean), (loss_diff, loss_after)) = plt.subplots(2, 2)
-    fig.suptitle('Kami model evolution statistics')
+    fig, ((elo, v_loss), (loss_diff, p_loss)) = plt.subplots(2, 2)
+    fig.suptitle('Kami evolution')
 
     # Render average game ply
-    ply_mean_y, elo_x, elo_y, d_loss_diff, d_loss_after, d_loss_x = generate_datasets()
-    ply_x = list(range(len(ply_mean_y)))
-
-    ply_mean.plot(ply_x, ply_mean_y, '.-')
-    ply_mean.set_xlabel('Generation #')
-    ply_mean.set_ylabel('Average game ply')
-    ply_mean.set(ylim=(0, 400))
-    ply_mean.grid()
+    elo_x, elo_y, p_loss_pre, p_loss_post, p_loss_diff, v_loss_pre, v_loss_post, v_loss_diff, loss_x = generate_datasets()
 
     elo.plot(elo_x, elo_y, 'b.-')
     elo.set_xlabel('Generation #')
-    elo.set_ylabel('Estimated ELO rating')
-    elo.set(ylim=(-20, max(elo_y) + 200), xlim=(0, len(ply_x) - 1))
+    elo.set_ylabel('ELO projection')
+    elo.set(ylim=(-20, max(elo_y) + 200), xlim=(0, max(elo_x)))
     elo.grid()
 
-    loss_diff.plot(d_loss_x, d_loss_diff, 'g.-')
+    loss_diff.plot(loss_x, p_loss_diff, 'b.-', label='policy')
+    loss_diff.plot(loss_x, v_loss_diff, 'r.-', label='value')
     loss_diff.set_xlabel('Generation #')
-    loss_diff.set_ylabel('Loss decrease')
-    loss_diff.set(ylim=(0, max(d_loss_diff) * 1.25), xlim=(0, len(d_loss_x) - 1))
+    loss_diff.set_ylabel('Loss Δ')
+    loss_diff.set(ylim=(0, max(max(p_loss_diff), max(v_loss_diff)) * 1.25), xlim=(0, len(loss_x) - 1))
     loss_diff.grid()
+    loss_diff.legend()
 
-    loss_after.plot(d_loss_x, d_loss_after, 'r.-')
-    loss_after.set_xlabel('Generation #')
-    loss_after.set_ylabel('Actual loss, post-train')
-    loss_after.set(ylim=(0, max(d_loss_after) * 1.25), xlim=(0, len(d_loss_x) - 1))
-    loss_after.grid()
+    v_loss.plot(loss_x, v_loss_pre, 'r.-', label='value (pre)')
+    v_loss.plot(loss_x, v_loss_post, 'y.-', label='value (post)')
+    v_loss.set_xlabel('Generation #')
+    v_loss.set_ylabel('Loss')
+    v_loss.set(ylim=(0, max(max(v_loss_pre), max(v_loss_post)) * 1.25), xlim=(0, len(loss_x) - 1))
+    v_loss.grid()
+    v_loss.legend()
+
+    p_loss.plot(loss_x, p_loss_pre, 'c.-', label='policy (pre)')
+    p_loss.plot(loss_x, p_loss_post, 'b.-', label='policy (post)')
+    p_loss.set_xlabel('Generation #')
+    p_loss.set_ylabel('Loss')
+    p_loss.set(ylim=(min(min(p_loss_pre), min(p_loss_post)) * 0.75, max(max(p_loss_pre), max(p_loss_post)) * 1.25), xlim=(0, len(loss_x) - 1))
+    p_loss.grid()
+    p_loss.legend()
 
     plt.show()
 
