@@ -228,9 +228,6 @@ fn evaluate_elo(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
     let mut rng = thread_rng();
     let mut kami_move = rng.next_u32() % 2 == 0;
 
-    // Enable stockfish strength tuning
-    sf_stdin.write(b"setoption UCI_LimitStrength value true\n")?;
-
     // Start playing games.
     while let Some((next_game, game_id)) = dir::next_elo_game()? {
         // Set initial position
@@ -261,20 +258,20 @@ fn evaluate_elo(ui: Arc<Mutex<ui::Ui>>) -> Result<bool, Box<dyn Error>> {
         }
 
         // Set stockfish ELO rating
-        let sf_elo = constants::STOCKFISH_ELO[game_id];
+        let sf_skill = constants::STOCKFISH_SKILL_LEVEL[game_id];
 
-        sf_stdin.write(format!("setoption UCI_Elo value {}\n", sf_elo).as_bytes())?;
+        sf_stdin.write(format!("setoption Skill Level value {}\n", sf_skill).as_bytes())?;
 
         if kami_move ^ (position.side_to_move() == Color::Black) {
             ui.lock().unwrap().log(format!(
                 "Kami generation {} VS. Stockfish [{}]",
                 dir::get_generation()?,
-                sf_elo
+                sf_skill
             ));
         } else {
             ui.lock().unwrap().log(format!(
                 "Stockfish [{}] VS. Kami generation {}",
-                sf_elo,
+                sf_skill,
                 dir::get_generation()?
             ));
         }

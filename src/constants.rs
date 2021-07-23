@@ -12,7 +12,9 @@ pub const TUI_FRAME_RATE: u64 = 15; // TUI framerate (frames/second)
 pub const MOVETIME_ELO: usize = 2000; // MS per move during ELO evaluation
 pub const ELO_EVALUATION_NUM_GAMES: usize = 6;
 pub const STOCKFISH_ELO: [i32; ELO_EVALUATION_NUM_GAMES] =
-    [200, 600, 1000, 1400, 1800, 2200]; // stockfish elo settings for ELO evaluation
+    [1100, 1165, 1360, 1620, 1880, 2400]; // stockfish elo equivalents for ELO calculation
+pub const STOCKFISH_SKILL_LEVEL: [i32; ELO_EVALUATION_NUM_GAMES] =
+    [0, 1, 4, 8, 12, 20]; // stockfish skill level setting for UCI play (calibrated from )
 pub const ELO_EVALUATION_INTERVAL: usize = 25; // Perform ELO evaluation every n generations
 pub const ELO_EVALUATION_INITIAL: i32 = 0; // Initial ELO to assume in evaluation
 pub const ELO_EVALUATION_K: f32 = 75.0; // ELO k factor, keep high for more fluid estimates
