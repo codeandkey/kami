@@ -19,7 +19,7 @@ def test_kaminet_board_input():
 
     board_input = KamiNet.transform_input(input_headers, input_frames, True)
     
-    assert str(board_input.shape) == '(1, %s, 8, 8)' % str(consts.HEADER_SIZE + consts.FRAME_COUNT * consts.FRAME_SIZE)
+    assert board_input.shape == (1, consts.HEADER_SIZE + consts.FRAME_COUNT * consts.FRAME_SIZE, 8, 8)
 
     for r in range(8):
         for f in range(8):
