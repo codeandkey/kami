@@ -22,3 +22,4 @@ PUCT_NOISE_WEIGHT  = 0.25  # PUCT noise component weight
 PUCT_POLICY_WEIGHT = 4.0   # PUCT policy component weight (prior + noise)
 PUCT_NOISE_ALPHA   = 0.285 # PUCT dirichlet noise alpha
 TREE_TEMPERATURE   = 1.0   # Move selection temperature
+BATCH_SIZE         = 16

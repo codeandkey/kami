@@ -1,5 +1,6 @@
 # Kami model type.
 
+from batch import Batch, BatchResult
 import consts
 
 import math
@@ -8,9 +9,14 @@ import torch.nn as nn
 
 def transform_input(headers, frames, data=False):
     """Transforms headers and frames into the final board input.
-        Expects headers in NC format and frames in NWHC format."""
+        Expects headers in NC format and frames in NFWHC format."""
 
-    # Reorder frame axes to NCHW for convolution
+    # Combine axes 1 (frameid) and 4 (framedata)
+
+    frames = torch.swapaxes(frames, 1, 3)
+    frames = torch.reshape(frames, (-1, 8, 8, consts.FRAME_COUNT * consts.FRAME_SIZE))
+
+    # Reorder frame axes to NCWH for convolution
     frames = frames.permute(0, 3, 1, 2)
 
     # Expand headers, append to each frame
@@ -186,11 +192,11 @@ class KamiNet(nn.Module):
         return ph, vh
 
 class Model:
-    def __init__(self, path: str = None):
+    def __init__(self, path: str = None, allow_cuda=True):
         """Initializes a new model. Loads a model from `path` if it is provided,
            or generates a new model in place."""
 
-        self.cuda = torch.cuda.is_available()
+        self.cuda = torch.cuda.is_available() and allow_cuda
 
         if path:
             self.model = torch.jit.load(path)
@@ -305,10 +311,10 @@ class Model:
 
         return first_avg_loss, last_avg_loss
 
-    def execute(self, input_data) -> (list, list):
+    def execute_direct(self, inputs) -> (list, list):
         """Executes an input batch and returns the value and policy results."""
 
-        (headers, frames, lmm) = input_data
+        headers, frames, lmm = inputs
         
         headers = self.to_tensor(headers)
         frames = self.to_tensor(frames)
@@ -318,3 +324,8 @@ class Model:
             policy, value = self.model(headers, frames, lmm)
 
             return policy.cpu().numpy(), value.cpu().numpy()
+
+    def execute(self, batch: Batch) -> BatchResult:
+        """Executes an input batch structure."""
+        return batch.make_result(*self.execute_direct(batch.get_inputs()))
+        
