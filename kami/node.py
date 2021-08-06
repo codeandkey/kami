@@ -6,7 +6,7 @@ import numpy as np
 class Node:
     """Manages a single MCTS tree node."""
 
-    def __init__(self, parent=None, action=None, p=0.0):
+    def __init__(self, turn=None, parent=None, action=None, p=0.0):
         """Initializes a new node with no children."""
 
         self.n        = 0
@@ -19,6 +19,7 @@ class Node:
         self.claimed  = False
         self.expanded = False
         self.action   = action
+        self.turn     = turn
         self.maxdepth = 0
 
     def puct(self, noise):
@@ -33,15 +34,17 @@ class Node:
         return out
     
     def expand(self, actions, p, v, depth):
+        """Expands a node."""
         def next_child(pair):
             (action, p) = pair
-            return Node(self, action, p)
+            return Node(not self.turn, self, action, p)
 
         self.claimed = False
         self.children = list(map(next_child, zip(actions, p)))
         self.backprop(v, 0, depth)
 
     def backprop(self, v, terminal=0, depth=0):
+        """Backpropagates a value through connected parent nodes."""
         self.n  += 1
         self.tn += terminal
         self.w  += v

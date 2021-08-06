@@ -14,7 +14,7 @@ class Tree():
     def __init__(self, pos=Position()):
         """Initializes a new tree with a single root node."""
 
-        self.root    = Node()
+        self.root    = Node(pos.board.turn)
         self.pos     = pos
         self.nodemap = {}
 
@@ -88,9 +88,26 @@ class Tree():
         for i in range(result.get_size()):
             target = self.nodemap[result.get_node(i)]
 
+            actions = result.get_actions(i)
+            policy = result.get_policy(i)
+
+            def get_policy_value(action):
+                mv = chess.Move.from_uci(action)
+
+                src = mv.from_square
+                dst = mv.to_square
+
+                if target.turn == chess.BLACK:
+                    src = 63 - src
+                    dst = 63 - dst
+                
+                return policy[src * 64 + dst]
+
+            actual_policy = list(map(get_policy_value, actions))
+
             target.expand(
-                result.get_actions(i),
-                result.get_policy(i),
+                actions,
+                actual_policy,
                 result.get_value(i),
                 result.get_depth(i)
             )
