@@ -6,6 +6,24 @@ import math
 import torch
 import torch.nn as nn
 
+def transform_input(headers, frames, data=False):
+    """Transforms headers and frames into the final board input.
+        Expects headers in NC format and frames in NWHC format."""
+
+    # Reorder frame axes to NCHW for convolution
+    frames = frames.permute(0, 3, 1, 2)
+
+    # Expand headers, append to each frame
+    headers = headers.unsqueeze(2)
+    headers = headers.unsqueeze(3)
+    headers = headers.expand(-1, -1, 8, 8)
+
+    board = torch.cat((headers, frames), dim=1)
+
+    if data: board = board.cpu().numpy()
+    
+    return board
+
 class KamiResidual(nn.Module):
     def __init__(self):
         super(KamiResidual, self).__init__()
@@ -94,26 +112,8 @@ class KamiNet(nn.Module):
         self.vh_fc3 = nn.Linear(256, 1)
         self.vh_out = nn.Tanh()
 
-    def transform_input(headers, frames, data=False):
-        """Transforms headers and frames into the final board input.
-           Expects headers in NC format and frames in NWHC format."""
-
-        # Reorder frame axes to NCHW for convolution
-        frames = frames.permute(0, 3, 1, 2)
-
-        # Expand headers, append to each frame
-        headers = headers.unsqueeze(2)
-        headers = headers.unsqueeze(3)
-        headers = headers.expand(-1, -1, 8, 8)
-
-        board = torch.cat((headers, frames), dim=1)
-
-        if data: board = board.cpu().numpy()
-        
-        return board
-
     def forward(self, headers, frames, lmm):
-        x = KamiNet.transform_input(headers, frames)
+        x = transform_input(headers, frames)
 
         # Forward pre-presidual convolution
         x = self.pr_conv(x)
