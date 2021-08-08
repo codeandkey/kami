@@ -26,8 +26,17 @@ def test_node_backprop():
 # Tests node PV generation.
 def test_node_pv():
     n = Node()
-    n.expand(['abcd'], [0.0], 0.0, 0)
-    n.children[0].expand(['efgh'], [0.0], 0.0, 0)
-    n.children[0].children[0].expand(['ijkl'], [0.0], 0.0, 0)
+    n.expand(['abcd'], [0.0], 0.0)
+    n.children[0].expand(['efgh'], [0.0], 0.0)
+    n.children[0].children[0].expand(['ijkl'], [0.0], 0.0)
 
     assert n.pv() == ['abcd', 'efgh', 'ijkl']
+
+# Tests node maxdepth calculation.
+def test_node_maxdepth():
+    n = Node()
+    n.expand(['abcd'], [0.0], 0.0)
+    n.children[0].expand(['efgh'], [0.0], 0.0)
+    n.children[0].children[0].expand(['ijkl'], [0.0], 0.0)
+
+    assert n.maxdepth() == 3

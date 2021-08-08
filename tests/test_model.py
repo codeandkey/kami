@@ -64,23 +64,20 @@ def model_execute_direct(model):
     def random_lmm():
         return list(map(lambda _: float(random.randint(0, 1)), range(4096)))
 
-    batch = (
-        np.random.randn(16, consts.HEADER_SIZE),
-        np.random.randn(16, 8, 8, consts.FRAME_SIZE * consts.FRAME_COUNT),
-        [random_lmm()] * 16,
-    )
+    headers = np.random.randn(16, consts.HEADER_SIZE)
+    frames = np.random.randn(16, consts.FRAME_COUNT, 8, 8, consts.FRAME_SIZE)
+    lmm = [random_lmm()] * 16
 
-    policy, value = model.execute_direct(batch)
+    policy, value = model.execute_direct(headers, frames, lmm)
 
     # Check output shapes
     assert len(policy) == 16
     assert len(policy[0]) == 4096
     assert len(value) == 16
-    assert len(value[0]) == 1
 
     # Check value in bounds
-    assert value[0][0] >= -1.0
-    assert value[0][0] <= 1.0
+    assert value[0] >= -1.0
+    assert value[0] <= 1.0
     
     # Check policy sums to 1
     assert abs(sum(policy[0]) - 1.0) < 1e-6

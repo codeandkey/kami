@@ -1,6 +1,6 @@
 # Kami model type.
 
-from batch import Batch, BatchResult
+from batch import Batch
 import consts
 
 import math
@@ -20,8 +20,8 @@ def transform_input(headers, frames, data=False):
     frames = frames.permute(0, 3, 1, 2)
 
     # Expand headers, append to each frame
-    headers = headers.unsqueeze(2)
-    headers = headers.unsqueeze(3)
+    headers = headers.unsqueeze(-1)
+    headers = headers.unsqueeze(-1)
     headers = headers.expand(-1, -1, 8, 8)
 
     board = torch.cat((headers, frames), dim=1)
@@ -311,11 +311,9 @@ class Model:
 
         return first_avg_loss, last_avg_loss
 
-    def execute_direct(self, inputs) -> (list, list):
+    def execute_direct(self, headers, frames, lmm) -> (list, list):
         """Executes an input batch and returns the value and policy results."""
 
-        headers, frames, lmm = inputs
-        
         headers = self.to_tensor(headers)
         frames = self.to_tensor(frames)
         lmm = self.to_tensor(lmm)
@@ -323,9 +321,15 @@ class Model:
         with torch.no_grad():
             policy, value = self.model(headers, frames, lmm)
 
-            return policy.cpu().numpy(), value.cpu().numpy()
+            return policy.cpu().numpy().tolist(), value.cpu().numpy().flatten().tolist()
 
-    def execute(self, batch: Batch) -> BatchResult:
-        """Executes an input batch structure."""
-        return batch.make_result(*self.execute_direct(batch.get_inputs()))
+    def execute(self, batch: dict) -> dict:
+        """Executes an input dict in place. The input must contain
+          'headers', 'frames', and 'lmm' fields which will be replaced
+          with 'policy' and 'value' fields."""
         
+        batch['policy'], batch['value'] = self.execute_direct(batch['headers'], batch['frames'], batch['lmm'])
+
+        del batch['headers']
+        del batch['frames']
+        del batch['lmm']

@@ -162,5 +162,5 @@ class Position():
         if res.result() == '1/2-1/2':
             return 0
 
-        # Any non-draw ending is a loss for the CTM (checkmate)
-        return -1
+        # Any non-draw ending is reached by a winning decision, so we assign a value of 1.
+        return 1

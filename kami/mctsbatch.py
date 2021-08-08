@@ -1,26 +1,6 @@
 # MCTS-specialized input batch type.
 
-from batch import Batch, BatchResult
-
-class MCTSResult(BatchResult):
-    def __init__(self, policy, value, actions, nodes, depths):
-        super().__init__(policy, value)
-
-        self.actions = actions
-        self.nodes   = nodes
-        self.depths  = depths
-
-    def get_actions(self, ind):
-        """Returns actions for a batch index."""
-        return self.actions[ind]
-
-    def get_node(self, ind):
-        """Returns target nodeid for a batch index."""
-        return self.nodes[ind]
-
-    def get_depth(self, ind):
-        """Returns node depth for a batch index."""
-        return self.depths[ind]
+from batch import Batch
 
 class MCTSBatch(Batch):
     """Manages an MCTS input batch. This is a specialized input batch tracking
@@ -32,16 +12,22 @@ class MCTSBatch(Batch):
 
         self.actions = []
         self.nodes   = []
-        self.depths  = []
 
-    def add(self, headers, frames, lmm, actions, nodeid, depth):
+    def add(self, headers, frames, lmm, actions, nodeid):
         """Adds an input to the batch."""
         super().add(headers, frames, lmm)
 
         self.nodes.append(nodeid)
         self.actions.append(actions)
-        self.depths.append(depth)
+
+    def into_dict(self):
+        ret = super().into_dict()
+        ret['nodes'] = self.nodes
+        ret['actions'] = self.actions
+        return ret
 
     def make_result(self, policy, value):
-        """Creates a result structure from a network output."""
-        return MCTSResult(policy, value, self.actions, self.nodes, self.depths)
+        ret = super().make_result(policy, value)
+        ret['nodes'] = self.nodes
+        ret['actions'] = self.actions
+        return ret

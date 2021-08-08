@@ -23,3 +23,10 @@ PUCT_POLICY_WEIGHT = 4.0   # PUCT policy component weight (prior + noise)
 PUCT_NOISE_ALPHA   = 0.285 # PUCT dirichlet noise alpha
 TREE_TEMPERATURE   = 1.0   # Move selection temperature
 BATCH_SIZE         = 16
+
+# Search control parameters
+
+WORKER_PORT   = 8163   # Port to communciate with workers on
+SEARCH_NODES  = 2500   # Nodes per search
+SEND_BUF_SIZE = 200000 # Send bufsize
+RECV_BUF_SIZE = 200000 # Recv bufsize

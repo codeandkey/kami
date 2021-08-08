@@ -13,17 +13,16 @@ class Node:
         self.tn       = 0
         self.p        = p
         self.w        = 0.0
-        self.terminal = None
         self.parent   = parent
         self.children = []
         self.claimed  = False
         self.expanded = False
         self.action   = action
         self.turn     = turn
-        self.maxdepth = 0
 
     def puct(self, noise):
-        out = -self.q()
+        """Computes the PUCT value for a child node."""
+        out = self.q()
 
         # policy component
         out += consts.PUCT_POLICY_WEIGHT * (self.p * (1 - consts.PUCT_NOISE_WEIGHT) + noise * consts.PUCT_NOISE_WEIGHT)
@@ -33,25 +32,23 @@ class Node:
         
         return out
     
-    def expand(self, actions, p, v, depth):
+    def expand(self, actions, p, v):
         """Expands a node."""
-        def next_child(pair):
-            (action, p) = pair
-            return Node(not self.turn, self, action, p)
+        def next_child(action_p):
+            return Node(not self.turn, self, action_p[0], action_p[1])
 
         self.claimed = False
         self.children = list(map(next_child, zip(actions, p)))
-        self.backprop(v, 0, depth)
+        self.backprop(v)
 
-    def backprop(self, v, terminal=0, depth=0):
+    def backprop(self, v, terminal=0):
         """Backpropagates a value through connected parent nodes."""
         self.n  += 1
         self.tn += terminal
         self.w  += v
-        self.maxdepth = max(depth, self.maxdepth)
 
         if self.parent:
-            self.parent.backprop(-v, terminal, depth - 1)
+            self.parent.backprop(-v, terminal)
 
     def q(self):
         """Gets the average value at this node."""
@@ -75,9 +72,6 @@ class Node:
 
         if self.claimed:
             return None
-
-        if self.terminal:
-            return self
 
         if len(self.children) == 0:
             return self
@@ -125,3 +119,10 @@ class Node:
 
         self.parent = None
         return ret
+    
+    def maxdepth(self) -> int:
+        """Computes the maximum depth under this node."""
+        if len(self.children) == 0:
+            return 0
+
+        return max(map(lambda x: x.maxdepth(), self.children)) + 1

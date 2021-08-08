@@ -4,20 +4,6 @@ import consts
 
 import numpy as np
 
-class BatchResult:
-    def __init__(self, policy, value):
-        self.policy = policy
-        self.value  = value
-
-    def get_size(self):
-        return len(self.value)
-    
-    def get_value(self, ind):
-        return self.value[ind]
-    
-    def get_policy(self, ind):
-        return self.policy[ind]
-
 class Batch:
     """Manages an input batch. This is the most basic input type to the network,
        containing only headers, frames, and LMM. No other information is tracked."""
@@ -59,4 +45,15 @@ class Batch:
         return self.get_headers(), self.get_frames(), self.get_lmm()
     
     def make_result(self, policy, value):
-        return BatchResult(policy, value)
+        """Returns a result dict from policy and value outputs."""
+        return {
+            'policy': policy,
+            'value': value,
+        }
+
+    def into_dict(self):
+        return {
+            'headers': self.get_headers().tolist(),
+            'frames': self.get_frames().tolist(),
+            'lmm': self.get_lmm().tolist()
+        }

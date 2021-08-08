@@ -49,7 +49,7 @@ def test_position_checkmate():
     pos.push('a7a5')
     pos.push('f3f7')
 
-    assert pos.is_game_over() == -1
+    assert pos.is_game_over() == 1
 
 # Checks the position can detect a draw by repetition.
 def test_position_repetition():

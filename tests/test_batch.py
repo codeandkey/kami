@@ -2,7 +2,7 @@
 
 import kamitest
 
-from batch import Batch, BatchResult
+from batch import Batch
 import consts
 
 import numpy as np

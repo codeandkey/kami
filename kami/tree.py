@@ -1,7 +1,7 @@
 # Tree type.
 
 import consts
-from mctsbatch import MCTSBatch, MCTSResult
+from mctsbatch import MCTSBatch
 from node import Node
 from position import Position
 
@@ -46,7 +46,7 @@ class Tree():
 
             if result is not None:
                 # Terminal! Backprop here and call it good.
-                selected.backprop(result, 1, len(action_path))
+                selected.backprop(result, 1)
             else:
                 # Nonterminal, claim this node and add it to the batch.
                 # Compute next moves and lmm
@@ -57,7 +57,7 @@ class Tree():
                 # Map the node id so we can expand it later.
                 self.nodemap[id(selected)] = selected
 
-                out.add(headers, frames, lmm, moves, id(selected), len(action_path))
+                out.add(headers, frames, lmm, moves, id(selected))
 
                 selected.claimed = True
             
@@ -82,14 +82,14 @@ class Tree():
 
         return selected
     
-    def expand(self, result: MCTSResult):
+    def expand(self, result: dict):
         """Expands one or more nodes in the tree."""
 
-        for i in range(result.get_size()):
-            target = self.nodemap[result.get_node(i)]
+        for i in range(len(result['value'])):
+            target = self.nodemap[result['nodes'][i]]
 
-            actions = result.get_actions(i)
-            policy = result.get_policy(i)
+            actions = result['actions'][i]
+            policy = result['policy'][i]
 
             def get_policy_value(action):
                 mv = chess.Move.from_uci(action)
@@ -108,8 +108,7 @@ class Tree():
             target.expand(
                 actions,
                 actual_policy,
-                result.get_value(i),
-                result.get_depth(i)
+                result['value'][i]
             )
 
-            del self.nodemap[result.get_node(i)]
+            del self.nodemap[result['nodes'][i]]
