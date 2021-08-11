@@ -26,7 +26,5 @@ BATCH_SIZE         = 16
 
 # Search control parameters
 
-WORKER_PORT   = 8163   # Port to communciate with workers on
+WORKER_PORT   = 8124   # Port to communciate with workers on
 SEARCH_NODES  = 2500   # Nodes per search
-SEND_BUF_SIZE = 200000 # Send bufsize
-RECV_BUF_SIZE = 200000 # Recv bufsize
