@@ -310,26 +310,3 @@ class Model:
         print()
 
         return first_avg_loss, last_avg_loss
-
-    def execute_direct(self, headers, frames, lmm) -> (list, list):
-        """Executes an input batch and returns the value and policy results."""
-
-        headers = self.to_tensor(headers)
-        frames = self.to_tensor(frames)
-        lmm = self.to_tensor(lmm)
-
-        with torch.no_grad():
-            policy, value = self.model(headers, frames, lmm)
-
-            return policy.cpu().numpy().tolist(), value.cpu().numpy().flatten().tolist()
-
-    def execute(self, batch: dict) -> dict:
-        """Executes an input dict in place. The input must contain
-          'headers', 'frames', and 'lmm' fields which will be replaced
-          with 'policy' and 'value' fields."""
-        
-        batch['policy'], batch['value'] = self.execute_direct(batch['headers'], batch['frames'], batch['lmm'])
-
-        del batch['headers']
-        del batch['frames']
-        del batch['lmm']
