@@ -1,111 +1,96 @@
 # Search structure
 
 import consts
-from tree import Tree
 
 import json
 import multiprocessing as mp
 import os
-import pickle
-import select
 import socket
 import subprocess as sp
-import sys
 import time
-import threading
 
 class Search:
     def __init__(self, modelpath: str, port=consts.WORKER_PORT, nprocs: int = mp.cpu_count() // 2):
-        self.streams = []
-        self.procs   = []
+        # Build searcher service, synchronously
+        self.sproc = sp.Popen([
+            'cargo',
+            'build',
+            '--release',
+        ], cwd=os.path.join(os.path.dirname(os.path.dirname(__file__)), 'search'))
 
-        self.listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP)
-        self.listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.listener.bind(('0.0.0.0', port))
-        self.listener.listen()
+        if self.sproc.wait() != 0:
+            raise RuntimeError('Search build failed!')
 
-        # Spawn workers and wait for connections
-        for _ in range(nprocs):
-            self.procs.append(
-                sp.Popen([
-                    'python',
-                    'worker.py',
-                    str(port),
-                    modelpath,
-                ], cwd=os.path.dirname(__file__))
-            )
+        # Start searcher service
 
-        for _ in range(nprocs):
-            conn, _ = self.listener.accept()
-            self.streams.append(conn)
+        self.sproc = sp.Popen([
+            'cargo',
+            'run',
+            '--release',
+            '--',
+            str(port),
+        ], cwd=os.path.join(os.path.dirname(os.path.dirname(__file__)), 'search'))
 
-        print('Search ready.')
-        print('Using {} compute workers.'.format(nprocs))
+        # Connect to service
 
-    def write(self, stream, msg: bytes):
-        stream.send(len(msg).to_bytes(4, 'little'))
-        stream.send(msg)
+        ok = False
+        for _ in range(consts.MAX_RETRIES):
+            try:
+                self.conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP)
+                self.conn.connect(('127.0.0.1', port))
+                ok = True
+                break
+            except ConnectionRefusedError:
+                print('Connection refused, retrying..')
+                time.sleep(consts.RETRY_DELAY)
 
-    def run(self, tree: Tree, maxnodes=consts.SEARCH_NODES, status_callback=None):
-        """Runs a synchronous search on `tree` until `maxnodes` have been searched."""
+        if not ok:
+            raise RuntimeError("Couldn't establish connection with search service after {} retries.".format(consts.MAX_RETRIES))
 
-        starttime = time.time()
+        self.connfile = self.conn.makefile('rw')
 
-        nnodes = 0
-        nbatches = 0
-        while nnodes < maxnodes:
-            for c in self.streams:
-                try:
-                    ready, _, _ = select.select([c], [], [], 0)
+        # Write configuration
 
-                    if c not in ready:
-                        continue
+        config = {
+            'Config': {
+                'puct_policy_weight': consts.PUCT_POLICY_WEIGHT,
+                'puct_noise_weight': consts.PUCT_NOISE_WEIGHT,
+                'puct_noise_alpha': consts.PUCT_NOISE_ALPHA,
+                'batch_size': consts.BATCH_SIZE,
+                'num_threads': nprocs,
+                'model_path': modelpath,
+                'search_nodes': consts.SEARCH_NODES
+            }
+        }
 
-                    def nextbytes(n):
-                        bout = b''
-                        while len(bout) < n:
-                            bout += c.recv(n - len(bout))
-                        return bout
+        self.write(json.dumps(config))
 
-                    def recvnext():
-                        msglen = int.from_bytes(nextbytes(4), 'little')
-                        return nextbytes(msglen).decode('utf-8')
+    def write(self, msg):
+        self.connfile.write(msg + '\n')
+        self.connfile.flush()
 
-                    msg = recvnext()
+    def readline(self):
+        return self.connfile.readline()
 
-                    if msg == 'READY':
-                        # Send a batch!
-                        nextbatch = tree.next_batch().into_dict()
-                        self.write(c, pickle.dumps(nextbatch))
-                    else:
-                        # Try and expand batch results.
-                        results = json.loads(msg)
-                        tree.expand(results)
-
-                        if nnodes == 0:
-                            starttime = time.time()
-
-                        nnodes += len(results['value'])
-                        nbatches += 1
-
-                        if status_callback:
-                            status_callback({
-                                'nps': nnodes / (time.time() - starttime),
-                                'bps': nbatches / (time.time() - starttime),
-                                'nodes': nnodes,
-                                'elapsed': (time.time() - starttime),
-                                'batches': nbatches,
-                            })
-                except ConnectionResetError:
-                    c.close()
-                    self.streams.remove(c)
-        
     def stop(self):
-        """Stops the search. Sends a STOP request to all workers and waits
-           for their processes to terminate."""
+        """Stops the search service and waits for the process to join."""
+        self.write('"Stop"')
+        self.sproc.wait()
 
-        for child in self.streams:
-            self.write(child, b'STOP')
+    def go(self, status_data):
+        """Starts the search and waits for status data. Returns the final
+           status response when the search is complete."""
 
-        for proc in self.procs:
-            proc.wait(5000)
+        self.write('"Go"')
+        
+        while True:
+            resp = json.loads(self.readline())
+            
+            if 'Searching' in resp:
+                status_data(resp['Searching'])
+            
+            if 'Done' in resp:
+                return resp['Done']
+
+    def push(self, action):
+        self.write('{"Push":"%s"}' % action)

@@ -21,6 +21,7 @@ use std::io::{BufReader, BufRead, Write, BufWriter};
 use std::net::TcpListener;
 use std::str::FromStr;
 use std::sync::{Arc, mpsc::channel};
+use std::time::SystemTime;
 
 #[derive(Serialize)]
 /// Outgoing message type.
@@ -57,12 +58,21 @@ fn write_error(client: &mut impl Write, message: impl ToString) -> Result<(), Bo
 fn write_message(client: &mut impl Write, message: Message) -> Result<(), Box<dyn Error>> {
     client.write(serde_json::to_string(&message)?.as_bytes())?;
     client.write(b"\n")?;
+    client.flush()?;
     Ok(())
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    // Parse optional port from args
+    let mut port = consts::PORT;
+    let args: Vec<String> = std::env::args().collect();
+
+    for i in 1..args.len() {
+        port = u16::from_str(&args[i])?;
+    }
+
     // Start listening for client
-    let bind_addr = format!("0.0.0.0:{}", consts::PORT);
+    let bind_addr = format!("0.0.0.0:{}", port);
     let socket = TcpListener::bind(&bind_addr)?;
     
     println!("Waiting for client on {}", bind_addr);
@@ -116,6 +126,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
             Command::Go => {
                 // Start searching!
+                let mut start = SystemTime::now();
+
                 while tree[0].n < config.search_nodes as u32 {
                     match wrx.recv().unwrap() {
                         WorkerMsg::Ready(tx) => {
@@ -123,8 +135,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                         },
                         WorkerMsg::Expand(res) => {
                             tree.expand(*res);
-                            write_message(&mut writer, Message::Searching(tree.clone()))?;
                         },
+                    }
+
+                    if start.elapsed()?.as_millis() > consts::STATUS_INTERVAL {
+                        start = SystemTime::now();
+                        write_message(&mut writer, Message::Searching(tree.clone()))?;
                     }
                 }
 

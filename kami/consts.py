@@ -28,3 +28,6 @@ BATCH_SIZE         = 16
 
 WORKER_PORT   = 8124   # Port to communciate with workers on
 SEARCH_NODES  = 2500   # Nodes per search
+
+MAX_RETRIES = 10
+RETRY_DELAY = 1
