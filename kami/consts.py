@@ -31,3 +31,7 @@ SEARCH_NODES  = 2500   # Nodes per search
 
 MAX_RETRIES = 10
 RETRY_DELAY = 1
+
+# Webserver parameters
+
+WEB_PORT = 8000
