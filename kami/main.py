@@ -1,6 +1,7 @@
 # Entry point
 
 import consts
+from trainer import Trainer
 
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
@@ -11,6 +12,9 @@ static_files = [
 ]
 
 rootpath = os.path.dirname(os.path.dirname(__file__))
+
+trainer = Trainer()
+trainer.start_training()
 
 class RequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -27,7 +31,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
-            self.wfile.write(json.dumps(status).encode('utf-8'))
+            self.wfile.write(json.dumps(trainer.status).encode('utf-8'))
         else:
             self.send_response(404)
             self.end_headers()

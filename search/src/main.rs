@@ -28,7 +28,14 @@ use std::time::SystemTime;
 enum Message {
     Error(String),
     Searching(Tree),
-    Done(Tree),
+    Done {
+        tree: Tree,
+        action: String,
+        headers: Vec<f32>,
+        frames: Vec<f32>,
+        lmm: Vec<f32>,
+        mcts: Vec<f32>,
+    },
 }
 
 #[derive(Serialize, Deserialize)]
@@ -147,8 +154,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // Ensure we've finished all the expansions in the channel
                 let mut readies = Vec::new();
 
-                while let Ok(next) = wrx.try_recv() {
-                    match next {
+                while readies.len() < workers.len() {
+                    match wrx.recv()? {
                         WorkerMsg::Expand(res) => {
                             tree.expand(*res);
                         },
@@ -164,7 +171,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                 readies.into_iter().for_each(|x| wtx.send(x).unwrap());
 
                 // Send a final search-complete message.
-                write_message(&mut writer, Message::Done(tree.clone()))?;
+                write_message(&mut writer, Message::Done {
+                    tree: tree.clone(),
+                    action: tree.pick().to_string(),
+                    mcts: tree.get_mcts(),
+                    headers: tree.get_position().get_headers().to_vec(),
+                    frames: tree.get_position().get_frames().to_vec(),
+                    lmm: tree.get_position().get_lmm().0.to_vec(),
+                })?;
             },
             x => println!("{}", serde_json::to_string_pretty(&x)?),
         }

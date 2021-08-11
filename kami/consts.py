@@ -16,6 +16,14 @@ POLICY_EPSILON = 1e-6 # policy epsilon to avoid NaN loss
 EPOCHS         = 10   # training epoch count
 L2_REG_WEIGHT  = 0.01 # L2 regularization weight
 
+# Trainer parameters
+
+NUM_SELFPLAY_GAMES = 10
+NUM_ARENA_GAMES = 10
+ARENACOMPARE_THRESHOLD = 0.6
+NUM_TRAINING_BATCHES = 16
+TRAINING_BATCH_SIZE = 16
+
 # Tree search parameters
 
 PUCT_NOISE_WEIGHT  = 0.25  # PUCT noise component weight

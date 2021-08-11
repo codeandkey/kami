@@ -5,6 +5,7 @@ use crate::position::Position;
 
 use chess::{ChessMove, Color};
 use rand::prelude::*;
+use rand::distributions::WeightedIndex;
 use serde::ser::{Serialize, Serializer, SerializeSeq};
 use std::cmp::Ordering;
 use std::ops::{Index, IndexMut};
@@ -105,10 +106,6 @@ impl Tree {
 
                 self.nodes.push(Node::child(idx, p.into(), *mv, new_color));
             }
-
-            assert!(
-                (new_children.iter().cloned().map(|x| self[x].p).sum::<f64>() - 1.0).abs() < 0.0001,
-            );
 
             self[target].children = Some(new_children);
             self[target].claim = false;
@@ -228,6 +225,53 @@ impl Tree {
         if let Some(pidx) = node.parent {
             self.backprop(pidx, -value, depth + 1, terminal);
         }
+    }
+
+    /// Selects an action randomly from the tree given an MCTS temperature.
+    pub fn pick(&self) -> ChessMove {
+        let child_nodes = self.nodes[0].children.as_ref().unwrap().clone();
+        let mut actions = Vec::new();
+        let mut probs = Vec::new();
+
+        for &nd in child_nodes.iter() {
+            actions.push(self[nd].action.unwrap());
+            probs.push(((self[nd].n + 1) as f64).powf(1.0 / self.params.temperature as f64));
+        }
+
+        let index = WeightedIndex::new(probs).expect("failed to initialize rand index");
+        let mut rng = thread_rng();
+
+        return actions[index.sample(&mut rng)];
+    }
+
+    /// Gets the MCTS layer for this tree.
+    pub fn get_mcts(&self) -> Vec<f32> {
+        let mut out = Vec::new();
+        let child_nodes = self.nodes[0].children.as_ref().unwrap().clone();
+
+        out.resize(4096, 0.0);
+
+        match self.position.side_to_move() {
+            Color::White => {
+                for &nd in child_nodes.iter() {
+                    let action = self[nd].action.unwrap();
+                    out[action.get_source().to_index() * 64 + action.get_dest().to_index()] += self[nd].n as f32 / self[0].n as f32;
+                }
+            },
+            Color::Black => {
+                for &nd in child_nodes.iter() {
+                    let action = self[nd].action.unwrap();
+                    out[(63 - action.get_source().to_index()) * 64 + 63 - action.get_dest().to_index()] += self[nd].n as f32 / self[0].n as f32;
+                }
+            },
+        }
+        
+        out
+    }
+
+    /// Gets the root position for this tree.
+    pub fn get_position(&self) -> &Position {
+        &self.position
     }
 }
 

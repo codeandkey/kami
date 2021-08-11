@@ -11,4 +11,5 @@ pub struct Params {
     pub batch_size: u8,
     pub model_path: PathBuf,
     pub num_threads: usize,
+    pub temperature: f64,
 }

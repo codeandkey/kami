@@ -59,7 +59,8 @@ class Search:
                 'batch_size': consts.BATCH_SIZE,
                 'num_threads': nprocs,
                 'model_path': modelpath,
-                'search_nodes': consts.SEARCH_NODES
+                'search_nodes': consts.SEARCH_NODES,
+                'temperature': consts.TREE_TEMPERATURE,
             }
         }
 
@@ -71,6 +72,9 @@ class Search:
 
     def readline(self):
         return self.connfile.readline()
+
+    def reset(self):
+        self.write('{"Load":[]}')
 
     def stop(self):
         """Stops the search service and waits for the process to join."""
