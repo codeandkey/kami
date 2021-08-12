@@ -331,28 +331,6 @@ impl Position {
             }
         }
     }
-
-    /// Returns a pretty-printed board representation.
-    pub fn to_string_pretty(&self) -> String {
-        (0..8)
-            .rev()
-            .map(Rank::from_index)
-            .map(|r| {
-                (0..8)
-                    .map(File::from_index)
-                    .map(|f| {
-                        let sq = Square::make_square(r, f);
-                        match self.top().b.piece_on(sq) {
-                            Some(p) => p.to_string(self.top().b.color_on(sq).unwrap()),
-                            None => ".".to_string(),
-                        }
-                    })
-                    .collect::<Vec<String>>()
-                    .join(" ")
-            })
-            .collect::<Vec<String>>()
-            .join("\n")
-    }
 }
 
 #[cfg(test)]

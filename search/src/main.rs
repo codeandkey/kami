@@ -180,7 +180,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                     lmm: tree.get_position().get_lmm().0.to_vec(),
                 })?;
             },
-            x => println!("{}", serde_json::to_string_pretty(&x)?),
         }
     }
 
