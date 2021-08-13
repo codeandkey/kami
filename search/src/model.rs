@@ -19,16 +19,13 @@ impl Model {
         tch::maybe_init_cuda();
 
         if tch::Cuda::is_available() {
-            println!("CUDA support enabled");
-            println!("{} CUDA devices available", tch::Cuda::device_count());
-
-            if tch::Cuda::cudnn_is_available() {
-                println!("CUDNN acceleration enabled");
-            }
-
             cmod.to(Device::Cuda(0), tch::Kind::Float, false);
+
+            if !tch::Cuda::cudnn_is_available() {
+                println!("search: CUDA available, but CUDNN not supported");
+            }
         } else {
-            println!("CUDA is not available, using CPU for inference");
+            println!("search: CUDA not available, using CPU for inference");
         }
 
         return Ok(Model {

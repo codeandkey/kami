@@ -28,14 +28,16 @@ use std::time::SystemTime;
 enum Message {
     Error(String),
     Searching(Tree),
-    Done {
-        tree: Tree,
-        action: String,
+    Input {
         headers: Vec<f32>,
         frames: Vec<f32>,
         lmm: Vec<f32>,
-        mcts: Vec<f32>,
     },
+    Done {
+        action: String,
+        mcts_pairs: Vec<(f64, String)>,
+    },
+    Outcome(f64),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -44,6 +46,7 @@ enum Command {
     Push(String),
     Go,
     Load(Vec<String>),
+    Input(Vec<String>),
     Config(params::Params),
     Stop,
 }
@@ -57,7 +60,7 @@ fn next_command(reader: &mut impl BufRead) -> Result<Command, Box<dyn Error>> {
 
 /// Writes an error message to a client.
 fn write_error(client: &mut impl Write, message: impl ToString) -> Result<(), Box<dyn Error>> {
-    println!("Error: {}", message.to_string());
+    println!("search: Error: {}", message.to_string());
     write_message(client, Message::Error(message.to_string()))
 }
 
@@ -82,12 +85,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let bind_addr = format!("0.0.0.0:{}", port);
     let socket = TcpListener::bind(&bind_addr)?;
     
-    println!("Waiting for client on {}", bind_addr);
-    
-    let (client, addr) = socket.accept().expect("socket accept failed");
-
-    println!("Accepted connection from {}", addr);
-
+    let (client, _) = socket.accept().expect("socket accept failed");
     let mut reader = BufReader::new(&client);
     let mut writer = BufWriter::new(&client);
 
@@ -98,9 +96,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             return write_error(&mut writer, "Invalid first message, expected configuration");
         }
     };
-
-    println!("Loaded initial configuration:");
-    println!("{}", serde_json::to_string_pretty(&config)?);
 
     let mut tree = Tree::new(Position::new(), &config);
     let model = Arc::new(Model::load(&config.model_path)?);
@@ -127,11 +122,38 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                 tree = Tree::new(new_pos, &config);
             },
+            Command::Input(actions) => {
+                // Generate input layer.
+                let mut new_pos = Position::new();
+
+                for a in actions {
+                    assert!(new_pos.make_move(ChessMove::from_str(&a).expect("invalid move")));
+                }
+
+                write_message(&mut writer, Message::Input {
+                    headers: new_pos.get_headers().to_vec(),
+                    frames: new_pos.get_frames().to_vec(),
+                    lmm: new_pos.get_lmm().0.to_vec()
+                })?;
+            },
             Command::Push(action) => {
                 // Advance tree.
+
+                // If children haven't been generated, do a quick 1-node expansion
+                if tree[0].children.is_none() {
+                    let nb = tree.next_batch();
+                    tree.expand(model.execute(nb));
+                }
+
                 tree.push(ChessMove::from_str(&action).expect("invalid move"));
             }
             Command::Go => {
+                // Check if the game is over.
+                if let Some(res) = tree.get_position().is_game_over() {
+                    write_message(&mut writer, Message::Outcome(res))?;
+                    continue;
+                }
+
                 // Start searching!
                 let mut start = SystemTime::now();
 
@@ -172,12 +194,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                 // Send a final search-complete message.
                 write_message(&mut writer, Message::Done {
-                    tree: tree.clone(),
                     action: tree.pick().to_string(),
-                    mcts: tree.get_mcts(),
-                    headers: tree.get_position().get_headers().to_vec(),
-                    frames: tree.get_position().get_frames().to_vec(),
-                    lmm: tree.get_position().get_lmm().0.to_vec(),
+                    mcts_pairs: tree.get_mcts_pairs(),
                 })?;
             },
         }

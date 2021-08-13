@@ -229,6 +229,12 @@ impl Tree {
 
     /// Selects an action randomly from the tree given an MCTS temperature.
     pub fn pick(&self) -> ChessMove {
+        assert!(
+            self[0].children.is_some(),
+            "Will not pick moves with no children: {}",
+            self.position.get_fen()
+        );
+
         let child_nodes = self.nodes[0].children.as_ref().unwrap().clone();
         let mut actions = Vec::new();
         let mut probs = Vec::new();
@@ -244,32 +250,19 @@ impl Tree {
         return actions[index.sample(&mut rng)];
     }
 
-    /// Gets the MCTS layer for this tree.
-    pub fn get_mcts(&self) -> Vec<f32> {
-        let mut out = Vec::new();
+    /// Gets the MCTS pairs for this tree.
+    pub fn get_mcts_pairs(&self) -> Vec<(f64, String)> {
         let child_nodes = self.nodes[0].children.as_ref().unwrap().clone();
 
-        out.resize(4096, 0.0);
+        let total_n = child_nodes.iter().map(|x| self[*x].n as f64).sum::<f64>();
 
-        match self.position.side_to_move() {
-            Color::White => {
-                for &nd in child_nodes.iter() {
-                    let action = self[nd].action.unwrap();
-                    out[action.get_source().to_index() * 64 + action.get_dest().to_index()] += self[nd].n as f32 / self[0].n as f32;
-                }
-            },
-            Color::Black => {
-                for &nd in child_nodes.iter() {
-                    let action = self[nd].action.unwrap();
-                    out[(63 - action.get_source().to_index()) * 64 + 63 - action.get_dest().to_index()] += self[nd].n as f32 / self[0].n as f32;
-                }
-            },
-        }
-        
-        out
+        child_nodes
+            .iter()
+            .map(|x| (self[*x].n as f64 / total_n, self[*x].action.as_ref().unwrap().to_string()))
+            .collect()
     }
 
-    /// Gets the root position for this tree.
+    /// Gets a reference to the root position.
     pub fn get_position(&self) -> &Position {
         &self.position
     }

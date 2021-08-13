@@ -17,12 +17,15 @@ candidate_path = path.join(datapath, 'candidate.pt')
 model_path = path.join(datapath, 'model.pt')
 selfplay_games_path = path.join(datapath, 'selfplay')
 arena_games_path = path.join(datapath, 'arena')
+gen_path = path.join(datapath, 'generation')
+archive_path = path.join(datapath, 'archive')
 
 class Trainer:
     def __init__(self):
         os.makedirs(datapath, exist_ok=True)
         os.makedirs(selfplay_games_path, exist_ok=True)
         os.makedirs(arena_games_path, exist_ok=True)
+        os.makedirs(archive_path, exist_ok=True)
 
         self.status = {}
 
@@ -37,24 +40,57 @@ class Trainer:
             print('Generating new model at %s' % model_path)
             Model().save(model_path)
 
-        # Generate selfplay set
-        self.gen_selfplay_games()
+        if not path.exists(gen_path):
+            print('Marked generation 0')
+            with open(gen_path, 'w') as f:
+                f.write('0')
 
         # Generate candidates and do arenacompare until a nextgen is found
         while True:
             self.generate_candidate()
-            self.gen_arenacompare_games()
 
-            if self.get_arenacompare_winrate() >= consts.ARENACOMPARE_THRESHOLD:
-                os.remove(model_path)
-                os.rename(candidate_path, model_path)
+            print('Starting arenacompare phase')
+            accept = self.do_arenacompare()
+
+            if accept:
+                print('Accepting candidate')
+                self.advance_candidate()
             else:
+                print('Rejecting candidate')
+
                 os.remove(candidate_path)
 
     def update_search_status(self, stat):
         self.status['search'] = stat
 
-    def gen_selfplay_games(self):
+    def advance_candidate(self):
+        """Accepts the current candidate as the next generation."""
+        os.remove(model_path)
+        os.rename(candidate_path, model_path)
+    
+        gen = int(open(gen_path, 'r').read())
+
+        # Move selfplay games to archive
+        target_archive_dir = path.join(archive_path, 'generation_%s' % gen)
+        os.makedirs(target_archive_dir)
+
+        for i in range(consts.NUM_SELFPLAY_GAMES):
+            p = path.join(selfplay_games_path, '{}.json'.format(i))
+            
+            if path.exists(p):
+                os.rename(p, path.join(target_archive_dir, '{}.json'.format(i)))
+
+        # Flush arenacompare games
+        for i in range(consts.NUM_ARENA_GAMES):
+            p = path.join(arena_games_path, '{}.json'.format(i))
+
+            if path.exists(p):
+                os.remove(p)
+
+        print('Accepted candidate as generation {}'.format(gen + 1))
+
+    def do_selfplay(self):
+        """Generates all required selfplay games."""
         needed_games = []
 
         # Generate selfplay set
@@ -84,6 +120,7 @@ class Trainer:
             s.stop()
 
     def play_game(self, white, black):
+        """Plays a single game between one or more searchers."""
         current_game = {
             'steps': []
         }
@@ -101,67 +138,103 @@ class Trainer:
             else:
                 result = black.go(lambda stat: self.update_search_status(stat))
 
+            if 'outcome' in result:
+                current_game['result'] = result['outcome']
+                break
+
             white.push(result['action'])
 
             if black != white:
                 black.push(result['action'])
 
-            # Select move
-            pos.push(chess.Move.from_uci(result['action']))
             current_game['steps'].append(result)
-
-        outcome = pos.outcome(claim_draw=True)
-
-        if outcome.result() == '1/2-1/2':
-            current_game['result'] = 0
-        elif outcome.result() == '1-0':
-            current_game['result'] = 1
-        else:
-            current_game['result'] = -1
 
         return current_game
     
-    def gen_arenacompare_games(self):
-        needed_games = []
+    def do_arenacompare(self):
+        """Performs the arenacompare phase. Returns true if the candidate
+           should be accepted, false otherwise."""
+
+        current = None
+        candidate = None
+
+        score = 0
+        accept = None
 
         # Generate selfplay set
         for i in range(consts.NUM_ARENA_GAMES):
             gpath = path.join(arena_games_path, '{}.json'.format(i))
 
             if path.exists(gpath):
+                result = json.loads(open(gpath, 'r').read())
+                score += ((result['cside'] * result['result']) + 1) / 2
                 continue
 
-            # Generate selfplay game
-            needed_games.append(gpath)
-        
-        if len(needed_games) > 0:
-            print('Generating {} arenacompare games' % len(needed_games))
-            current = Search(model_path)
-            candidate = Search(candidate_path)
+            if current is None:
+                current = Search(model_path)
+            
+            if candidate is None:
+                candidate = Search(candidate_path, consts.WORKER_PORT + 1)
+
+            print('Generating arenacompare game {} of {}'.format(i + 1, consts.NUM_ARENA_GAMES))
 
             self.status['task'] = 'arenacompare'
 
-            for target in needed_games:
-                if random.randint(0, 1) == 0:
-                    white = candidate
-                    black = current
-                    cside = 1
-                else:
-                    white = current
-                    black = candidate
-                    cside = -1
+            if random.randint(0, 1) == 0:
+                white = candidate
+                black = current
+                cside = 1
+                print('White: Candidate, Black: Current')
+            else:
+                white = current
+                black = candidate
+                cside = -1
+                print('White: Current, Black: Candidate')
 
-                game = self.play_game(white, black)
-                game['cside'] = cside
+            game = self.play_game(white, black)
+            game['cside'] = cside
 
-                with open(target, 'w') as f:
-                    f.write(json.dumps(game))
+            with open(gpath, 'w') as f:
+                f.write(json.dumps(game))
 
-                print('Finished arenacompare game {}, result {} (for candidate)'.format(target, game['cside'] * game['result']))
+            score += ((game['cside'] * game['result']) + 1) / 2
+
+            print('Finished arenacompare game {}, result {} (for candidate)'.format(gpath, game['cside'] * game['result']))
+
+            # Check if candidate can accept or reject.
+
+            best_possible_score = score + (consts.NUM_ARENA_GAMES - (i + 1))
+            worst_possible_score = score
+
+            if best_possible_score < consts.NUM_ARENA_GAMES * consts.ARENACOMPARE_THRESHOLD:
+                print('Best possible winrate {} below threshold {}, rejecting'.format(
+                    best_possible_score / consts.NUM_ARENA_GAMES,
+                    consts.ARENACOMPARE_THRESHOLD,
+                ))
+                accept = False
+                break
+
+            if worst_possible_score >= consts.NUM_ARENA_GAMES * consts.ARENACOMPARE_THRESHOLD:
+                print('Worst possible winrate {} above threshold {}, accepting'.format(
+                    worst_possible_score / consts.NUM_ARENA_GAMES,
+                    consts.ARENACOMPARE_THRESHOLD,
+                ))
+                accept = True
+                break
+
+            print('Continuing games, winrate window [{} => {}] (target {})'.format(
+                worst_possible_score / consts.NUM_ARENA_GAMES,
+                best_possible_score / consts.NUM_ARENA_GAMES,
+                consts.ARENACOMPARE_THRESHOLD
+            ))
             
+        if current:
             current.stop()
+        if candidate:
             candidate.stop()
-    
+        
+        return accept
+
     def generate_candidate(self):
         """Generates a candidate model from selfplay data."""
 
@@ -169,37 +242,49 @@ class Trainer:
         if path.exists(candidate_path):
             return
 
+        # Generate training set
+        self.do_selfplay()
+
+        print('Generating candidate model')
+
+        # Flush arenacompare games
         for i in range(consts.NUM_ARENA_GAMES):
             p = path.join(arena_games_path, '{}.json'.format(i))
 
             if path.exists(p):
                 os.remove(p)
 
+        # Start a searcher for batch gen.
+        s = Search(model_path)
+
         # First generate n training batches.
-        tbatches = [self.generate_training_batch() for _ in range(consts.NUM_TRAINING_BATCHES)]
+        tpositions = [self.generate_training_batch_positions() for _ in range(consts.NUM_TRAINING_BATCHES)]
+        tbatches = [s.make_batch(tpos) for tpos in tpositions]
+
+        s.stop()
 
         new_candidate = Model(model_path)
-        new_candidate.train(tbatches)
+        startloss, endloss = new_candidate.train(tbatches)
+
+        print('Candidate average loss diff: {} => {}'.format(startloss, endloss))
+
         new_candidate.save(candidate_path)
 
-    def generate_training_batch(self):
-        """Generates a single training batch from selfplay data."""
-        outbatch = []
+    def generate_training_batch_positions(self):
+        """Generates a list of selected training positions."""
+        positions = []
 
         for _ in range(consts.TRAINING_BATCH_SIZE):
             gsel = random.randint(0, consts.NUM_SELFPLAY_GAMES - 1)
-            gdata = json.loads(open(path.join(selfplay_games_path, '{}.json'.format(gsel))).read().decode('utf-8'))
+            gdata = json.loads(open(path.join(selfplay_games_path, '{}.json'.format(gsel))).read())
 
             fsel = random.randint(0, len(gdata['steps']) - 1)
 
-            result_mul = 1
+            actions = []
 
-            if fsel % 2 == 1:
-                result_mul = -1
-            
-            outbatch.append(
-                (gdata['steps'][fsel]['headers'], gdata['steps'][fsel]['frames'], gdata['steps'][fsel]['lmm']),
-                (gdata['steps'][fsel]['mcts'], gdata['result'] * result_mul)
-            )
+            for i in range(fsel):
+                actions.append(gdata['steps'][i]['action'])
 
-        return outbatch
+            positions.append((actions, gdata['steps'][fsel]['mcts_pairs'], gdata['result']))
+
+        return positions

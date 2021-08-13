@@ -8,7 +8,8 @@ import json
 import os
 
 static_files = [
-    '/static/index.html'
+    '/static/index.html',
+    '/static/viewer.js'
 ]
 
 rootpath = os.path.dirname(os.path.dirname(__file__))
@@ -24,7 +25,10 @@ class RequestHandler(BaseHTTPRequestHandler):
 
         if self.path in static_files:
             self.send_response(200)
-            self.send_header('Content-Type', 'text/html')
+            if self.path.endswith('html'):
+                self.send_header('Content-Type', 'text/html')
+            elif self.path.endswith('js'):
+                self.send_header('Content-Type', 'application/javascript')
             self.end_headers()
             self.wfile.write(open(os.path.join(rootpath, self.path[1:])).read().encode('utf-8'))
         elif self.path == '/status':
