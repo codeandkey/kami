@@ -27,7 +27,10 @@ use std::time::SystemTime;
 /// Outgoing message type.
 enum Message {
     Error(String),
-    Searching(Tree),
+    Searching {
+        tree: Tree,
+        fen: String,
+    },
     Input {
         headers: Vec<f32>,
         frames: Vec<f32>,
@@ -37,7 +40,10 @@ enum Message {
         action: String,
         mcts_pairs: Vec<(f64, String)>,
     },
-    Outcome(f64),
+    Outcome {
+        fen: String,
+        result: f64,
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -150,7 +156,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             Command::Go => {
                 // Check if the game is over.
                 if let Some(res) = tree.get_position().is_game_over() {
-                    write_message(&mut writer, Message::Outcome(res))?;
+                    write_message(&mut writer, Message::Outcome {
+                        result: res,
+                        fen: tree.get_position().get_fen(),
+                    })?;
                     continue;
                 }
 
@@ -169,7 +178,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                     if start.elapsed()?.as_millis() > consts::STATUS_INTERVAL {
                         start = SystemTime::now();
-                        write_message(&mut writer, Message::Searching(tree.clone()))?;
+                        write_message(&mut writer, Message::Searching {
+                            tree: tree.clone(),
+                            fen: tree.get_position().get_fen(),
+                        })?;
                     }
                 }
 

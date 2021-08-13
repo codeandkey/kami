@@ -61,7 +61,8 @@ class Trainer:
                 os.remove(candidate_path)
 
     def update_search_status(self, stat):
-        self.status['search'] = stat
+        self.status['tree'] = stat['tree']
+        self.status['fen'] = stat['fen']
 
     def advance_candidate(self):
         """Accepts the current candidate as the next generation."""
@@ -87,11 +88,15 @@ class Trainer:
             if path.exists(p):
                 os.remove(p)
 
+        # Write generation marker
+        with open(gen_path, 'w') as f:
+            f.write(str(gen + 1))
+
         print('Accepted candidate as generation {}'.format(gen + 1))
 
     def do_selfplay(self):
         """Generates all required selfplay games."""
-        needed_games = []
+        s = None
 
         # Generate selfplay set
         for i in range(consts.NUM_SELFPLAY_GAMES):
@@ -100,23 +105,21 @@ class Trainer:
             if path.exists(gpath):
                 continue
 
-            # Generate selfplay game
-            needed_games.append(gpath)
-        
-        if len(needed_games) > 0:
-            print('Generating %s selfplay games' % len(needed_games))
-            s = Search(model_path)
+            print('Generating selfplay game {} of {}'.format(i + 1, consts.NUM_SELFPLAY_GAMES))
+
+            if s is None:
+                s = Search(model_path)
 
             self.status['task'] = 'selfplay'
 
-            for target in needed_games:
-                game = self.play_game(s, s)
+            game = self.play_game(s, s)
 
-                with open(target, 'w') as f:
-                    f.write(json.dumps(game))
+            with open(gpath, 'w') as f:
+                f.write(json.dumps(game))
 
-                print('Finished selfplay game {}, result {}'.format(target, game['result']))
+            print('Finished game, result {}'.format(game['result']))
 
+        if s:
             s.stop()
 
     def play_game(self, white, black):
@@ -138,8 +141,9 @@ class Trainer:
             else:
                 result = black.go(lambda stat: self.update_search_status(stat))
 
-            if 'outcome' in result:
-                current_game['result'] = result['outcome']
+            if 'result' in result:
+                self.status['fen'] = result['fen']
+                current_game['result'] = result['result']
                 break
 
             white.push(result['action'])

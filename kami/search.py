@@ -97,9 +97,7 @@ class Search:
                 status_data(resp['Searching'])
 
             if 'Outcome' in resp:
-                return {
-                    'outcome': resp['Outcome']
-                }
+                return resp['Outcome']
             
             if 'Done' in resp:
                 return resp['Done']
