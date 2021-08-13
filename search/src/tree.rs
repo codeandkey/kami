@@ -175,7 +175,7 @@ impl Tree {
                     + ((child.p * (1.0 - self.params.puct_noise_weight))
                         + self.params.puct_noise_weight * noise)
                         * self.params.puct_policy_weight
-                        + (cur_n as f64).sqrt()
+                        * (cur_n as f64).sqrt()
                         / (child.n as f64 + 1.0);
 
                 assert!(
