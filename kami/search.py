@@ -18,6 +18,7 @@ class Search:
             'cargo',
             'build',
             '--release',
+            '--quiet'
         ], cwd=os.path.join(os.path.dirname(os.path.dirname(__file__)), 'search'))
 
         if self.sproc.wait() != 0:
@@ -28,6 +29,7 @@ class Search:
         self.sproc = sp.Popen([
             'cargo',
             'run',
+            '--quiet',
             '--release',
             '--',
             str(port),
