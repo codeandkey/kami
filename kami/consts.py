@@ -27,10 +27,12 @@ TRAINING_BATCH_SIZE = 16
 # Tree search parameters
 
 PUCT_NOISE_WEIGHT  = 0.05  # PUCT noise component weight
-PUCT_POLICY_WEIGHT = 3.0   # PUCT policy component weight (prior + noise)
+PUCT_POLICY_WEIGHT = 4     # PUCT policy component weight (prior + noise)
 PUCT_NOISE_ALPHA   = 0.285 # PUCT dirichlet noise alpha
 TREE_TEMPERATURE   = 1.0   # Move selection temperature
-BATCH_SIZE         = 16
+TREE_TEMPERATURE_DROP = 0.1 # Move temperature (after drop ply)
+TREE_TEMPERATURE_DROP_PLY = 30 # After nth ply, switch to drop temperature
+BATCH_SIZE         = 32
 
 # Search control parameters
 

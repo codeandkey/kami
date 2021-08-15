@@ -64,6 +64,8 @@ class Search:
                 'model_path': modelpath,
                 'search_nodes': consts.SEARCH_NODES,
                 'temperature': consts.TREE_TEMPERATURE,
+                'temperature_drop': consts.TREE_TEMPERATURE_DROP,
+                'temperature_drop_ply': consts.TREE_TEMPERATURE_DROP_PLY,
             }
         }
 

@@ -11,6 +11,7 @@ static_files = [
     '/index.html',
     '/js/viewer.js',
     '/js/chessboard-1.0.0.js',
+    '/js/chart.js',
     '/img/chesspieces/wikipedia/bB.png',
     '/img/chesspieces/wikipedia/bK.png',
     '/img/chesspieces/wikipedia/bN.png',
