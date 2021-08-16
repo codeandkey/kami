@@ -24,7 +24,7 @@ static_files = [
     '/img/chesspieces/wikipedia/wP.png',
     '/img/chesspieces/wikipedia/wQ.png',
     '/img/chesspieces/wikipedia/wR.png',
-    '/css/chessboard-1.0.0.min.css',
+    '/css/chessboard-1.0.0.css',
 ]
 
 staticpath = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static')

@@ -221,7 +221,7 @@ impl Tree {
     }
 
     /// Selects an action randomly from the tree given an MCTS temperature.
-    pub fn pick(&self) -> ChessMove {
+    pub fn pick(&self) -> (ChessMove, f64) {
         assert!(
             self[0].children.is_some(),
             "Will not pick moves with no children (n={}, t={:?}): {}",
@@ -241,7 +241,7 @@ impl Tree {
         }
 
         for &nd in child_nodes.iter() {
-            actions.push(self[nd].action.unwrap());
+            actions.push((self[nd].action.unwrap(), self[nd].q()));
             probs.push(((self[nd].n + 1) as f64).powf(1.0 / temp as f64));
         }
 

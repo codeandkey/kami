@@ -1,8 +1,9 @@
-UPDATE_INTERVAL = 100
+UPDATE_INTERVAL = 250
 
 var board;
 var confidenceChart;
 var depthChart;
+var scoreChart;
 
 function init_confidence_chart() {
     var ctx = document.getElementById('confidence-chart').getContext('2d');
@@ -27,6 +28,38 @@ function init_depth_chart() {
         options: {
             animation: {
                 duration: 0
+            },
+            scales: {
+                yAxis: {
+                    min: 0,
+                }
+            }
+        }
+    });
+}
+
+function init_score_chart() {
+    var ctx = document.getElementById('score-chart').getContext('2d');
+
+    scoreChart = new Chart(ctx, {
+        type: 'line',
+        options: {
+            animation: {
+                duration: 0
+            },
+            scales: {
+                yAxis: {
+                    min: -1,
+                    max: 1
+                },
+                xAxis: {
+                    position: 'center',
+                    borderWidth: 4,
+                    color: '#333333',
+                    ticks: {
+                        display: false,
+                    }
+                }
             }
         }
     });
@@ -47,18 +80,18 @@ function update_confidence_chart(tree) {
     confidenceChart.data = {
         datasets: [{
             label: 'Confidence',
-            backgroundColor: 'rgb(99, 255, 132)',
-            borderColor: 'rgb(99, 255, 132)',
+            backgroundColor: '#f92672',
+            borderColor: '#f92672',
             data: tree.map(function (nd) { return nd.n / totaln; })
         },{
             label: 'Exploration',
-            backgroundColor: 'rgb(255, 132, 255)',
-            borderColor: 'rgb(255, 255, 132)',
+            backgroundColor: '#ae81ff',
+            borderColor: '#ae81ff',
             data: tree.map(function (nd) { return nd.p * (Math.sqrt(totaln) / (nd.n+ 1)); })
         },{
             label: 'Value',
-            backgroundColor: 'rgb(0, 255, 255)',
-            borderColor: 'rgb(255, 255, 132)',
+            backgroundColor: '#66d9ef',
+            borderColor: '#66d9ef',
             data: tree.map(function (nd) { return nd.q; })
         }],
         labels: tree.map(function (nd) { return nd.action; })
@@ -71,14 +104,28 @@ function update_depth_chart(depth_data) {
     depthChart.data = {
         datasets: [{
             label: 'Depth (root)',
-            backgroundColor: 'rgb(99, 255, 132)',
-            borderColor: 'rgb(99, 255, 132)',
+            backgroundColor: '#a1ef44',
+            borderColor: '#a1ef44',
             data: depth_data
         }],
         labels: [...Array(depth_data.length).keys()]
     };
 
     depthChart.update();
+}
+
+function update_score_chart(score_data) {
+    scoreChart.data = {
+        datasets: [{
+            label: 'Score (w)',
+            backgroundColor: '#f92672',
+            borderColor: '#f92672',
+            data: score_data
+        }],
+        labels: [...Array(score_data.length).keys()]
+    };
+
+    scoreChart.update();
 }
 
 function update_tree_full(tree) {
@@ -129,6 +176,9 @@ function update_status() {
         if ('depth' in resp) {
             update_depth_chart(resp['depth']);
         }
+        if ('score' in resp) {
+            update_score_chart(resp['score']);
+        }
     });
 }
 
@@ -139,6 +189,7 @@ function update_board(fen) {
 $('document').ready(function() {
     init_confidence_chart();
     init_depth_chart();
+    init_score_chart();
 
     interval = setInterval(update_status, UPDATE_INTERVAL);
     board = Chessboard('game-board', 'start');

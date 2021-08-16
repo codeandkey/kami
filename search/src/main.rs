@@ -14,7 +14,7 @@ use position::Position;
 use tree::Tree;
 use worker::{Worker, WorkerMsg};
 
-use chess::ChessMove;
+use chess::{ChessMove, Color};
 use serde::{Serialize, Deserialize};
 use std::error::Error;
 use std::io::{BufReader, BufRead, Write, BufWriter};
@@ -39,6 +39,7 @@ enum Message {
     Done {
         action: String,
         depth: usize,
+        score: f64,
         mcts_pairs: Vec<(f64, String)>,
     },
     Outcome {
@@ -205,9 +206,18 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                 readies.into_iter().for_each(|x| wtx.send(x).unwrap());
 
+                let (picked, value) = tree.pick();
+
+                let score = if tree[0].color == Color::Black {
+                    -value
+                } else {
+                    value
+                };
+
                 // Send a final search-complete message.
                 write_message(&mut writer, Message::Done {
-                    action: tree.pick().to_string(),
+                    action: picked.to_string(),
+                    score: score,
                     mcts_pairs: tree.get_mcts_pairs(),
                     depth: tree[0].maxdepth,
                 })?;

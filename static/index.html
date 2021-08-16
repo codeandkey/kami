@@ -1,5 +1,5 @@
 <!doctype html>
-<html>
+<html style='height: 100%'>
     <head>
         <meta charset='utf-8'>
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.0/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-KyZXEAg3QhqLMpG8r+8fhAXLRk2vvoC2f3B09zVXn8CA5QIVfZOJ3BCsw2P0p/We" crossorigin="anonymous">
@@ -8,11 +8,11 @@
         <script src="/js/chessboard-1.0.0.js"></script>
         <script src="/js/chart.js"></script>
         <script src="/js/viewer.js"></script>
-        <link rel="stylesheet" href="/css/chessboard-1.0.0.min.css" />
+        <link rel="stylesheet" href="/css/chessboard-1.0.0.css" />
     </head>
-    <body class='bg-dark' style="overflow:hidden;">
-        <div class='container-fluid'>
-            <div class='row'>
+    <body class='bg-dark' style="overflow:hidden;width:100%;height:100%;">
+        <div class='container-fluid' style='height: 100%;'>
+            <div class='row' style='height: 100%'>
                 <!-- TREEview <div class='col'>
                     <div class='container'>
                         <table class='table table-sm table-striped table-dark'>
@@ -30,18 +30,27 @@
                         </table>
                     </div>
                 </div> -->
-                <div class='col'>
+                <div class='col' style='height: 100%'>
                     <!-- Condensed tree stats -->
-                    <div class='row'>
-                        <canvas id='confidence-chart' width=400px height=200px></canvas>
+                    <div class='row' style='height: 33%;'>
+                        <canvas id='confidence-chart' style='width:100%; height: 100%;'></canvas>
                     </div>
-                    <div class='row'>
-                        <canvas id='depth-chart' width=400px height=200px></canvas>
+                    <div class='row' style='height: 33%;'>
+                        <canvas id='depth-chart' style='width:100%; height: 100%;'></canvas>
+                    </div>
+                    <div class='row' style='height: 33%;'>
+                        <canvas id='score-chart' style='width:100%; height: 100%;'></canvas>
                     </div>
                 </div>
-                <div class='col justify-content-center'>
-                    <div id='game-board' style='width: 100%'></div>
-                </div>
+                <table class='table col table-dark'>
+                    <tbody>
+                        <tr>
+                            <td class='align-middle'>
+                                <div id='game-board' style='width: 100%; height: 100%'></div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </body>

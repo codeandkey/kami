@@ -130,6 +130,7 @@ class Trainer:
 
         self.status['actions'] = []
         self.status['depth'] = []
+        self.status['score']= []
 
         pos = chess.Board()
 
@@ -158,6 +159,7 @@ class Trainer:
 
             self.status['depth'].append(result['depth'])
             self.status['actions'].append(result['action'])
+            self.status['score'].append(result['score'])
 
         return current_game
     
