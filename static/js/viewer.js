@@ -179,6 +179,9 @@ function update_status() {
         if ('score' in resp) {
             update_score_chart(resp['score']);
         }
+        if ('state' in resp) {
+            $('#state').text(resp['state']);
+        }
     });
 }
 

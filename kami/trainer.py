@@ -107,6 +107,12 @@ class Trainer:
 
             print('Generating selfplay game {} of {}'.format(i + 1, consts.NUM_SELFPLAY_GAMES))
 
+            self.status['state'] = 'Selfplay: generation {}, {} of {}'.format(
+                open(gen_path).read(),
+                i + 1,
+                consts.NUM_SELFPLAY_GAMES,
+            )
+
             if s is None:
                 s = Search(model_path)
 
@@ -190,8 +196,6 @@ class Trainer:
 
             print('Generating arenacompare game {} of {}'.format(i + 1, consts.NUM_ARENA_GAMES))
 
-            self.status['task'] = 'arenacompare'
-
             if random.randint(0, 1) == 0:
                 white = candidate
                 black = current
@@ -202,6 +206,14 @@ class Trainer:
                 black = candidate
                 cside = -1
                 print('White: Current, Black: Candidate')
+
+            self.status['state'] = 'Arena: {} vs. {} ({} of {}, WR {})'.format(
+                open(gen_path).read() if cside == -1 else 'candidate',
+                open(gen_path).read() if cside == 1 else 'candidate',
+                i + 1,
+                consts.NUM_ARENA_GAMES,
+                score / consts.NUM_ARENA_GAMES,
+            )
 
             game = self.play_game(white, black)
             game['cside'] = cside
@@ -258,6 +270,7 @@ class Trainer:
         self.do_selfplay()
 
         print('Generating candidate model')
+        self.status['state'] = 'Generating candidate model'
 
         # Flush arenacompare games
         for i in range(consts.NUM_ARENA_GAMES):
