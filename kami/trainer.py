@@ -128,6 +128,9 @@ class Trainer:
             'steps': []
         }
 
+        self.status['actions'] = []
+        self.status['depth'] = []
+
         pos = chess.Board()
 
         white.reset()
@@ -152,6 +155,9 @@ class Trainer:
                 black.push(result['action'])
 
             current_game['steps'].append(result)
+
+            self.status['depth'].append(result['depth'])
+            self.status['actions'].append(result['action'])
 
         return current_game
     
