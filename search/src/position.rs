@@ -276,6 +276,11 @@ impl Position {
         self.top().b.to_string()
     }
 
+    /// Returns the current ply count.
+    pub fn ply(&self) -> usize {
+        self.states.len() - 1
+    }
+
     /// Pushes the current board/rep state onto the frames layer.
     fn push(&mut self, reps: usize) {
         let b = self.top().b;

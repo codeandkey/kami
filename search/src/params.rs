@@ -12,4 +12,6 @@ pub struct Params {
     pub model_path: PathBuf,
     pub num_threads: usize,
     pub temperature: f64,
+    pub temperature_drop: f64,
+    pub temperature_drop_ply: usize,
 }

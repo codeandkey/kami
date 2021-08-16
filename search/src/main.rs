@@ -38,6 +38,7 @@ enum Message {
     },
     Done {
         action: String,
+        depth: usize,
         mcts_pairs: Vec<(f64, String)>,
     },
     Outcome {
@@ -208,6 +209,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 write_message(&mut writer, Message::Done {
                     action: tree.pick().to_string(),
                     mcts_pairs: tree.get_mcts_pairs(),
+                    depth: tree[0].maxdepth,
                 })?;
             },
         }

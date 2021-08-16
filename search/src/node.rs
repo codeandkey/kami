@@ -2,7 +2,7 @@ use chess::{ChessMove, Color};
 use serde::ser::{Serialize, Serializer, SerializeStruct};
 
 /// Node terminal cache enum.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum TerminalStatus {
     Unknown,
     NotTerminal,

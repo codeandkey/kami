@@ -33,9 +33,7 @@ impl Tree {
         let mut batch = Batch::new(self.params.batch_size.into());
 
         for _ in 0..self.params.batch_size {
-            if !self.mcts_select(&mut batch, 0) {
-                break;
-            }
+            self.mcts_select(&mut batch, 0);
         }
         
         return batch;
@@ -104,7 +102,7 @@ impl Tree {
                 assert!(!p.is_nan(), "policy is NaN out of network");
                 new_children.push(self.nodes.len());
 
-                self.nodes.push(Node::child(idx, p.into(), *mv, new_color));
+                self.nodes.push(Node::child(target, p.into(), *mv, new_color));
             }
 
             self[target].children = Some(new_children);
@@ -192,22 +190,17 @@ impl Tree {
 
         pairs.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
 
-        // Iterate over children
-        for (child, _) in pairs {
-            // Perform child action
-            assert!(self.position.make_move(self[child].action.unwrap()));
+        let child = pairs[0].0;
 
-            // Try MCTS iteration
-            let result = self.mcts_select(b, child);
+        // Perform child action
+        assert!(self.position.make_move(self[child].action.unwrap()));
 
-            self.position.unmake_move();
+        // Try MCTS iteration
+        let result = self.mcts_select(b, child);
 
-            if result {
-                return true;
-            }
-        }
+        self.position.unmake_move();
 
-        return false;
+        return result;
     }
 
     /// Backpropagates a value up through the tree.
@@ -231,7 +224,9 @@ impl Tree {
     pub fn pick(&self) -> ChessMove {
         assert!(
             self[0].children.is_some(),
-            "Will not pick moves with no children: {}",
+            "Will not pick moves with no children (n={}, t={:?}): {}",
+            self[0].n,
+            self[0].terminal,
             self.position.get_fen()
         );
 
@@ -239,9 +234,15 @@ impl Tree {
         let mut actions = Vec::new();
         let mut probs = Vec::new();
 
+        let mut temp = self.params.temperature;
+
+        if self.get_position().ply() >= self.params.temperature_drop_ply {
+            temp = self.params.temperature_drop;
+        }
+
         for &nd in child_nodes.iter() {
             actions.push(self[nd].action.unwrap());
-            probs.push(((self[nd].n + 1) as f64).powf(1.0 / self.params.temperature as f64));
+            probs.push(((self[nd].n + 1) as f64).powf(1.0 / temp as f64));
         }
 
         let index = WeightedIndex::new(probs).expect("failed to initialize rand index");
