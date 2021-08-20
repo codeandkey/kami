@@ -1,6 +1,6 @@
-# Global immutable constants.
+# Global immutable constants
 
-# Network architecture.
+# Network architecture
 
 FRAME_COUNT = 6  # number of history frames
 FRAME_SIZE  = 14 # history frame length
@@ -18,30 +18,30 @@ L2_REG_WEIGHT  = 0.01 # L2 regularization weight
 
 # Trainer parameters
 
-NUM_SELFPLAY_GAMES = 8
-NUM_ARENA_GAMES = 10
-ARENACOMPARE_THRESHOLD = 0.6
-NUM_TRAINING_BATCHES = 32
-TRAINING_BATCH_SIZE = 4
+NUM_SELFPLAY_GAMES     = 8   # number of selfplay games (training window size)
+NUM_ARENA_GAMES        = 10  # number of arenacompare games
+SELFPLAY_WINDOW_SHIFT  = 2   # additional games to play after candidate rejected
+ARENACOMPARE_THRESHOLD = 0.6 # min required win rate to accept candidate
+NUM_TRAINING_BATCHES   = 32  # number of training batches
+TRAINING_BATCH_SIZE    = 4   # positions per training batch
 
 # Tree search parameters
 
-PUCT_NOISE_WEIGHT  = 0.05  # PUCT noise component weight
-PUCT_POLICY_WEIGHT = 4     # PUCT policy component weight (prior + noise)
-PUCT_NOISE_ALPHA   = 0.285 # PUCT dirichlet noise alpha
-TREE_TEMPERATURE   = 1.0   # Move selection temperature
-TREE_TEMPERATURE_DROP = 1.0 # Move temperature (after drop ply)
-TREE_TEMPERATURE_DROP_PLY = 30 # After nth ply, switch to drop temperature
-BATCH_SIZE         = 32
+PUCT_NOISE_WEIGHT         = 0.05  # PUCT noise component weight
+PUCT_POLICY_WEIGHT        = 4     # PUCT policy component weight (prior + noise)
+PUCT_NOISE_ALPHA          = 0.285 # PUCT dirichlet noise alpha
+TREE_TEMPERATURE          = 1.0   # Move selection temperature
+TREE_TEMPERATURE_DROP     = 1.0   # Move temperature (after drop ply)
+TREE_TEMPERATURE_DROP_PLY = 30    # After nth ply, switch to drop temperature
+BATCH_SIZE                = 16    # Maximum nodes per batch
 
 # Search control parameters
 
 WORKER_PORT   = 8124   # Port to communciate with workers on
 SEARCH_NODES  = 16000   # Nodes per search
-
 MAX_RETRIES = 10
 RETRY_DELAY = 1
 
 # Webserver parameters
 
-WEB_PORT = 8000
+WEBSERVER_BIND = ('0.0.0.0', 8000) # Web server bind address and port (ipv4)

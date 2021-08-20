@@ -60,6 +60,22 @@ class Trainer:
 
                 os.remove(candidate_path)
 
+                # Remove the oldest n selfplay games.
+
+                for i in range(consts.SELFPLAY_WINDOW_SHIFT):
+                    p = path.join(selfplay_games_path, '{}.json'.format(i))
+                    
+                    if path.exists(p):
+                        os.remove(p)
+
+                # Shift the existing selfplay games down.
+
+                for i in range(consts.SELFPLAY_WINDOW_SHIFT, consts.NUM_SELFPLAY_GAMES):
+                    src = path.join(selfplay_games_path, '{}.json'.format(i))
+                    dst = path.join(selfplay_games_path, '{}.json'.format(i - consts.SELFPLAY_WINDOW_SHIFT))
+
+                    os.rename(src, dst)
+
     def update_search_status(self, stat):
         self.status['tree'] = stat['tree']
         self.status['fen'] = stat['fen']
