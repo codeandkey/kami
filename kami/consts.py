@@ -21,8 +21,8 @@ L2_REG_WEIGHT  = 0.01 # L2 regularization weight
 NUM_SELFPLAY_GAMES = 8
 NUM_ARENA_GAMES = 10
 ARENACOMPARE_THRESHOLD = 0.6
-NUM_TRAINING_BATCHES = 16
-TRAINING_BATCH_SIZE = 16
+NUM_TRAINING_BATCHES = 32
+TRAINING_BATCH_SIZE = 4
 
 # Tree search parameters
 
@@ -30,14 +30,14 @@ PUCT_NOISE_WEIGHT  = 0.05  # PUCT noise component weight
 PUCT_POLICY_WEIGHT = 4     # PUCT policy component weight (prior + noise)
 PUCT_NOISE_ALPHA   = 0.285 # PUCT dirichlet noise alpha
 TREE_TEMPERATURE   = 1.0   # Move selection temperature
-TREE_TEMPERATURE_DROP = 0.1 # Move temperature (after drop ply)
+TREE_TEMPERATURE_DROP = 1.0 # Move temperature (after drop ply)
 TREE_TEMPERATURE_DROP_PLY = 30 # After nth ply, switch to drop temperature
 BATCH_SIZE         = 32
 
 # Search control parameters
 
 WORKER_PORT   = 8124   # Port to communciate with workers on
-SEARCH_NODES  = 5000   # Nodes per search
+SEARCH_NODES  = 16000   # Nodes per search
 
 MAX_RETRIES = 10
 RETRY_DELAY = 1
