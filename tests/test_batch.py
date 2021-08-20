@@ -13,8 +13,8 @@ def test_batch_can_init_with_various_maxsize():
     for i in range(1, 32):
         Batch(i)
 
-# Checks the batch input is correct.
-def test_batch_input_is_correct():
+# Checks the batch input concat transformation is correct.
+def test_batch_input_concat_correct():
     b = Batch(2)
 
     def random_lmm():
