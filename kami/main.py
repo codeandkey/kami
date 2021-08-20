@@ -65,8 +65,8 @@ class RequestHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
 
-server = HTTPServer(('0.0.0.0', consts.WEB_PORT), RequestHandler)
-print('Listening on 0.0.0.0:%s' % consts.WEB_PORT)
+server = HTTPServer(consts.WEBSERVER_BIND, RequestHandler)
+print('Listening on %s:%s' % consts.WEBSERVER_BIND)
 
 try:
     server.serve_forever()
