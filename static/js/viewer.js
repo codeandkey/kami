@@ -9,12 +9,20 @@ function init_confidence_chart() {
     var ctx = document.getElementById('confidence-chart').getContext('2d');
 
     confidenceChart = new Chart(ctx, {
+        responsive: true,
+        maintainAspectRatio: false,
         type: 'bar',
         data: [],
         labels: [],
         options: {
             animation: {
                 duration: 0
+            },
+            scales: {
+                yAxis: {
+                    min: -1,
+                    max: 1
+                },
             }
         }
     });
@@ -87,7 +95,7 @@ function update_confidence_chart(tree) {
             label: 'Exploration',
             backgroundColor: '#ae81ff',
             borderColor: '#ae81ff',
-            data: tree.map(function (nd) { return nd.p * (Math.sqrt(totaln) / (nd.n+ 1)); })
+            data: tree.map(function (nd) { return nd.p * 3.5 * (Math.sqrt(totaln) / (nd.n+ 1)); })
         },{
             label: 'Value',
             backgroundColor: '#66d9ef',
@@ -182,6 +190,10 @@ function update_status() {
         if ('state' in resp) {
             $('#state').text(resp['state']);
         }
+        if ('progress' in resp) {
+            $('#search-progress').text(Math.round(Number.parseFloat(resp['progress']) * 100) + '%');
+            $('#search-progress').css('width', (resp['progress'] * 100).toString() + '%');
+        }
     });
 }
 
@@ -196,4 +208,10 @@ $('document').ready(function() {
 
     interval = setInterval(update_status, UPDATE_INTERVAL);
     board = Chessboard('game-board', 'start');
+
+    $(window).resize(function() {
+        confidenceChart.resize();
+        depthChart.resize();
+        scoreChart.resize();
+    });
 });
