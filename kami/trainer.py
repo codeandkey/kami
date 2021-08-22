@@ -80,6 +80,11 @@ class Trainer:
         self.status['tree'] = stat['tree']
         self.status['fen'] = stat['fen']
 
+        total_n = sum(map(lambda nd: nd['n'], stat['tree']))
+        self.status['progress'] = total_n / consts.SEARCH_NODES
+
+        self.status['nps'] = total_n / stat['elapsed']
+
     def advance_candidate(self):
         """Accepts the current candidate as the next generation."""
         os.remove(model_path)

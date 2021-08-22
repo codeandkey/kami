@@ -33,7 +33,9 @@ impl Tree {
         let mut batch = Batch::new(self.params.batch_size.into());
 
         for _ in 0..self.params.batch_size {
-            self.mcts_select(&mut batch, 0);
+            if !self.mcts_select(&mut batch, 0) {
+                break;
+            }
         }
         
         return batch;

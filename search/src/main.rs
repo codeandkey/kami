@@ -30,6 +30,7 @@ enum Message {
     Searching {
         tree: Tree,
         fen: String,
+        elapsed: u128,
     },
     Input {
         headers: Vec<f32>,
@@ -167,6 +168,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                 // Start searching!
                 let mut start = SystemTime::now();
+                let actual_start = SystemTime::now();
 
                 while tree[0].n < config.search_nodes as u32 {
                     match wrx.recv().unwrap() {
@@ -183,6 +185,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         write_message(&mut writer, Message::Searching {
                             tree: tree.clone(),
                             fen: tree.get_position().get_fen(),
+                            elapsed: actual_start.elapsed()?.as_millis(),
                         })?;
                     }
                 }
