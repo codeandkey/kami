@@ -83,7 +83,7 @@ class Trainer:
         total_n = sum(map(lambda nd: nd['n'], stat['tree']))
         self.status['progress'] = total_n / consts.SEARCH_NODES
 
-        self.status['nps'] = total_n / stat['elapsed']
+        self.status['nps'] = total_n / (stat['elapsed'] / 1000)
 
     def advance_candidate(self):
         """Accepts the current candidate as the next generation."""

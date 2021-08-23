@@ -18,9 +18,9 @@ L2_REG_WEIGHT  = 0.01 # L2 regularization weight
 
 # Trainer parameters
 
-NUM_SELFPLAY_GAMES     = 8   # number of selfplay games (training window size)
+NUM_SELFPLAY_GAMES     = 16  # number of selfplay games (training window size)
 NUM_ARENA_GAMES        = 10  # number of arenacompare games
-SELFPLAY_WINDOW_SHIFT  = 2   # additional games to play after candidate rejected
+SELFPLAY_WINDOW_SHIFT  = 4   # additional games to play after candidate rejected
 ARENACOMPARE_THRESHOLD = 0.6 # min required win rate to accept candidate
 NUM_TRAINING_BATCHES   = 32  # number of training batches
 TRAINING_BATCH_SIZE    = 4   # positions per training batch
@@ -38,7 +38,7 @@ BATCH_SIZE                = 16    # Maximum nodes per batch
 # Search control parameters
 
 WORKER_PORT   = 8124   # Port to communciate with workers on
-SEARCH_NODES  = 16000   # Nodes per search
+SEARCH_NODES  = 1600   # Nodes per search
 MAX_RETRIES = 10
 RETRY_DELAY = 1
 

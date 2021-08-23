@@ -194,6 +194,13 @@ function update_status() {
             $('#search-progress').text(Math.round(Number.parseFloat(resp['progress']) * 100) + '%');
             $('#search-progress').css('width', (resp['progress'] * 100).toString() + '%');
         }
+        if ('nps' in resp) {
+            // Update search data
+            $('#search-data').html(
+                'NPS: ' + Math.round(resp.nps) + '<br>' +
+                'FEN: ' + resp.fen
+            );
+        }
     });
 }
 
