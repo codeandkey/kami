@@ -1,1 +1,3 @@
-/target
+search/target
+data
+**/__pycache__

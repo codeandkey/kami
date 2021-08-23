@@ -1,0 +1,74 @@
+<!doctype html>
+<html style='height: 100%'>
+    <head>
+        <meta charset='utf-8'>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.0/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-KyZXEAg3QhqLMpG8r+8fhAXLRk2vvoC2f3B09zVXn8CA5QIVfZOJ3BCsw2P0p/We" crossorigin="anonymous">
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.0/dist/js/bootstrap.bundle.min.js" integrity="sha384-U1DAWAznBHeqEIlVSCgzq+c9gqGAJn5c/t99JyeKa9xxaYpSvHU5awsuZVVFIhvj" crossorigin="anonymous"></script>
+        <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+        <script src="/js/chessboard-1.0.0.js"></script>
+        <script src="/js/chart.js"></script>
+        <script src="/js/viewer.js"></script>
+        <link rel="stylesheet" href="/css/chessboard-1.0.0.css" />
+    </head>
+    <body class='bg-dark' style="overflow:hidden;width:100%;height:100%;">
+        <div class='container-fluid' style='height: 100%;'>
+            <div class='row' style='height: 100%'>
+                <!-- TREEview <div class='col'>
+                    <div class='container'>
+                        <table class='table table-sm table-striped table-dark'>
+                            <thead>
+                                <tr>
+                                    <th scope='col'>Action</th>
+                                    <th scope='col'>Probability</th>
+                                    <th scope='col'>Value</th>
+                                    <th scope='col'>Policy</th>
+                                    <th scope='col'>Terminal</th>
+                                </tr>
+                            </thead>
+                            <tbody id='tree-body'>
+                            </tbody>
+                        </table>
+                    </div>
+                </div> -->
+                <div class='col' style='height: 100%'>
+                    <!-- Condensed tree stats -->
+                    <div class='row' style='height: 33%;'>
+                        <canvas id='confidence-chart' style='width:100%; height: 100%;'></canvas>
+                    </div>
+                    <!-- Search depth display -->
+                    <div class='row' style='height: 33%;'>
+                        <canvas id='depth-chart' style='width:100%; height: 100%;'></canvas>
+                    </div>
+                    <!-- Game score graph -->
+                    <div class='row' style='height: 33%;'>
+                        <canvas id='score-chart' style='width:100%; height: 100%;'></canvas>
+                    </div>
+                </div>
+                <table class='table col table-dark'>
+                    <tbody>
+                        <tr class='text-center'>
+                            <td id='state'></td>
+                        </tr>
+                        <tr>
+                            <td class='align-middle'>
+                                <div id='game-board' style='width: 100%; height: 100%'></div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <div id='search-data'></div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <div class="progress">
+                                    <div id='search-progress' class="progress-bar" role="progressbar" style="width: 25%;" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </body>
+</html>
