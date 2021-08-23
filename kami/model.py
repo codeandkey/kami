@@ -1,6 +1,5 @@
 # Kami model type.
 
-from batch import Batch
 import consts
 
 import math
