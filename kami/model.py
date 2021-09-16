@@ -234,7 +234,7 @@ class Model:
         else:
             return torch.tensor(data, dtype=torch.float32)
 
-    def train(self, batches) -> (float, float):
+    def train(self, batches):
         """Trains the model in place on the training data provided in `training_batches`.
            Returns the starting average loss and the ending average loss."""
 
@@ -259,7 +259,7 @@ class Model:
         self.model.train(True)
 
         def value_loss(value, result):
-            return nn.MSELoss()(value, result)
+            return nn.MSELoss(reduction='sum')(value, result)
 
         def policy_loss(policy, mcts):
             return -torch.sum(mcts * torch.log(torch.add(policy, consts.POLICY_EPSILON)))
@@ -289,15 +289,23 @@ class Model:
                 optimizer.step()
 
             test_loss = 0
+            test_vloss = 0
+            test_ploss = 0
 
             with torch.no_grad():
                 for ((headers, frames, lmm), (mcts, result)) in batches:
                     policy, value = self.model(headers, frames, lmm)
-                    test_loss += policy_loss(policy, mcts).cpu().item() + value_loss(value, result).cpu().item()
+                    ploss = policy_loss(policy, mcts).cpu().item()
+                    vloss = value_loss(value, result).cpu().item()
+                    test_ploss += ploss
+                    test_vloss += vloss
+                    test_loss += ploss + vloss
                 
             test_loss /= len(batches)
+            test_vloss /= len(batches)
+            test_ploss /= len(batches)
 
-            print('Training: Epoch {}/{}, loss {}'.format(epoch + 1, consts.EPOCHS, test_loss), end='\r')
+            print('Training: Epoch {}/{}, loss avg p{:.2} v{:.2} t{:.2}'.format(epoch + 1, consts.EPOCHS, test_ploss, test_vloss, test_loss), end='\r')
 
             if first_avg_loss is None:
                 first_avg_loss = test_loss

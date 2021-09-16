@@ -66,6 +66,7 @@ class Search:
                 'temperature': consts.TREE_TEMPERATURE,
                 'temperature_drop': consts.TREE_TEMPERATURE_DROP,
                 'temperature_drop_ply': consts.TREE_TEMPERATURE_DROP_PLY,
+                'rollout_weight': consts.ROLLOUT_WEIGHT,
             }
         }
 
@@ -113,7 +114,7 @@ class Search:
            Input should be a list of triplets `(actions, mcts, result)` where
            `actions` is a list of move strings, `mcts` is a list of mcts values
            for each corresponding action, and `result` is the game result from
-           white's POV."""
+           ctm's POV."""
 
         batch = (
             (
@@ -136,8 +137,6 @@ class Search:
             mcts = [0.0] * 4096
 
             if flip:
-                result *= -1
-                
                 for pair in mcts_pairs:
                     value = pair[0]
                     mv = pair[1]

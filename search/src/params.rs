@@ -14,4 +14,5 @@ pub struct Params {
     pub temperature: f64,
     pub temperature_drop: f64,
     pub temperature_drop_ply: usize,
+    pub rollout_weight: f64,
 }

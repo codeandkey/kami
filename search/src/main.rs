@@ -209,13 +209,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                 readies.into_iter().for_each(|x| wtx.send(x).unwrap());
 
-                let (picked, value) = tree.pick();
+                let (picked, _) = tree.pick();
 
-                let score = if tree[0].color == Color::Black {
-                    -value
-                } else {
-                    value
-                };
+                let mut score = tree[0].q();
+
+                if tree[0].color == Color::Black {
+                    score *= -1.0;
+                }
 
                 // Send a final search-complete message.
                 write_message(&mut writer, Message::Done {

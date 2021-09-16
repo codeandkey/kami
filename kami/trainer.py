@@ -3,6 +3,7 @@
 import consts
 from model import Model
 from search import Search
+from buffer import Buffer
 
 import chess
 import json
@@ -19,6 +20,7 @@ selfplay_games_path = path.join(datapath, 'selfplay')
 arena_games_path = path.join(datapath, 'arena')
 gen_path = path.join(datapath, 'generation')
 archive_path = path.join(datapath, 'archive')
+training_buffer = Buffer('training', consts.TRAINING_BUFFER_SIZE)
 
 class Trainer:
     def __init__(self):
@@ -141,6 +143,8 @@ class Trainer:
 
             game = self.play_game(s, s)
 
+            training_buffer.add(game)
+
             with open(gpath, 'w') as f:
                 f.write(json.dumps(game))
 
@@ -159,18 +163,20 @@ class Trainer:
         self.status['depth'] = []
         self.status['score']= []
 
-        pos = chess.Board()
+        white_turn = True
 
         white.reset()
         black.reset()
 
-        while not pos.is_game_over(claim_draw=True):
+        while True:
             result = None
 
-            if pos.turn == chess.WHITE:
+            if white_turn:
                 result = white.go(lambda stat: self.update_search_status(stat))
             else:
                 result = black.go(lambda stat: self.update_search_status(stat))
+
+            white_turn = not white_turn
 
             if 'result' in result:
                 self.status['fen'] = result['fen']
@@ -193,6 +199,10 @@ class Trainer:
     def do_arenacompare(self):
         """Performs the arenacompare phase. Returns true if the candidate
            should be accepted, false otherwise."""
+
+        if consts.NUM_ARENA_GAMES == 0:
+            print('Skipping arenacompare phase')
+            return True
 
         current = None
         candidate = None
@@ -228,12 +238,13 @@ class Trainer:
                 cside = -1
                 print('White: Current, Black: Candidate')
 
-            self.status['state'] = 'Arena: {} vs. {} ({} of {}, WR {})'.format(
+            self.status['state'] = 'Arena: {} vs. {} ({} of {}, MWR {:.2}, CWR {:.2})'.format(
                 open(gen_path).read() if cside == -1 else 'candidate',
                 open(gen_path).read() if cside == 1 else 'candidate',
                 i + 1,
                 consts.NUM_ARENA_GAMES,
                 score / consts.NUM_ARENA_GAMES,
+                (score / i) if i > 0 else 0.0,
             )
 
             game = self.play_game(white, black)
@@ -321,16 +332,17 @@ class Trainer:
         positions = []
 
         for _ in range(consts.TRAINING_BATCH_SIZE):
-            gsel = random.randint(0, consts.NUM_SELFPLAY_GAMES - 1)
-            gdata = json.loads(open(path.join(selfplay_games_path, '{}.json'.format(gsel))).read())
-
+            gdata = training_buffer.choose()
             fsel = random.randint(0, len(gdata['steps']) - 1)
 
             actions = []
 
+            result_mul = 1.0
+
             for i in range(fsel):
                 actions.append(gdata['steps'][i]['action'])
+                result_mul *= -1.0
 
-            positions.append((actions, gdata['steps'][fsel]['mcts_pairs'], gdata['result']))
+            positions.append((actions, gdata['steps'][fsel]['mcts_pairs'], gdata['result'] * result_mul))
 
         return positions

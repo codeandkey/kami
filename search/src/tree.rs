@@ -82,6 +82,51 @@ impl Tree {
         return new_id;
     }
 
+    /// Rolls out a node until a terminal is reached.
+    /// Rollout path is not saved in the tree.
+    /// Returns the value of the reached terminal.
+    pub fn rollout(&mut self, start: usize) -> f64 {
+        // Trace actions to node
+        let mut path_to_start = Vec::new();
+        let mut current = start;
+
+        while current != 0 {
+            path_to_start.push(current);
+            current = self[current].parent.unwrap();
+        }
+
+        // Build position
+        let mut pos = self.position.clone();
+
+        for &i in path_to_start.iter().rev() {
+            assert!(pos.make_move(self[i].action.unwrap()));
+        }
+
+        // Until node is terminal, expand children
+        while pos.is_game_over().is_none() {
+            let moves = pos.generate_moves();
+            let mut rng = thread_rng();
+
+            let mv = moves[(rng.next_u32() as usize) % moves.len()];
+
+            assert!(pos.make_move(mv));
+        }
+
+        // It's a draw!
+        if pos.is_game_over().unwrap() == 0.0 {
+            return 0.0;
+        }
+
+        if self[start].color == pos.side_to_move() {
+            // The node's pov color has lost.
+            // So the color about to move loses, we are happy
+
+            return 1.0;
+        } else {
+            return -1.0;
+        }
+    }
+
     /// Expands a batch result.
     pub fn expand(&mut self, result: BatchResult) {
         for idx in 0..result.size {
@@ -93,15 +138,34 @@ impl Tree {
 
             assert_ne!(moves.len(), 0);
 
+            // Compute noise dist
+            let mut noise = match moves.len() {
+                1 => {
+                    vec![1.0]
+                },
+                x => {
+                    let dist = rand::distributions::Dirichlet::new_with_param(
+                        self.params.puct_noise_alpha,
+                        x,
+                    );
+
+                    let mut rng = thread_rng();
+                    dist.sample(&mut rng)
+                }
+            };
+
             for mv in moves {
                 let new_color = match self[target].color {
                     Color::White => Color::Black,
                     Color::Black => Color::White,
                 };
 
-                let p = result.policy_for_action(idx, &mv, self[target].color);
+                let model_p = result.policy_for_action(idx, &mv, self[target].color);
+                let noise_p = noise.pop().unwrap();
 
-                assert!(!p.is_nan(), "policy is NaN out of network");
+                let p = (noise_p * self.params.puct_noise_weight) + (model_p * (1.0 - self.params.puct_noise_weight));
+
+                assert!(!model_p.is_nan(), "policy is NaN out of network");
                 new_children.push(self.nodes.len());
 
                 self.nodes.push(Node::child(target, p.into(), *mv, new_color));
@@ -110,7 +174,12 @@ impl Tree {
             self[target].children = Some(new_children);
             self[target].claim = false;
 
-            self.backprop(target, result.value[idx], 0, 0);
+            if self.params.rollout_weight > 0.0 {
+                let rollout = self.rollout(target);
+                self.backprop(target, result.value[idx] * (1.0 - self.params.rollout_weight) + rollout * self.params.rollout_weight, 0, 0);
+            } else {
+                self.backprop(target, result.value[idx], 0, 0);
+            }
         }
     }
 
@@ -133,8 +202,11 @@ impl Tree {
             }
 
             if let TerminalStatus::Terminal(mut res) = self[this].terminal {
-                if res == -1.0 {
-                    res = 1.0; // If the position is checkmate, then this node (decision) has a high value.
+                // Our move, and we are lost.
+                // We are not happy.
+                
+                if res == 1.0 {
+                    res = -1.0;
                 }
 
                 self.backprop(this, res, 0, 1);
@@ -154,28 +226,14 @@ impl Tree {
         let children = self[this].children.as_ref().unwrap().clone();
         let cur_n = self[this].n;
 
-        let p_noise = match children.len() {
-            1 => vec![1.0],
-            len => {
-                let dist = rand::distributions::Dirichlet::new_with_param(
-                    self.params.puct_noise_alpha,
-                    len,
-                );
-                let mut rng = rand::thread_rng();
-                dist.sample(&mut rng)
-            }
-        };
-
         let mut pairs: Vec<(usize, f64)> = children
             .iter()
-            .zip(p_noise)
-            .map(|(&cidx, noise)| {
+            .map(|&cidx| {
                 let child = &self[cidx];
-                let uct = child.q()
-                    + ((child.p * (1.0 - self.params.puct_noise_weight))
-                        + self.params.puct_noise_weight * noise)
+                let uct = -child.q()
+                    + (child.p
                         * self.params.puct_policy_weight
-                        * (cur_n as f64).sqrt()
+                        * (cur_n as f64).sqrt())
                         / (child.n as f64 + 1.0);
 
                 assert!(
