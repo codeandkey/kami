@@ -1,5 +1,7 @@
 #pragma once
 
+#include <iostream>
+
 #include <vector>
 
 #include <cstring>
@@ -17,6 +19,7 @@ class Env {
 
     public:
         Env() {
+            board.Init();
             curturn = 1.0f;
         }
 
@@ -60,9 +63,9 @@ class Env {
         thc::Move decode(int action)
         {
             thc::Move out;
+            out.Invalid();
 
-            char mv[6];
-            mv[4] = mv[5] = '\0';
+            char mv[6] = {0};
 
             if (action < 4096)
             {
@@ -74,7 +77,7 @@ class Env {
                 mv[2] = thc::get_file(dst);
                 mv[3] = thc::get_rank(dst);
 
-                out.NaturalIn(&board, mv);
+                out.TerseIn(&board, mv);
                 return out;
             }
 
@@ -91,7 +94,7 @@ class Env {
             {
                 mv[0] = mv[2] = 'a' + action;
 
-                out.NaturalIn(&board, mv);
+                out.TerseIn(&board, mv);
                 return out;
             }
 
@@ -103,7 +106,7 @@ class Env {
                 mv[0] = 'b' + action;
                 mv[2] = 'a' + action;
 
-                out.NaturalIn(&board, mv);
+                out.TerseIn(&board, mv);
                 return out;
             }
 
@@ -113,7 +116,7 @@ class Env {
             mv[0] = 'a' + action;
             mv[2] = 'b' + action;
 
-            out.NaturalIn(&board, mv);
+            out.TerseIn(&board, mv);
             return out;
         }
 
@@ -121,6 +124,17 @@ class Env {
             float header[1 + 8 + 6 + 4];
 
             header[0] = 0.5f + curturn / 2.0f;
+
+            for (int i = 0; i < 8; ++i)
+                header[1 + i] = (history.size() >> (i + 1)) & 1;
+
+            for (int i = 0; i < 6; ++i)
+                header[9 + i] = (board.half_move_clock >> i) & 1;
+
+            header[15] = board.wking_allowed() ? 1.0f : 0.0f;
+            header[16] = board.wqueen_allowed() ? 1.0f : 0.0f;
+            header[17] = board.bking_allowed() ? 1.0f : 0.0f;
+            header[18] = board.bqueen_allowed() ? 1.0f : 0.0f;
 
             for (int rank = 0; rank < 8; ++rank)
             {
@@ -167,13 +181,16 @@ class Env {
 
         void push(int action)
         {
-            history.push_back(decode(action));
+            thc::Move mv = decode(action);
+            //std::cout << "pushing " << mv.TerseOut() << std::endl;
+            history.push_back(mv);
             board.PlayMove(history.back());
             curturn = -curturn;
         }
 
         void pop()
         {
+            //std::cout << "popping " << history.back().TerseOut() << std::endl;
             board.PopMove(history.back());
             history.pop_back();
             curturn = -curturn;
@@ -223,6 +240,11 @@ class Env {
                 out.push_back(encode(m));
 
             return out;
+        }
+
+        std::string print()
+        {
+            return board.ToDebugStr();
         }
 };
 }

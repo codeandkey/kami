@@ -52,6 +52,8 @@ class MCTS {
             root->turn = -env->turn();
         }
 
+        int n() { return root->n; }
+
         void push(int action)
         {
             Node* next = nullptr;
@@ -77,6 +79,9 @@ class MCTS {
         }
 
         int pick(float alpha = 0.0f) {
+            if (!root->children.size())
+                throw std::runtime_error("no children to pick from");
+
             if (alpha < 0.1f)
             {
                 int best_n = 0;
@@ -118,6 +123,8 @@ class MCTS {
                 if (ind <= 0.0)
                     return root->children[i]->action;
             }
+
+            return root->children.back()->action;
         }
 
         bool select(float* obs)
@@ -132,6 +139,13 @@ class MCTS {
             if (env->terminal(&value))
             {
                 target->backprop(value);
+
+                while (target != root)
+                {
+                    env->pop();
+                    target = target->parent;
+                }
+
                 target = nullptr;
                 return false;
             }
@@ -180,6 +194,8 @@ class MCTS {
                 new_child->parent = target;
                 new_child->turn = -target->turn;
                 new_child->p = policy[action];
+
+                target->children.push_back(new_child);
             }
 
             target->backprop(value);

@@ -29,6 +29,7 @@
 #include <ctype.h>
 #include <assert.h>
 #include <algorithm>
+#define strcpy_s(s, n, p) strncpy(s, p, n)
 #include "thc.h"
 using namespace std;
 using namespace thc;
