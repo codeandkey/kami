@@ -10,6 +10,7 @@ namespace kami {
 struct Node {
     int n = 0;
     float w = 0.0f;
+    float p = 0.0f;
     int action = -1;
     std::vector<Node*> children;
     Node* parent = nullptr;
@@ -21,7 +22,7 @@ struct Node {
     {
         for (auto& c : children)
         {
-            c.clean();
+            c->clean();
             delete c;
         }
     }
@@ -57,11 +58,11 @@ class MCTS {
 
             for (auto& c : root->children)
             {
-                if (c.action = action)
+                if (c->action == action)
                     next = c;
                 else
                 {
-                    c.clean();
+                    c->clean();
                     delete c;
                 }
             }
@@ -83,10 +84,10 @@ class MCTS {
 
                 for (auto& c : root->children)
                 {
-                    if (c.n > best_n)
+                    if (c->n > best_n)
                     {
-                        best_n = c.n;
-                        best_action = c.action;
+                        best_n = c->n;
+                        best_action = c->action;
                     }
                 }
 
@@ -115,7 +116,7 @@ class MCTS {
                 ind -= dist[i];
 
                 if (ind <= 0.0)
-                    return root->children[i].action;
+                    return root->children[i]->action;
             }
         }
 
@@ -148,14 +149,14 @@ class MCTS {
 
             for (auto& c : target->children)
             {
-                if (!c.n)
+                if (!c->n)
                 {
                     target = c;
-                    env->push(c.action);
+                    env->push(c->action);
                     return true;
                 }
 
-                double uct = c.q() + c.p * cPUCT * sqrt(target->n) / (c.n + 1.0);
+                double uct = c->q() + c->p * cPUCT * sqrt(target->n) / (c->n + 1.0);
 
                 if (uct > best_uct)
                 {
@@ -182,6 +183,14 @@ class MCTS {
             }
 
             target->backprop(value);
+
+            while (target != root)
+            {
+                env->pop();
+                target = target->parent;
+            }
+
+            target = nullptr;
         }
 };
 }
