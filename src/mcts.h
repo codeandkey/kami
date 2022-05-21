@@ -5,6 +5,9 @@
 #include <cmath>
 #include <vector>
 #include <stdexcept>
+#include <string>
+#include <sstream>
+#include <iomanip>
 
 namespace kami {
 struct Node {
@@ -35,15 +38,36 @@ struct Node {
         if (parent)
             parent->backprop(value);
     }
+
+    std::string debug(Env* e)
+    {
+        std::stringstream out;
+        float value;
+
+        out << std::setw(6) << e->decode(action).NaturalOut(&e->board);
+        out << " Visits: " << std::setw(4) << std::to_string(n);
+        out << " Average: " << std::to_string(q());
+        out << " Policy: " << std::to_string(p);
+        out << " Turn: " << std::to_string(turn);
+
+        e->push(action);
+
+        if (e->terminal(&value))
+            out << " Terminal: " << std::to_string(value);
+
+        e->pop();
+
+        return out.str();
+    }
 };
 
 class MCTS {
     private:
         Env* env = nullptr;
-        Node* root = nullptr;
         Node* target = nullptr;
 
     public:
+        Node* root = nullptr;
         MCTS(Env* initial)
         {
             env = initial;
@@ -101,7 +125,7 @@ class MCTS {
 
             double dist[root->children.size()], length = 0.0f;
 
-            for (int i = 0; i < root->children.size(); ++i)
+            for (unsigned i = 0; i < root->children.size(); ++i)
             {
                 Node* child = root->children[i];
 
@@ -116,7 +140,7 @@ class MCTS {
 
             double ind = (double) rand() / (double) RAND_MAX;
 
-            for (int i = 0; i < root->children.size(); ++i)
+            for (unsigned i = 0; i < root->children.size(); ++i)
             {
                 ind -= dist[i];
 
@@ -134,25 +158,25 @@ class MCTS {
             if (!target)
                 target = root;
 
-            // Test terminal state
-            float value;
-            if (env->terminal(&value))
-            {
-                target->backprop(value);
-
-                while (target != root)
-                {
-                    env->pop();
-                    target = target->parent;
-                }
-
-                target = nullptr;
-                return false;
-            }
-
             // If no children, need to expand
             if (target->children.empty())
             {
+                // Test terminal state
+                float value;
+                if (env->terminal(&value))
+                {
+                    target->backprop(value);
+
+                    while (target != root)
+                    {
+                        env->pop();
+                        target = target->parent;
+                    }
+
+                    target = nullptr;
+                    return false;
+                }
+
                 env->observe(obs);
                 return true;
             }
@@ -167,10 +191,10 @@ class MCTS {
                 {
                     target = c;
                     env->push(c->action);
-                    return true;
+                    return select(obs);
                 }
 
-                double uct = c->q() + c->p * cPUCT * sqrt(target->n) / (c->n + 1.0);
+                double uct = c->q() + c->p * cPUCT * sqrt(target->n) / (double) (c->n + 1);
 
                 if (uct > best_uct)
                 {

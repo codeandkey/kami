@@ -22,6 +22,17 @@
          nested inline expansion of -> GeneratedLookupTables.h
  */
 
+// Fix GCC warnings for -Werror
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wsign-compare"
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#pragma GCC diagnostic ignored "-Wchar-subscripts"
+
+// Fix windows-only strcpy_s
+#ifdef __linux__
+#define strcpy_s(s, n, p) strncpy(s, p, n)
+#endif
+
 #define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,7 +40,6 @@
 #include <ctype.h>
 #include <assert.h>
 #include <algorithm>
-#define strcpy_s(s, n, p) strncpy(s, p, n)
 #include "thc.h"
 using namespace std;
 using namespace thc;
@@ -12987,4 +12997,5 @@ lte to_mask[] =
 
 }
 
-
+// Reset GCC diagnostic stack
+#pragma GCC diagnostic pop

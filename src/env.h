@@ -13,14 +13,21 @@ constexpr int NFEATURES = 1 + 8 + 6 + 4 + 12;
 
 class Env {
     private:
-        thc::ChessRules board;
         float curturn;
         std::vector<thc::Move> history;
+        std::vector<char*> square_hist;
 
     public:
+        thc::ChessRules board;
+        std::vector<int> repetitions;
+
         Env() {
-            board.Init();
             curturn = 1.0f;
+            repetitions.push_back(1);
+
+            char* squares_dup = new char[sizeof(board.squares)];
+            memcpy(squares_dup, board.squares, sizeof board.squares);
+            square_hist.push_back(squares_dup);
         }
 
         int encode(thc::Move move) 
@@ -186,6 +193,17 @@ class Env {
             history.push_back(mv);
             board.PlayMove(history.back());
             curturn = -curturn;
+            char* squares_dup = new char[sizeof(board.squares)];
+            memcpy(squares_dup, board.squares, sizeof board.squares);
+            square_hist.push_back(squares_dup);
+
+            int reps = 0;
+
+            for (unsigned i = 0; i < square_hist.size(); ++i)
+                if (!memcmp(squares_dup, square_hist[i], sizeof board.squares))
+                    reps++;
+
+            repetitions.push_back(reps);
         }
 
         void pop()
@@ -194,34 +212,71 @@ class Env {
             board.PopMove(history.back());
             history.pop_back();
             curturn = -curturn;
+
+            delete[] square_hist.back();
+            square_hist.pop_back();
+            repetitions.pop_back();
         }
 
-        bool terminal(float* value)
+        bool terminal_str(float* value, std::string& out)
         {
             thc::TERMINAL val;
-            thc::DRAWTYPE unused;
+            thc::DRAWTYPE drawtype;
 
             board.Evaluate(val);
 
-            if (val == thc::TERMINAL_WCHECKMATE)
+            switch (val)
             {
-                *value = 1.0f;
-                return true;
+                case thc::TERMINAL_BCHECKMATE:
+                    *value = 1.0f;
+                    out = "Black is checkmated";
+                    return true;
+                case thc::TERMINAL_WCHECKMATE:
+                    *value = -1.0f;
+                    out = "White is checkmated";
+                    return true;
+                case thc::TERMINAL_WSTALEMATE:
+                    *value = 0.0f;
+                    out = "White is stalemated";
+                    return true;
+                case thc::TERMINAL_BSTALEMATE:
+                    *value = 0.0f;
+                    out = "Black is stalemated";
+                    return true;
+                default:;
             }
 
-            if (val == thc::TERMINAL_BCHECKMATE)
-            {
-                *value = -1.0f;
-                return true;
-            }
-
-            if (val != thc::NOT_TERMINAL || board.IsDraw(true, unused))
+            if (board.IsDraw(true, drawtype))
             {
                 *value = 0.0f;
+                
+                switch (drawtype)
+                {
+                    case thc::DRAWTYPE_50MOVE:
+                        out = "Draw by 50-move rule";
+                        break;
+                    case thc::DRAWTYPE_INSUFFICIENT:
+                        out = "Draw by insufficient material";
+                        break;
+                    case thc::DRAWTYPE_INSUFFICIENT_AUTO:
+                        out = "Draw by insufficient material (auto)";
+                        break;
+                    case thc::DRAWTYPE_REPITITION:
+                        out = "Draw by threefold repetition";
+                        break;
+                    default:;
+                }
+
                 return true;
             }
 
             return false;
+        }
+
+        bool terminal(float* value)
+        {
+            std::string unused;
+            return terminal_str(value, unused);
         }
 
         float turn()
