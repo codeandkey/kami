@@ -10,6 +10,7 @@
 
 namespace kami {
 constexpr int NFEATURES = 1 + 8 + 6 + 4 + 12;
+constexpr int PSIZE = 4096 + 4 * 22;
 
 class Env {
     private:
