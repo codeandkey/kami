@@ -1,6 +1,7 @@
 CXX      = g++
-CXXFLAGS = -Werror -Wall -g -I/usr/include/torch/csrc/api/include
-LDFLAGS  = -ltorch -ltorch_cpu -lc10
+#CXXFLAGS = -Werror -Wall -g -I/usr/include/torch/csrc/api/include
+CXXFLAGS = -Werror -Wall -O3 -I/usr/include/torch/csrc/api/include
+LDFLAGS  = -ltorch -ltorch_cuda -ltorch_cpu -lc10 -lc10_cuda -lprotobuf
 
 SOURCES = $(wildcard src/*.cpp src/chess/*.cpp)
 OBJECTS = $(SOURCES:.cpp=.o)
