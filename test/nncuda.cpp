@@ -1,12 +1,13 @@
 #include "../src/nn/nn.h"
 #include "../src/env.h"
 
+#define TESTSIZE 5000 // observations per batch test
+
 using namespace kami;
 using namespace std;
 
 int main() {
     float* inp = new float[128 * 8 * 8 * NFEATURES];
-    long bcount = 0;
 
     if (!torch::cuda::is_available())
     {
@@ -24,23 +25,20 @@ int main() {
 
     for (int f = 0; f < 4; ++f)
     {
-        int i = 8 << f;
+        clock_t start = clock(), timer = start;
+        int bsize = 8 << f; 
+        float policy[bsize * PSIZE];
+        float value[bsize];
 
-        clock_t start = clock();
-
-        float policy[i * PSIZE];
-        float value[i];
-
-        for (int b = 0; b < 5000; ++b)
+        for (int batch = 1; batch <= TESTSIZE / bsize; ++batch)
         {
-            for (int j = 0; j < i * 8 * 8 * NFEATURES; ++j)
-                inp[j] = (float) rand() / (float) RAND_MAX;
+            for (int i = 0; i < bsize * 8 * 8 * NFEATURES; ++i)
+                inp[i] = (float) rand() / (float) RAND_MAX;
 
-            net.infer(inp, i, policy, value);
+            net.infer(inp, bsize, policy, value);
         }
 
-        bcount = i * 5000;
-        cout << "batch size " << i << " : " << (bcount * CLOCKS_PER_SEC) / (clock() - start) << " pred/s\n";
+        cout << "batch size " << bsize << " : " << (TESTSIZE * CLOCKS_PER_SEC) / (clock() - start) << " pred/s" << endl;
     }
 
     delete[] inp;
