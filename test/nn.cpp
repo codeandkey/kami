@@ -9,7 +9,7 @@ using namespace std;
 int main() {
     float* inp = new float[128 * 8 * 8 * NFEATURES];
 
-    NN net(8, 8, NFEATURES, PSIZE, torch::kCPU);
+    NN net(8, 8, NFEATURES, PSIZE, true);
 
     for (int i = 8; i <= 128; i += 8)
     {

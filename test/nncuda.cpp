@@ -1,6 +1,8 @@
 #include "../src/nn/nn.h"
 #include "../src/env.h"
 
+#include <torch/cuda.h>
+
 #define TESTSIZE 5000 // observations per batch test
 
 using namespace kami;
@@ -9,19 +11,13 @@ using namespace std;
 int main() {
     float* inp = new float[128 * 8 * 8 * NFEATURES];
 
-    if (!torch::cuda::is_available())
+    NN net(8, 8, NFEATURES, PSIZE);
+
+    if (!net.isCUDA())
     {
-        cout << "Torch reports CUDA not available!" << endl;
+        cout << "Couldn't initialize model in CUDA mode, aborting\n";
         return 0;
     }
-
-    cout << "Torch reports " << torch::cuda::device_count() << " CUDA devices" << endl;
-
-    torch::Device dev(torch::kCUDA, 0);
-
-    cout << "CUDA device: " << dev << endl;
-
-    NN net(8, 8, NFEATURES, PSIZE, dev);
 
     for (int f = 0; f < 4; ++f)
     {
