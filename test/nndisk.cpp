@@ -28,7 +28,7 @@ int main() {
             cerr << "policy mismatch at " << i << ": " << policy[i] << " into " << policy2[i] << endl;
 
     if (value != value2)
-        cerr << "value mismatch" << endl;
+        cerr << "value mismatch: " << value << " into " << value2 << endl;
 
     return 0;
 }
