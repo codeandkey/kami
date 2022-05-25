@@ -98,8 +98,11 @@ void NN::infer(float* input, int batch, float* policy, float* value)
 
     std::vector<Tensor> outputs = forward(inputs);
 
-    float* policy_data = outputs[0].cpu().data_ptr<float>();
-    float* value_data = outputs[1].cpu().data_ptr<float>();
+    outputs[0] = outputs[0].cpu();
+    outputs[1] = outputs[1].cpu();
+
+    float* policy_data = outputs[0].data_ptr<float>();
+    float* value_data = outputs[1].data_ptr<float>();
 
     memcpy(policy, policy_data, batch * psize * sizeof(float));
     memcpy(value, value_data, batch * sizeof(float));
