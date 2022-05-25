@@ -46,5 +46,7 @@ namespace kami {
 
             void write(std::string path);
             void read(std::string path);
+
+            void train(float* data, int batch);
     };
 }
