@@ -8,6 +8,10 @@ using namespace std;
 
 int main() {
     float* inp = new float[128 * 8 * 8 * NFEATURES];
+    float* lmm = new float[128 * PSIZE];
+
+    for (int j = 0; j < 128 * PSIZE; ++j)
+        lmm[j] = ((float) rand() / (float) RAND_MAX) > 0.5f ? 1.0f : 0.0f;
 
     NN net(8, 8, NFEATURES, PSIZE, true);
 
@@ -23,12 +27,14 @@ int main() {
             for (int j = 0; j < i * 8 * 8 * NFEATURES; ++j)
                 inp[j] = (float) rand() / (float) RAND_MAX;
 
-            net.infer(inp, i, policy, value);
+            net.infer(inp, lmm, i, policy, value);
         }
 
         cout << "batch size " << i << " : " << (TESTSIZE * CLOCKS_PER_SEC) / (clock() - start) << " pred/s\n";
     }
 
     delete[] inp;
+    delete[] lmm;
+
     return 0;
 }

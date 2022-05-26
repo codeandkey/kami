@@ -151,7 +151,7 @@ class MCTS {
             return root->children.back()->action;
         }
 
-        bool select(float* obs)
+        bool select(float* obs, float* lmm)
         {
             static constexpr double cPUCT = 1.0;
 
@@ -178,6 +178,7 @@ class MCTS {
                 }
 
                 env->observe(obs);
+                env->lmm(lmm);
                 return true;
             }
 
@@ -191,7 +192,7 @@ class MCTS {
                 {
                     target = c;
                     env->push(c->action);
-                    return select(obs);
+                    return select(obs, lmm);
                 }
 
                 double uct = c->q() + c->p * cPUCT * sqrt(target->n) / (double) (c->n + 1);
@@ -205,7 +206,7 @@ class MCTS {
 
             env->push(best_child->action);
             target = best_child;
-            return select(obs);
+            return select(obs, lmm);
         }
 
         void expand(float* policy, float value)

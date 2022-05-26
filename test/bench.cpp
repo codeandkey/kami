@@ -27,8 +27,9 @@ int main()
         while (tree.n() < 1024)
         {
             float observation[8 * 8 * NFEATURES];
+            float lmm[PSIZE];
 
-            while (!tree.select(observation) && tree.n() < 1024);
+            while (!tree.select(observation, lmm) && tree.n() < 1024);
             if (tree.n() >= 1024) break;
 
             observations++;

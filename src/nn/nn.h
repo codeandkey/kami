@@ -11,6 +11,9 @@ using namespace torch::nn;
 namespace kami {
     constexpr int FILTERS = 16;
     constexpr int RESIDUALS = 4;
+    constexpr double LEARNING_RATE = 0.0001f;
+    constexpr int EPOCHS = 3; 
+    constexpr int TRAIN_BATCHSIZE = 8;
 
     class NNResidual : public Module {
         private:
@@ -21,7 +24,7 @@ namespace kami {
         public:
             NNResidual();
 
-            Tensor forward(Tensor x);
+            Tensor forward(Tensor inputs);
     };
 
     class NN : public Module {
@@ -35,18 +38,20 @@ namespace kami {
             int width, height, features, psize;
             torch::Device device = torch::kCPU;
 
+            Tensor loss(Tensor& p, Tensor& v, Tensor& obsp, Tensor& obsv, Tensor& lmm);
+
         public:
             NN(int width, int height, int features, int psize, bool force_cpu=false);
 
-            std::vector<Tensor> forward(Tensor x);
+            std::vector<torch::Tensor> forward(std::vector<torch::IValue> x);
 
-            void infer(float* input, int batch, float* policy, float* value);
+            void infer(float* input, float* inplmm, int batch, float* policy, float* value);
 
             bool isCUDA() { return device.is_cuda(); }
 
             void write(std::string path);
             void read(std::string path);
 
-            void train(float* data, int batch);
+            void train(int trajectories, float* inputs, float* lmm, float* obs_p, float* obs_v);
     };
 }

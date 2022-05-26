@@ -11,17 +11,22 @@ int main() {
 
     float policy[PSIZE], value, inp[8 * 8 * NFEATURES];
 
+    float lmm[PSIZE];
+
+    for (int j = 0; j < 128 * PSIZE; ++j)
+        lmm[j] = ((float) rand() / (float) RAND_MAX) > 0.5f ? 1.0f : 0.0f;
+
     for (int i = 0; i < 8 * 8 * NFEATURES; ++i)
         inp[i] = (float) rand() / (float) RAND_MAX;
 
-    net.infer(inp, 1, policy, &value);
+    net.infer(inp, lmm, 1, policy, &value);
 
     float policy2[PSIZE], value2;
 
     net.write("__nndisk_TESTMODEL.pt");
     net.read("__nndisk_TESTMODEL.pt");
 
-    net.infer(inp, 1, policy2, &value2);
+    net.infer(inp, lmm, 1, policy2, &value2);
 
     for (int i = 0; i < PSIZE; ++i)
         if (policy[i] != policy2[i])

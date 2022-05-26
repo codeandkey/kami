@@ -17,6 +17,8 @@ class Env {
         float curturn;
         std::vector<thc::Move> history;
         std::vector<char*> square_hist;
+        std::vector<int> cur_actions;
+        bool actions_utd;
 
     public:
         thc::ChessRules board;
@@ -29,6 +31,7 @@ class Env {
             char* squares_dup = new char[sizeof(board.squares)];
             memcpy(squares_dup, board.squares, sizeof board.squares);
             square_hist.push_back(squares_dup);
+            actions_utd = false;
         }
 
         int encode(thc::Move move) 
@@ -205,6 +208,7 @@ class Env {
                     reps++;
 
             repetitions.push_back(reps);
+            actions_utd = false;
         }
 
         void pop()
@@ -217,6 +221,7 @@ class Env {
             delete[] square_hist.back();
             square_hist.pop_back();
             repetitions.pop_back();
+            actions_utd = false;
         }
 
         bool terminal_str(float* value, std::string& out)
@@ -245,6 +250,13 @@ class Env {
                     out = "Black is stalemated";
                     return true;
                 default:;
+            }
+
+            if (repetitions.back() >= 3)
+            {
+                out = "Draw by threefold repetition";
+                *value = 0.0f;
+                return true;
             }
 
             if (board.IsDraw(true, drawtype))
@@ -285,22 +297,36 @@ class Env {
             return curturn;
         }
 
-        std::vector<int> actions()
+        std::vector<int>& actions()
         {
-            std::vector<thc::Move> moves;
-            std::vector<int> out;
+            if (!actions_utd)
+            {
+                std::vector<thc::Move> moves;
+                cur_actions.clear();
 
-            board.GenLegalMoveList(moves);
+                board.GenLegalMoveList(moves);
 
-            for (auto& m : moves)
-                out.push_back(encode(m));
+                for (auto& m : moves)
+                    cur_actions.push_back(encode(m));
 
-            return out;
+                actions_utd = true;
+            }
+
+            return cur_actions;
         }
 
         std::string print()
         {
             return board.ToDebugStr();
+        }
+
+        void lmm(float* out)
+        {
+            for (int i = 0; i < PSIZE; ++i)
+                out[i] = 0.0f;
+
+            for (int& i : actions())
+                out[i] = 1.0f;
         }
 };
 }
