@@ -139,7 +139,7 @@ void NN::read(std::string path)
     load(i);
 }
 
-void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float* obs_v)
+void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float* obs_v, int epochs)
 {
     // initialize optimizer
     optim::SGD optimizer(
@@ -156,8 +156,10 @@ void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float*
 
     int trainbatch_start = 0;
 
+    float firstloss, lastloss;
+
     // start epochs
-    for (int epoch = 0; epoch < EPOCHS; ++epoch)
+    for (int epoch = 0; epoch < epochs; ++epoch)
     {
         // prepare picker
         std::shuffle(picker.begin(), picker.end(), rng);
@@ -257,15 +259,19 @@ void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float*
             optimizer.step();
 
             float thisloss = lossval.cpu().item<float>();
-
-            std::cout << "batch " << i + 1 << "/" << training_inputs.size() << " : loss " << thisloss << std::endl; 
-
             avgloss += thisloss;
         }
 
         avgloss /= (float) training_inputs.size();
-        std::cout << "Epoch " << epoch + 1 << "/" << EPOCHS << ": loss " << avgloss << std::endl;
+        std::cout << "Epoch " << epoch + 1 << "/" << epochs << ": loss " << avgloss << std::endl;
+
+        if (!epoch)
+            firstloss = avgloss;
+
+        lastloss = avgloss;
     }
+
+    std::cout << "Finished training, average loss " << firstloss << " to " << lastloss << " over " << epochs << " epochs" << std::endl;
 }
 
 Tensor NN::loss(Tensor& p, Tensor& v, Tensor& obsp, Tensor& obsv, Tensor& lmm)

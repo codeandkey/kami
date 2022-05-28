@@ -12,7 +12,7 @@ namespace kami {
     constexpr int FILTERS = 16;
     constexpr int RESIDUALS = 4;
     constexpr double LEARNING_RATE = 0.0001f;
-    constexpr int EPOCHS = 3; 
+    constexpr int EPOCHS = 8; 
     constexpr int TRAIN_BATCHSIZE = 8;
 
     class NNResidual : public Module {
@@ -52,6 +52,6 @@ namespace kami {
             void write(std::string path);
             void read(std::string path);
 
-            void train(int trajectories, float* inputs, float* lmm, float* obs_p, float* obs_v);
+            void train(int trajectories, float* inputs, float* lmm, float* obs_p, float* obs_v, int epochs = EPOCHS);
     };
 }
