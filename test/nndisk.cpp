@@ -1,8 +1,6 @@
 #include "../src/nn/nn.h"
 #include "../src/env.h"
 
-#include <torch/cuda.h>
-
 using namespace kami;
 using namespace std;
 

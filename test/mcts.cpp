@@ -13,28 +13,27 @@ using namespace std;
 
 int main()
 {
-    Env env;
-    MCTS tree(&env);
+    MCTS tree;
     float value;
     std::string desc;
 
     srand(time(NULL));
 
-    while (!env.terminal_str(&value, desc))
+    while (!tree.get_env().terminal_str(&value, desc))
     {
         cout << "==============================\n";
-        cout << env.print() << "\n";
+        cout << tree.get_env().print() << "\n";
         cout << "legal actions: ";
 
-        for (int i : env.actions()) 
+        for (int i : tree.get_env().actions()) 
         {
-            if (env.decode(i) != env.decode(env.encode(env.decode(i))))
+            if (tree.get_env().decode(i) != tree.get_env().decode(tree.get_env().encode(tree.get_env().decode(i))))
             {
-                cout << i << " failed, decodes to " << env.decode(i).TerseOut() << "\n";
-                cout << ", but " << env.decode(i).TerseOut() << " encodes to " << env.encode(env.decode(i)) << "\n";
+                cout << i << " failed, decodes to " << tree.get_env().decode(i).TerseOut() << "\n";
+                cout << ", but " << tree.get_env().decode(i).TerseOut() << " encodes to " << tree.get_env().encode(tree.get_env().decode(i)) << "\n";
             }
 
-            cout << " " << env.decode(i).NaturalOut(&env.board);
+            cout << " " << tree.get_env().decode(i).NaturalOut(&tree.get_env().board);
         }
 
         cout << "\n";
@@ -56,7 +55,7 @@ int main()
             cout << "";
 */
             float policy[4096 + 4 * 22];
-            float p = 1.0f / (float) env.actions().size();
+            float p = 1.0f / (float) tree.get_env().actions().size();
 
             for (int i = 0; i < 4096 + 4 * 22; ++i)
                 policy[i] = p;
@@ -69,16 +68,16 @@ int main()
         std::sort(tree.root->children.begin(), tree.root->children.end(), [](Node* lhs, Node* rhs) { return lhs->n > rhs->n; });
 
         for (auto& n : tree.root->children) {
-            cout << n->debug(&env) << "\n";
+            cout << n->debug(&tree.get_env()) << "\n";
         }
 
         int action = tree.pick();
-        cout << "picking move " << env.decode(action).NaturalOut(&env.board) << "\n";
+        cout << "picking move " << tree.get_env().decode(action).NaturalOut(&tree.get_env().board) << "\n";
         tree.push(action);
     }
 
     cout << desc << ", " << value << "\n";
-    cout << "final: \n" << env.print() << "\n";
+    cout << "final: \n" << tree.get_env().print() << "\n";
 
     return 0;
 }

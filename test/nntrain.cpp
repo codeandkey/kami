@@ -1,8 +1,6 @@
 #include "../src/nn/nn.h"
 #include "../src/env.h"
 
-#include <torch/cuda.h>
-
 #define TESTSIZE 512 // trajectories to send
 
 using namespace kami;

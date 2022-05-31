@@ -28,9 +28,15 @@ add_executable(nntrain
   ../src/nn/nn.cpp
 )
 
+add_executable(selfplay
+  selfplay.cpp
+  ../src/nn/nn.cpp
+  ../src/selfplay.cpp
+  ../src/chess/thc.cpp
+)
+
 target_link_libraries(nn "${TORCH_LIBRARIES}")
 target_link_libraries(nncuda "${TORCH_LIBRARIES}")
 target_link_libraries(nndisk "${TORCH_LIBRARIES}")
 target_link_libraries(nntrain "${TORCH_LIBRARIES}")
-
-#set_property(TARGET kami PROPERTY CXX_STANDARD 14)
+target_link_libraries(selfplay "${TORCH_LIBRARIES}")

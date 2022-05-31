@@ -13,13 +13,12 @@ using namespace std;
 
 int main()
 {
-    Env env;
-    MCTS tree(&env);
+    MCTS tree;
 
     float value;
     srand(time(NULL));
 
-    while (!env.terminal(&value))
+    while (!tree.get_env().terminal(&value))
     {
         clock_t tm = clock();
         long observations = 0;
@@ -35,7 +34,7 @@ int main()
             observations++;
 
             float policy[4096 + 4 * 22];
-            float p = 1.0f / (float) env.actions().size();
+            float p = 1.0f / (float) tree.get_env().actions().size();
 
             for (int i = 0; i < 4096 + 4 * 22; ++i)
                 policy[i] = p;
