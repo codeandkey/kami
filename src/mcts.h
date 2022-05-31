@@ -63,17 +63,15 @@ struct Node {
 
 class MCTS {
     private:
-        Env* env = nullptr;
+        Env env;
         Node* target = nullptr;
 
     public:
         Node* root = nullptr;
-        MCTS(Env* initial)
+        MCTS()
         {
-            env = initial;
-
             root = new Node();
-            root->turn = -env->turn();
+            root->turn = -env.turn();
         }
 
         int n() { return root->n; }
@@ -99,7 +97,7 @@ class MCTS {
             delete root;
             root = next;
             root->parent = nullptr;
-            env->push(action);
+            env.push(action);
         }
 
         int pick(float alpha = 0.0f) {
@@ -163,13 +161,13 @@ class MCTS {
             {
                 // Test terminal state
                 float value;
-                if (env->terminal(&value))
+                if (env.terminal(&value))
                 {
                     target->backprop(value);
 
                     while (target != root)
                     {
-                        env->pop();
+                        env.pop();
                         target = target->parent;
                     }
 
@@ -177,8 +175,8 @@ class MCTS {
                     return false;
                 }
 
-                env->observe(obs);
-                env->lmm(lmm);
+                env.observe(obs);
+                env.lmm(lmm);
                 return true;
             }
 
@@ -191,7 +189,7 @@ class MCTS {
                 if (!c->n)
                 {
                     target = c;
-                    env->push(c->action);
+                    env.push(c->action);
                     return select(obs, lmm);
                 }
 
@@ -204,14 +202,14 @@ class MCTS {
                 }
             }
 
-            env->push(best_child->action);
+            env.push(best_child->action);
             target = best_child;
             return select(obs, lmm);
         }
 
         void expand(float* policy, float value)
         {
-            for (auto& action : env->actions())
+            for (auto& action : env.actions())
             {
                 Node* new_child = new Node();
 
@@ -227,11 +225,32 @@ class MCTS {
 
             while (target != root)
             {
-                env->pop();
+                env.pop();
                 target = target->parent;
             }
 
             target = nullptr;
+        }
+
+        Env& get_env() { return env; }
+
+        void reset() {
+            env = Env();         
+            target = nullptr;
+            root->clean();
+
+            delete root;
+            root = new Node();
+            root->turn = -env.turn();
+        }
+
+        void snapshot(float* pspace)
+        {
+            for (int i = 0; i < PSIZE; ++i)
+                pspace[i] = 0.0f;
+
+            for (auto& c : root->children)
+                pspace[c->action] = (float) c->n / (float) (root->n - 1);
         }
 };
 }
