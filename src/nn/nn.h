@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <shared_mutex>
 
 #include <torch/nn.h>
 
@@ -38,10 +39,12 @@ namespace kami {
             int width, height, features, psize;
             torch::Device device = torch::kCPU;
 
+            std::shared_mutex mut;
+
             Tensor loss(Tensor& p, Tensor& v, Tensor& obsp, Tensor& obsv, Tensor& lmm);
 
         public:
-            NN(int width, int height, int features, int psize, bool force_cpu=false);
+            NN(int width, int height, int features, int psize, bool force_cpu=false, int generation = 0);
 
             std::vector<torch::Tensor> forward(std::vector<torch::IValue> x);
 
@@ -51,6 +54,11 @@ namespace kami {
 
             void write(std::string path);
             void read(std::string path);
+
+            int obsize() const { return width * height * features; }
+            int polsize() const { return psize; }
+
+            int generation;
 
             void train(int trajectories, float* inputs, float* lmm, float* obs_p, float* obs_v, int epochs = EPOCHS);
     };

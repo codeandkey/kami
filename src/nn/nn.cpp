@@ -30,11 +30,12 @@ Tensor NNResidual::forward(Tensor x)
     return x;
 }
 
-NN::NN(int width, int height, int features, int psize, bool force_cpu) :
+NN::NN(int width, int height, int features, int psize, bool force_cpu, int generation) :
     width(width),
     height(height),
     features(features),
-    psize(psize)
+    psize(psize),
+    generation(generation)
 {
     batchnorm = register_module("batchnorm1", BatchNorm2d(FILTERS));
     vbatchnorm = register_module("vbatchnorm", BatchNorm2d(3));
@@ -103,6 +104,8 @@ std::vector<Tensor> NN::forward(std::vector<IValue> inputs)
 
 void NN::infer(float* input, float* inplmm, int batch, float* policy, float* value)
 {
+    mut.lock_shared();
+
     Tensor inputs = torch::from_blob(input, { batch, width, height, features }, {1, 1, 1, 1}, torch::kCPU);
     Tensor lmm = torch::from_blob(inplmm, { batch, psize }, {1, 1}, torch::kCPU);
     inputs = inputs.reshape({ batch, width, height, features });
@@ -121,26 +124,35 @@ void NN::infer(float* input, float* inplmm, int batch, float* policy, float* val
 
     memcpy(policy, policy_data, batch * psize * sizeof(float));
     memcpy(value, value_data, batch * sizeof(float));
+
+    mut.unlock_shared();
 }
 
 void NN::write(std::string path)
 {
+    mut.lock_shared();
+
     serialize::OutputArchive a;
     save(a);
 
     a.save_to(path);
+    mut.unlock_shared();
 }
 
 void NN::read(std::string path)
 {
+    mut.lock();
     serialize::InputArchive i;
     i.load_from(path);
 
     load(i);
+    mut.unlock();
 }
 
 void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float* obs_v, int epochs)
 {
+    mut.lock();
+
     // initialize optimizer
     optim::SGD optimizer(
         parameters(), optim::SGDOptions(LEARNING_RATE)
@@ -271,7 +283,11 @@ void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float*
         lastloss = avgloss;
     }
 
-    std::cout << "Finished training, average loss " << firstloss << " to " << lastloss << " over " << epochs << " epochs" << std::endl;
+    ++generation;
+    mut.unlock();
+
+    std::cout << "Finished training, average loss " << firstloss << " to " << lastloss << " over " << epochs << " epochs\n";
+    std::cout << "Using new model generation " << generation << "\n";
 }
 
 Tensor NN::loss(Tensor& p, Tensor& v, Tensor& obsp, Tensor& obsv, Tensor& lmm)
