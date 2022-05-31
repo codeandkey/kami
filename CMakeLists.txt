@@ -8,20 +8,22 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 add_executable(kami
   src/kami.cpp
   src/chess/thc.cpp
+  src/nn/nn.cpp
+  src/selfplay.cpp
 )
 
 target_link_libraries(kami "${TORCH_LIBRARIES}")
-set_property(TARGET kami PROPERTY CXX_STANDARD 14)
+set_property(TARGET kami PROPERTY CXX_STANDARD 17)
 
 set(CMAKE_BUILD_TYPE Debug)
 
 if (MSVC)
   file(GLOB TORCH_DLLS "${TORCH_INSTALL_PREFIX}/lib/*.dll")
-  add_custom_command(TARGET example-app
+  add_custom_command(TARGET kami 
                      POST_BUILD
                      COMMAND ${CMAKE_COMMAND} -E copy_if_different
                      ${TORCH_DLLS}
-                     $<TARGET_FILE_DIR:example-app>)
+                     $<TARGET_FILE_DIR:kami>)
 endif (MSVC)
 
 add_subdirectory(test)
