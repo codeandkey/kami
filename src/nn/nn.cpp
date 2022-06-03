@@ -250,7 +250,10 @@ void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float*
         }
 
         // train
-        float avgloss;
+        float avgloss = 0.0f;
+
+        float epfirstloss;
+        float eplastloss;
 
         for (int i = 0; i < training_inputs.size(); ++i)
         {
@@ -272,10 +275,13 @@ void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float*
 
             float thisloss = lossval.cpu().item<float>();
             avgloss += thisloss;
+
+            if (!i) epfirstloss = thisloss;
+            if (i == training_inputs.size() - 1) eplastloss = thisloss;
         }
 
         avgloss /= (float) training_inputs.size();
-        std::cout << "Epoch " << epoch + 1 << "/" << epochs << ": loss " << avgloss << std::endl;
+        std::cout << "Epoch " << epoch + 1 << "/" << epochs << ": loss " << epfirstloss << " => " << eplastloss << std::endl;
 
         if (!epoch)
             firstloss = avgloss;
