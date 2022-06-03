@@ -100,8 +100,12 @@ int main(int argc, char** argv) {
     string line;
     vector<string> args;
 
-    while (getline(cin, line))
+    while (1)
     {
+        cout << "> ";
+        cout.flush();
+        if (!getline(cin, line)) break;
+
         line += '\0';
 
         for (char* tok = strtok(&line[0], " \t"); tok; tok = strtok(nullptr, " \t"))
