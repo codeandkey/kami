@@ -328,5 +328,59 @@ class Env {
             for (int& i : actions())
                 out[i] = 1.0f;
         }
+
+        std::string pgn()
+        {
+            // Expect the game to be in a terminal position.
+            float value;
+            if (!terminal(&value))
+                throw std::runtime_error("Game must be in terminal state to write PGN!");
+
+            std::string result, output;
+
+            if (value < 0)
+                result = "0-1";
+            else if (value > 0)
+                result = "1-0";
+            else
+                result = "1/2-1/2";
+
+            std::vector<std::string> moves;
+            std::vector<thc::Move> history_back;
+
+            // Walk through move history.
+            while (history.size())
+            {
+                thc::Move move = history.back();
+                history_back.push_back(move);
+                pop();
+
+                moves.push_back(move.NaturalOut(&board));
+            }
+
+            // Restore state
+            while (history_back.size())
+            {
+                push(encode(history_back.back()));
+                history_back.pop_back();
+            }
+
+            // Walk in reverse through the generated moves.
+            int mn = 1;
+
+            while (moves.size()) {
+                output += std::to_string(mn) + ". ";
+                output += moves.back();
+                moves.pop_back();
+
+                if (!moves.size()) break;
+
+                output += " " + moves.back();
+                moves.pop_back();
+            }
+
+            output += result;
+            return output;
+        }
 };
 }

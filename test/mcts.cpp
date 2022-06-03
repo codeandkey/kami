@@ -78,6 +78,7 @@ int main()
 
     cout << desc << ", " << value << "\n";
     cout << "final: \n" << tree.get_env().print() << "\n";
+    cout << "pgn: \n" << tree.get_env().pgn() << "\n";
 
     return 0;
 }
