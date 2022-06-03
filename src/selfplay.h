@@ -71,6 +71,16 @@ class Selfplay {
         Status status;
 
         ReplayBuffer& get_rbuf() { return replay_buffer; }
+
+        std::string get_next_pgn() {
+            wants_pgn = true;
+
+            while (wants_pgn) 
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+            return ret_pgn;
+        }
+
     private:
         std::vector<std::thread> inference;
         std::thread training;
@@ -81,6 +91,9 @@ class Selfplay {
 
         int ibatch;
         int nodes;
+
+        std::atomic<bool> wants_pgn;
+        std::string ret_pgn;
 
         void inference_main(int id);
         void training_main();

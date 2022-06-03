@@ -113,6 +113,12 @@ void Selfplay::inference_main(int id) { try {
 
             if (trees[i].get_env().terminal(&value))
             {
+                if (wants_pgn.exchange(false))
+                {
+                    ret_pgn = trees[i].get_env().pgn();
+                    wants_pgn = false;
+                }
+
                 // Replace environment and reobserve
                 trees[i].reset();
                 cout << "Recorded " << trajectories[i].size() << " experiences from tree " << i << endl;
@@ -130,9 +136,6 @@ void Selfplay::inference_main(int id) { try {
             // Try again on new env
             --i;
             continue;
-
-            // Get next observation from new env
-            //while (!trees[i].select(batch + i * 8 * 8 * NFEATURES, lmm + i * PSIZE));
         }
 
         // Inference

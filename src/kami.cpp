@@ -2,6 +2,7 @@
 #include "env.h"
 
 #include <iostream>
+#include <fstream>
 #include <functional>
 #include <map>
 
@@ -88,6 +89,31 @@ int main(int argc, char** argv) {
         }
 
         cout << "done" << endl;
+    };
+
+    commands["pgn"] = [&](vector<string>& args)
+    {
+        string nextpgn;
+        nextpgn = string("[White \"KAMI generation ") + to_string(model.generation.load()) + "\"]\n";
+        nextpgn += string("[Black \"KAMI generation ") + to_string(model.generation.load()) + "\"]\n";
+        nextpgn += s.get_next_pgn();
+
+        cout << "\n" << nextpgn << "\n";
+
+        if (args.size()) {
+            ofstream file(args[0]);
+
+            if (!file)
+            {
+                cerr << "error writing PGN to " << args[0] << "\n";
+                return;
+            }
+
+            file << nextpgn << endl;
+            file.close();
+
+            cout << "Wrote PGN data to " << args[0] << endl;
+        }
     };
 
     commands["status"] = [&](vector<string>& args)

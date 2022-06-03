@@ -375,11 +375,13 @@ class Env {
 
                 if (!moves.size()) break;
 
-                output += " " + moves.back();
+                output += " " + moves.back() + " ";
                 moves.pop_back();
+
+                ++mn;
             }
 
-            output += result;
+            output += " " + result;
             return output;
         }
 };
