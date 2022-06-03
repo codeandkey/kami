@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <string>
 #include <vector>
 #include <shared_mutex>
@@ -58,7 +59,7 @@ namespace kami {
             int obsize() const { return width * height * features; }
             int polsize() const { return psize; }
 
-            int generation;
+            std::atomic<int> generation;
 
             void train(int trajectories, float* inputs, float* lmm, float* obs_p, float* obs_v, int epochs = EPOCHS);
     };

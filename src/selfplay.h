@@ -69,6 +69,8 @@ class Selfplay {
         };
 
         Status status;
+
+        ReplayBuffer& get_rbuf() { return replay_buffer; }
     private:
         std::vector<std::thread> inference;
         std::thread training;
