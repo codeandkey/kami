@@ -177,7 +177,7 @@ void Selfplay::training_main()
 
     long target_count = replay_buffer.size(), target_from = 0;
     int target_incr = replay_buffer.size() * options::getInt("rpb_train_pct", 40);
-    int trajectories = replay_buffer.size() * 100 / options::getInt("training_sample_pct", 60);
+    int trajectories = replay_buffer.size() * options::getInt("training_sample_pct", 60) / 100;
 
     float* inputs = new float[trajectories * 8 * 8 * NFEATURES];
     float* lmm = new float[trajectories * PSIZE];
