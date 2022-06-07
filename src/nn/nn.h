@@ -11,12 +11,6 @@ using namespace torch;
 using namespace torch::nn;
 
 namespace kami {
-    constexpr int FILTERS = 16;
-    constexpr int RESIDUALS = 4;
-    constexpr double LEARNING_RATE = 0.005f;
-    constexpr int EPOCHS = 8; 
-    constexpr int TRAIN_BATCHSIZE = 8;
-
     class NNResidual : public Module {
         private:
             Conv2d conv1{nullptr}, conv2{nullptr};
@@ -24,7 +18,7 @@ namespace kami {
             BatchNorm2d batchnorm1{nullptr}, batchnorm2{nullptr};
 
         public:
-            NNResidual();
+            NNResidual(int filters);
 
             Tensor forward(Tensor inputs);
     };
@@ -61,6 +55,6 @@ namespace kami {
 
             std::atomic<int> generation;
 
-            void train(int trajectories, float* inputs, float* lmm, float* obs_p, float* obs_v, int epochs = EPOCHS);
+            void train(int trajectories, float* inputs, float* lmm, float* obs_p, float* obs_v);
     };
 }

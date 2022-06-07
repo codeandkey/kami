@@ -1,4 +1,5 @@
 #include "nn.h"
+#include "../options.h"
 
 #include <random>
 #include <torch/cuda.h>
@@ -11,12 +12,12 @@ using namespace kami;
 using namespace torch;
 using namespace torch::nn;
 
-NNResidual::NNResidual()
+NNResidual::NNResidual(int filters)
 {
-    conv1 = register_module("conv1", Conv2d(Conv2dOptions(FILTERS, FILTERS, 3).padding(1).padding_mode(torch::kZeros)));
-    conv2 = register_module("conv2", Conv2d(Conv2dOptions(FILTERS, FILTERS, 3).padding(1).padding_mode(torch::kZeros)));
-    batchnorm1 = register_module("batchnorm1", BatchNorm2d(FILTERS));
-    batchnorm2 = register_module("batchnorm2", BatchNorm2d(FILTERS));
+    conv1 = register_module("conv1", Conv2d(Conv2dOptions(filters, filters, 3).padding(1).padding_mode(torch::kZeros)));
+    conv2 = register_module("conv2", Conv2d(Conv2dOptions(filters, filters, 3).padding(1).padding_mode(torch::kZeros)));
+    batchnorm1 = register_module("batchnorm1", BatchNorm2d(filters));
+    batchnorm2 = register_module("batchnorm2", BatchNorm2d(filters));
     relu = register_module("relu", ReLU());
 }
 
@@ -37,19 +38,22 @@ NN::NN(int width, int height, int features, int psize, bool force_cpu, int gener
     psize(psize),
     generation(generation)
 {
-    batchnorm = register_module("batchnorm1", BatchNorm2d(FILTERS));
+    int filters = options::getInt("filters", 16);
+    int nresiduals = options::getInt("residuals", 4);
+
+    batchnorm = register_module("batchnorm1", BatchNorm2d(filters));
     vbatchnorm = register_module("vbatchnorm", BatchNorm2d(3));
     pbatchnorm = register_module("pbatchnorm", BatchNorm2d(32));
-    conv1 = register_module("conv1", Conv2d(Conv2dOptions(features, FILTERS, 3).padding(1).padding_mode(torch::kZeros)));
-    valueconv = register_module("valueconv", Conv2d(Conv2dOptions(FILTERS, 3, 1)));
-    policyconv = register_module("policyconv", Conv2d(Conv2dOptions(FILTERS, 32, 1)));
+    conv1 = register_module("conv1", Conv2d(Conv2dOptions(features, filters, 3).padding(1).padding_mode(torch::kZeros)));
+    valueconv = register_module("valueconv", Conv2d(Conv2dOptions(filters, 3, 1)));
+    policyconv = register_module("policyconv", Conv2d(Conv2dOptions(filters, 32, 1)));
     policyfc = register_module("policyfc", Linear(32 * width * height, psize));
     valuefc1 = register_module("valuefc1", Linear(3 * width * height, 128));
     valuefc2 = register_module("valuefc2", Linear(128, 1));
 
     // residual layers
-    for (int i = 0; i < RESIDUALS; ++i)
-        residuals.push_back(register_module("residual" + std::to_string(i), ModuleHolder<NNResidual>()));
+    for (int i = 0; i < nresiduals; ++i)
+        residuals.push_back(register_module("residual" + std::to_string(i), ModuleHolder<NNResidual>(filters)));
 
     // try cuda
     if (torch::cuda::is_available() && !force_cpu)
@@ -75,7 +79,7 @@ std::vector<Tensor> NN::forward(std::vector<IValue> inputs)
     x = torch::relu(x);
 
     // apply residuals
-    for (int i = 0; i < RESIDUALS; ++i)
+    for (int i = 0; i < residuals.size(); ++i)
         x = residuals[i]->forward(x);
 
     // policy head
@@ -149,13 +153,17 @@ void NN::read(std::string path)
     mut.unlock();
 }
 
-void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float* obs_v, int epochs)
+void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float* obs_v)
 {
     mut.lock();
 
+    float lr = (float) options::getInt("training_mlr", 5) / 1000.0f;
+    int epochs = options::getInt("training_epochs", 8);
+    int tbatch = options::getInt("training_batchsize", 8);
+
     // initialize optimizer
     optim::SGD optimizer(
-        parameters(), optim::SGDOptions(LEARNING_RATE)
+        parameters(), optim::SGDOptions(lr)
     );
 
     // magic batch picker
@@ -177,10 +185,10 @@ void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float*
         std::shuffle(picker.begin(), picker.end(), rng);
 
         // training batch data
-        float next_input[TRAIN_BATCHSIZE][width][height][features];
-        float next_lmm[TRAIN_BATCHSIZE][psize];
-        float next_policy[TRAIN_BATCHSIZE][psize];
-        float next_value[TRAIN_BATCHSIZE];
+        float next_input[tbatch][width][height][features];
+        float next_lmm[tbatch][psize];
+        float next_policy[tbatch][psize];
+        float next_value[tbatch];
 
         std::vector<Tensor> training_inputs;
         std::vector<Tensor> training_lmm;
@@ -194,7 +202,7 @@ void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float*
             // build batch
             int i;
 
-            for (i = 0; i < TRAIN_BATCHSIZE && i + batch_base <= picker.size() - 1; ++i)
+            for (i = 0; i < tbatch && i + batch_base <= picker.size() - 1; ++i)
                 memcpy(
                     &next_input[i][0][0],
                     inputs + picker[batch_base + i] * width * height * features,
@@ -226,25 +234,25 @@ void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float*
             // build tensors
             training_inputs.push_back(torch::from_blob(
                 next_input, 
-                {TRAIN_BATCHSIZE, width, height, features},
+                {tbatch, width, height, features},
                 kCPU
             ).to(device, kFloat32));
 
             training_obsp.push_back(torch::from_blob(
                 next_policy, 
-                {TRAIN_BATCHSIZE, psize},
+                {tbatch, psize},
                 kCPU
             ).to(device, kFloat32));
 
             training_obsv.push_back(torch::from_blob(
                 next_value, 
-                {TRAIN_BATCHSIZE, 1},
+                {tbatch, 1},
                 kCPU
             ).to(device, kFloat32));
 
             training_lmm.push_back(torch::from_blob(
                 next_lmm, 
-                {TRAIN_BATCHSIZE, psize},
+                {tbatch, psize},
                 kCPU
             ).to(device, kFloat32));
         }

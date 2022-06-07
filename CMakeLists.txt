@@ -11,6 +11,7 @@ add_executable(kami
   src/nn/nn.cpp
   src/selfplay.cpp
   src/evaluate.cpp
+  src/options.cpp
 )
 
 target_link_libraries(kami "${TORCH_LIBRARIES}")

@@ -8,9 +8,9 @@ using namespace std;
 
 int main(int argc, char** argv) {
     NN model(8, 8, NFEATURES, PSIZE);
-    Selfplay S(&model, 16, 50);
+    Selfplay S(&model);
    
-    S.start(1);
+    S.start();
 
     // Don't busywait
 

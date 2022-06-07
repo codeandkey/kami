@@ -2,6 +2,7 @@
 #include "env.h"
 #include "mcts.h"
 #include "evaluate.h"
+#include "options.h"
 
 #include <iostream>
 #include <stdexcept>
@@ -9,17 +10,17 @@
 using namespace kami;
 using namespace std;
 
-Selfplay::Selfplay(NN* model, int ibatch, int nodes) :
+Selfplay::Selfplay(NN* model) :
     model(model),
-    ibatch(ibatch),
-    nodes(nodes),
-    replay_buffer(8 * 8 * NFEATURES, PSIZE, 2048) {}
+    ibatch(options::getInt("selfplay_batch")),
+    nodes(options::getInt("selfplay_nodes")),
+    replay_buffer(8 * 8 * NFEATURES, PSIZE, options::getInt("replaybuffer_size")) {}
 
-void Selfplay::start(int n_inference)
+void Selfplay::start()
 {
     status.code(RUNNING);
 
-    for (int i = 0; i < n_inference; ++i)
+    for (int i = 0; i < options::getInt("inference_threads", 1); ++i)
         inference.push_back(thread(&Selfplay::inference_main, this, i));
 
     training = thread(&Selfplay::training_main, this);
@@ -172,8 +173,11 @@ void Selfplay::training_main()
 {
     cout << "Starting training thread" << endl;
 
+    string modelpath = options::getStr("model_path", "/tmp/model.pt");
+
     long target_count = replay_buffer.size(), target_from = 0;
-    int trajectories = replay_buffer.size() * TRAIN_AFTER_PCT / 100;
+    int target_incr = replay_buffer.size() * options::getInt("rpb_train_pct");
+    int trajectories = replay_buffer.size() * 100 / options::getInt("training_sample_pct");
 
     float* inputs = new float[trajectories * 8 * 8 * NFEATURES];
     float* lmm = new float[trajectories * PSIZE];
@@ -196,11 +200,11 @@ void Selfplay::training_main()
         cout << "Gen " << model->generation << " Starting training step with " << trajectories << " trajectories sampled from last " << replay_buffer.size() << endl;
 
         // Save the current model
-        model->write(MODEL_PATH);
+        model->write(modelpath);
 
         // Generate candidate out-of-place
         NN cmodel(8, 8, NFEATURES, PSIZE, false, model->generation);
-        cmodel.read(MODEL_PATH);
+        cmodel.read(modelpath);
 
         // Train new model
         replay_buffer.select_batch(inputs, lmm, mcts, results, trajectories);
@@ -210,8 +214,8 @@ void Selfplay::training_main()
         if (eval(model, &cmodel))
         {
             // Save the current model
-            cmodel.write(MODEL_PATH);
-            model->read(MODEL_PATH);
+            cmodel.write(modelpath);
+            model->read(modelpath);
             model->generation += 1;
 
             cout << "Candidate accepted: using new generation " << model->generation << endl;
@@ -224,11 +228,11 @@ void Selfplay::training_main()
         } else
         {
             cout << "Candidate rejected: generation remains " << model->generation << endl;
-            model->read(MODEL_PATH);
+            model->read(modelpath);
         }
 
-        target_from = replay_buffer.size();
-        target_count += replay_buffer.size() * TRAIN_AFTER_PCT / 100;
+        target_from = replay_buffer.count();
+        target_count += target_incr;
     }
 
     cout << "Stopping training thread" << endl;

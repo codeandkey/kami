@@ -1,6 +1,7 @@
 #pragma once
 
 #include "env.h"
+#include "options.h"
 
 #include <cmath>
 #include <vector>
@@ -65,6 +66,7 @@ class MCTS {
     private:
         Env env;
         Node* target = nullptr;
+        double cPUCT;
 
     public:
         Node* root = nullptr;
@@ -72,6 +74,7 @@ class MCTS {
         {
             root = new Node();
             root->turn = -env.turn();
+            cPUCT = options::getInt("cpuct", 1);
         }
 
         int n() { return root->n; }
@@ -151,8 +154,6 @@ class MCTS {
 
         bool select(float* obs, float* lmm)
         {
-            static constexpr double cPUCT = 1.0;
-
             if (!target)
                 target = root;
 

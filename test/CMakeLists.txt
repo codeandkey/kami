@@ -1,31 +1,37 @@
 add_executable(bench
   bench.cpp
   ../src/chess/thc.cpp
+  ../src/options.cpp
 )
 
 add_executable(mcts
   mcts.cpp
   ../src/chess/thc.cpp
+  ../src/options.cpp
 )
 
 add_executable(nn
   nn.cpp
   ../src/nn/nn.cpp
+  ../src/options.cpp
 )
 
 add_executable(nncuda
   nncuda.cpp
   ../src/nn/nn.cpp
+  ../src/options.cpp
 )
 
 add_executable(nndisk
   nndisk.cpp
   ../src/nn/nn.cpp
+  ../src/options.cpp
 )
 
 add_executable(nntrain
   nntrain.cpp
   ../src/nn/nn.cpp
+  ../src/options.cpp
 )
 
 add_executable(selfplay
@@ -34,12 +40,14 @@ add_executable(selfplay
   ../src/selfplay.cpp
   ../src/evaluate.cpp
   ../src/chess/thc.cpp
+  ../src/options.cpp
 )
 
 add_executable(play
     play.cpp
   ../src/nn/nn.cpp
   ../src/chess/thc.cpp
+  ../src/options.cpp
 )
 
 target_link_libraries(nn "${TORCH_LIBRARIES}")

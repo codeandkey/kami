@@ -7,11 +7,6 @@ using namespace kami;
 using namespace std;
 
 int main(int argc, char** argv) {
-    int epochs = 8;
-
-    if (argc > 1)
-        epochs = stoi(string(argv[1]));
-
     float* inputs = new float[TESTSIZE * 8 * 8 * NFEATURES];
     float* policy = new float[TESTSIZE * PSIZE];
     float* value = new float[TESTSIZE];
@@ -33,7 +28,7 @@ int main(int argc, char** argv) {
     NN net(8, 8, NFEATURES, PSIZE);
 
     clock_t start = clock(), timer = start;
-    net.train(TESTSIZE, inputs, lmm, policy, value, epochs);
+    net.train(TESTSIZE, inputs, lmm, policy, value);
     cout << "Finished in " << (double) (clock() - start) / (double) CLOCKS_PER_SEC << " seconds" << endl;
 
     delete[] inputs;

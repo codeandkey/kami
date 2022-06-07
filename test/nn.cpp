@@ -13,7 +13,7 @@ int main() {
     for (int j = 0; j < 128 * PSIZE; ++j)
         lmm[j] = ((float) rand() / (float) RAND_MAX) > 0.5f ? 1.0f : 0.0f;
 
-    NN net(8, 8, NFEATURES, PSIZE, true);
+    NN net(8, 8, NFEATURES, PSIZE);
 
     for (int i = 8; i <= 128; i += 8)
     {

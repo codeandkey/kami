@@ -20,9 +20,6 @@
 
 namespace kami {
 
-// Train the network after <N>% of the replay buffer has been replaced
-constexpr int TRAIN_AFTER_PCT = 40;
-
 // MCTS alpha parameter curve
 constexpr float ALPHA_INITIAL = 1.0f;
 constexpr float ALPHA_DECAY = 0.06f;
@@ -34,12 +31,12 @@ static const char* MODEL_PATH = "/tmp/model.pt";
 
 class Selfplay {
     public:
-        Selfplay(NN* model, int ibatch = 16, int nodes = 1024);
+        Selfplay(NN* model);
 
         /**
          * Start the training loop.
          */
-        void start(int n_inference = 1);
+        void start();
 
         /**
          * Stops the training loop and cleans up resources.

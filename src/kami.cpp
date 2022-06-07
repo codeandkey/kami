@@ -1,5 +1,6 @@
 #include "selfplay.h"
 #include "env.h"
+#include "options.h"
 
 #include <ctime>
 #include <iostream>
@@ -13,21 +14,50 @@ using namespace std;
 int main(int argc, char** argv) {
     cout << "Starting kami." << endl;
 
-    srand(time(NULL));
+    // Set default options
+    options::setInt("inference_threads", 4);
+    options::setInt("cpuct", 1);
+    options::setInt("selfplay_nodes", 1024);
+    options::setInt("selfplay_batch", 16);
+    options::setInt("evaluate_nodes", 512);
+    options::setInt("evaluate_batch", 16);
+    options::setInt("evaluate_games", 10);
+    options::setInt("replaybuffer_size", 1024);
+    options::setInt("rpb_train_pct", 40);
+    options::setInt("training_sample_pct", 60);
+    options::setInt("evaluate_target_pct", 54);
+    options::setInt("residuals", 4);
+    options::setInt("filters", 16);
+    options::setInt("training_batchsize", 8);
+    options::setInt("training_mlr", 5);
+    options::setInt("training_epochs", 8);
 
-    int inf_threads = 2;
+    // Try and load options
+    try {
+        options::load();
+    } catch (exception& e) {
+        cerr << "WARNING: " << e.what() << endl;
+    }
+
+    cout << "=========== OPTIONS ===========" << endl;
+    options::print();
+    cout << "========= END OPTIONS =========" << endl;
+
+    srand(time(NULL));
 
     NN model(8, 8, NFEATURES, PSIZE);
 
-    if (argc > 1)
+    string modelpath = options::getStr("model_path");
+
+    if (modelpath.size())
     {
-        cout << "Restoring model from " << argv[1] << endl;
-        model.read(argv[1]);
+        cout << "Restoring model from " << modelpath << endl;
+        model.read(modelpath);
         cout << "Loaded model." << endl;
     }
 
-    Selfplay s(&model, 16, 1024);
-    s.start(inf_threads);
+    Selfplay s(&model);
+    s.start();
 
     bool should_quit = false;
     map<string, function<void(vector<string>& args)>> commands;
@@ -53,7 +83,7 @@ int main(int argc, char** argv) {
         cout.flush();
 
         try {
-            model.write("model.pt");
+            model.write(path);
         } catch (exception& e)
         {
             cerr << "model.write() ERROR: " << e.what() << endl;
@@ -82,7 +112,7 @@ int main(int argc, char** argv) {
         cout.flush();
 
         try {
-            model.read("model.pt");
+            model.read(path);
         } catch (exception& e)
         {
             cerr << "model.read() ERROR: " << e.what() << endl;
@@ -119,7 +149,7 @@ int main(int argc, char** argv) {
 
     commands["status"] = [&](vector<string>& args)
     {
-        cout << "Inference threads: " << inf_threads << endl;
+        cout << "Inference threads: " << options::getInt("inference_threads") << endl;
         cout << "Total experiences: " << s.get_rbuf().count() << endl;
         cout << "Current generation: " << model.generation << endl;
     };

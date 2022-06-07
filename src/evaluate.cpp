@@ -1,6 +1,7 @@
 #include "evaluate.h"
 #include "env.h"
 #include "mcts.h"
+#include "options.h"
 
 #include <iostream>
 
@@ -8,40 +9,45 @@ using namespace kami;
 
 bool kami::eval(NN* current_model, NN* candidate_model)
 {
+    int ebatch = options::getInt("evaluate_batch");
+    int egames = options::getInt("evaluate_games");
+    int enodes = options::getInt("evaluate_nodes");
+    int etarget = options::getInt("evaluate_target_pct");
+
     // Pick turns
-    int candidate_turns[EVAL_BATCH];
+    int candidate_turns[ebatch];
 
     // Each model plays first half 1, second half -1
-    for (int i = 0; i < EVAL_BATCH; ++i)
+    for (int i = 0; i < ebatch; ++i)
         candidate_turns[i] = (rand() % 2) * 2 - 1;
 
     // Input buffers
-    float* cur_inputs = new float[EVAL_BATCH * 8 * 8 * NFEATURES];
-    float* cur_lmm = new float[EVAL_BATCH * PSIZE];
+    float* cur_inputs = new float[ebatch * 8 * 8 * NFEATURES];
+    float* cur_lmm = new float[ebatch * PSIZE];
 
     // Input buffers (candidate)
-    float* cd_inputs = new float[EVAL_BATCH * 8 * 8 * NFEATURES];
-    float* cd_lmm = new float[EVAL_BATCH * PSIZE];
+    float* cd_inputs = new float[ebatch * 8 * 8 * NFEATURES];
+    float* cd_lmm = new float[ebatch * PSIZE];
 
     // Trees
-    MCTS trees[EVAL_BATCH];
+    MCTS trees[ebatch];
 
     // P/V
-    float policy[EVAL_BATCH * PSIZE];
-    float value[EVAL_BATCH];
+    float policy[ebatch * PSIZE];
+    float value[ebatch];
     float tvalue;
 
     // Infer tags (game target)
-    int cur_targets[EVAL_BATCH];
-    int cd_targets[EVAL_BATCH];
+    int cur_targets[ebatch];
+    int cd_targets[ebatch];
 
     float score = 0.0f; // Score
     int games = 0; // Games played
     
-    std::cout << "Starting evaluation of model generation " << candidate_model->generation << " over " << EVAL_RUNS << " games" << std::endl;
+    std::cout << "Starting evaluation of model generation " << candidate_model->generation << " over " << egames << " games" << std::endl;
     
     // Start playing games
-    while (games < EVAL_RUNS)
+    while (games < egames)
     {
         int cur_batch_size = 0;
         int cd_batch_size = 0;
@@ -55,10 +61,10 @@ bool kami::eval(NN* current_model, NN* candidate_model)
             int boff = trees[i].get_env().turn() == candidate_turns[i] ? cd_batch_size : cur_batch_size;
 
             // Push up to node limit, or next observation
-            while (trees[i].n() < EVAL_NODES && !trees[i].select(inputs + boff * 8 * 8 * NFEATURES, lmm + boff * PSIZE));
+            while (trees[i].n() < enodes && !trees[i].select(inputs + boff * 8 * 8 * NFEATURES, lmm + boff * PSIZE));
 
             // If not ready, this observation is done, we pass it to the model
-            if (trees[i].n() < EVAL_NODES)
+            if (trees[i].n() < enodes)
             {
                 if (trees[i].get_env().turn() == candidate_turns[i])
                     cd_targets[cd_batch_size++] = i;
@@ -78,7 +84,7 @@ bool kami::eval(NN* current_model, NN* candidate_model)
                 score += tvalue * candidate_turns[i] / 2.0f + 0.5f;
                 games++;
 
-                std::cout << "Game " << games << " of " << EVAL_RUNS << " [" << tvalue * candidate_turns[i] << "]: score " << (int) (score * 100 / games) << "%" << std::endl;
+                std::cout << "Game " << games << " of " << egames << " [" << tvalue * candidate_turns[i] << "]: score " << (int) (score * 100 / games) << "%" << std::endl;
 
                 // Reset model POV to match this model
                 trees[i].reset();
@@ -115,7 +121,7 @@ bool kami::eval(NN* current_model, NN* candidate_model)
     delete[] cd_inputs;
     delete[] cd_lmm;
 
-    std::cout << "Finished evaluating: score " << (int) (score * 100 / games) << "%, target " << (int) (EVAL_CRIT * 100) << std::endl;
+    std::cout << "Finished evaluating: score " << (int) (score * 100 / games) << "%, target " << etarget << std::endl;
 
-    return score >= EVAL_CRIT * games;
+    return score * 100 / games >= etarget;
 }
