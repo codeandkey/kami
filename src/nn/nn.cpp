@@ -146,11 +146,16 @@ void NN::write(std::string path)
 void NN::read(std::string path)
 {
     mut.lock();
-    serialize::InputArchive i;
-    i.load_from(path);
+    try {
+        serialize::InputArchive i;
+        i.load_from(path);
 
-    load(i);
-    mut.unlock();
+        load(i);
+        mut.unlock();
+    } catch (std::exception& e) {
+        mut.unlock();
+        throw e;
+    }
 }
 
 void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float* obs_v)
