@@ -281,7 +281,7 @@ void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float*
         }
 
         avgloss /= (float) training_inputs.size();
-        std::cout << "Epoch " << epoch + 1 << "/" << epochs << ": loss " << epfirstloss << " => " << eplastloss << std::endl;
+        std::cout << "Epoch " << epoch + 1 << "/" << epochs << ": loss " << epfirstloss << " => " << eplastloss << ", " << training_inputs.size() << " batches" << std::endl;
 
         if (!epoch)
             firstloss = avgloss;
@@ -292,8 +292,7 @@ void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float*
     ++generation;
     mut.unlock();
 
-    std::cout << "Finished training, average loss " << firstloss << " to " << lastloss << " over " << epochs << " epochs\n";
-    std::cout << "Using new model generation " << generation << "\n";
+    std::cout << "Generated model " << generation << ", average loss " << firstloss << " to " << lastloss << " over " << epochs << " epochs\n";
 }
 
 Tensor NN::loss(Tensor& p, Tensor& v, Tensor& obsp, Tensor& obsv, Tensor& lmm)

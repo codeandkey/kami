@@ -202,6 +202,14 @@ class MCTS {
                 }
             }
 
+            if (!best_child)
+            {
+                for (auto& c : target->children)
+                    std::cerr << "child " << c->action << " : q=" << c->q() << ", p=" << c->p << ", pmul=" << cPUCT * sqrt(target->n) / (double) (c->n + 1) << std::endl;
+
+                throw std::runtime_error("no best child to select, but children present!");
+            }
+
             env.push(best_child->action);
             target = best_child;
             return select(obs, lmm);

@@ -10,12 +10,13 @@ add_executable(kami
   src/chess/thc.cpp
   src/nn/nn.cpp
   src/selfplay.cpp
+  src/evaluate.cpp
 )
 
 target_link_libraries(kami "${TORCH_LIBRARIES}")
 set_property(TARGET kami PROPERTY CXX_STANDARD 17)
 
-set(CMAKE_BUILD_TYPE Debug)
+#set(CMAKE_BUILD_TYPE Debug)
 
 if (MSVC)
   file(GLOB TORCH_DLLS "${TORCH_INSTALL_PREFIX}/lib/*.dll")

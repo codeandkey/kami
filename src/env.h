@@ -23,16 +23,20 @@ class Env {
     public:
         thc::ChessRules board;
         std::vector<int> repetitions;
+        std::vector<int> halfmove_clock;
 
         Env() {
             curturn = 1.0f;
             repetitions.push_back(1);
+            halfmove_clock.push_back(0);
 
             char* squares_dup = new char[sizeof(board.squares)];
             memcpy(squares_dup, board.squares, sizeof board.squares);
             square_hist.push_back(squares_dup);
             actions_utd = false;
         }
+
+        int ply() { return history.size(); }
 
         int encode(thc::Move move) 
         {
@@ -201,6 +205,13 @@ class Env {
             memcpy(squares_dup, board.squares, sizeof board.squares);
             square_hist.push_back(squares_dup);
 
+            int hmc = halfmove_clock.back() + 1;
+
+            if (mv.capture || board.squares[mv.src] == 'p' || board.squares[mv.src] == 'P')
+                hmc = 0;
+
+            halfmove_clock.push_back(hmc);
+
             int reps = 0;
 
             for (unsigned i = 0; i < square_hist.size(); ++i)
@@ -221,6 +232,7 @@ class Env {
             delete[] square_hist.back();
             square_hist.pop_back();
             repetitions.pop_back();
+            halfmove_clock.pop_back();
             actions_utd = false;
         }
 
@@ -259,27 +271,10 @@ class Env {
                 return true;
             }
 
-            if (board.IsDraw(true, drawtype))
+            if (halfmove_clock.back() >= 100)
             {
+                out = "Draw by 50-move rule";
                 *value = 0.0f;
-                
-                switch (drawtype)
-                {
-                    case thc::DRAWTYPE_50MOVE:
-                        out = "Draw by 50-move rule";
-                        break;
-                    case thc::DRAWTYPE_INSUFFICIENT:
-                        out = "Draw by insufficient material";
-                        break;
-                    case thc::DRAWTYPE_INSUFFICIENT_AUTO:
-                        out = "Draw by insufficient material (auto)";
-                        break;
-                    case thc::DRAWTYPE_REPITITION:
-                        out = "Draw by threefold repetition";
-                        break;
-                    default:;
-                }
-
                 return true;
             }
 
@@ -333,7 +328,8 @@ class Env {
         {
             // Expect the game to be in a terminal position.
             float value;
-            if (!terminal(&value))
+            std::string tstr;
+            if (!terminal_str(&value, tstr))
                 throw std::runtime_error("Game must be in terminal state to write PGN!");
 
             std::string result, output;
@@ -344,6 +340,8 @@ class Env {
                 result = "1-0";
             else
                 result = "1/2-1/2";
+
+            result += " {" + tstr + "}";
 
             std::vector<std::string> moves;
             std::vector<thc::Move> history_back;

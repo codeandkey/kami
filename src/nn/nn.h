@@ -13,7 +13,7 @@ using namespace torch::nn;
 namespace kami {
     constexpr int FILTERS = 16;
     constexpr int RESIDUALS = 4;
-    constexpr double LEARNING_RATE = 0.0001f;
+    constexpr double LEARNING_RATE = 0.005f;
     constexpr int EPOCHS = 8; 
     constexpr int TRAIN_BATCHSIZE = 8;
 

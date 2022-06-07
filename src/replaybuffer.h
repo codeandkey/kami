@@ -30,6 +30,11 @@ class ReplayBuffer {
             delete[] mcts_buffer;
         }
 
+        void clear() {
+            total = 0;
+            write_index = 0;
+        }
+
         void add(float* input, float* lmm, float* mcts, float result)
         {
             std::lock_guard<std::mutex> lock(buffer_mut);

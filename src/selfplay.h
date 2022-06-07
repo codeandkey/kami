@@ -23,6 +23,15 @@ namespace kami {
 // Train the network after <N>% of the replay buffer has been replaced
 constexpr int TRAIN_AFTER_PCT = 40;
 
+// MCTS alpha parameter curve
+constexpr float ALPHA_INITIAL = 1.0f;
+constexpr float ALPHA_DECAY = 0.06f;
+constexpr int ALPHA_CUTOFF = 15;
+constexpr float ALPHA_FINAL = 0.0f;
+
+// Path to model
+static const char* MODEL_PATH = "/tmp/model.pt";
+
 class Selfplay {
     public:
         Selfplay(NN* model, int ibatch = 16, int nodes = 1024);
@@ -45,9 +54,9 @@ class Selfplay {
         };
 
         struct Status {
-            std::string _message = "Constructed";
             StatusCode _code = STOPPED;
             std::mutex _lock;
+            std::string _message;
 
             std::string message(std::string text = "") {
                 std::lock_guard<std::mutex> lock(_lock);
@@ -66,10 +75,10 @@ class Selfplay {
 
                 return _code = StatusCode(newcode);
             } 
+
         };
 
         Status status;
-
         ReplayBuffer& get_rbuf() { return replay_buffer; }
 
         std::string get_next_pgn() {

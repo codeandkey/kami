@@ -1,6 +1,7 @@
 #include "selfplay.h"
 #include "env.h"
 
+#include <ctime>
 #include <iostream>
 #include <fstream>
 #include <functional>
@@ -9,12 +10,12 @@
 using namespace kami;
 using namespace std;
 
-#define MODEL_PATH "model.pt"
-
 int main(int argc, char** argv) {
     cout << "Starting kami." << endl;
 
-    int inf_threads = 1;
+    srand(time(NULL));
+
+    int inf_threads = 2;
 
     NN model(8, 8, NFEATURES, PSIZE);
 
@@ -25,7 +26,7 @@ int main(int argc, char** argv) {
         cout << "Loaded model." << endl;
     }
 
-    Selfplay s(&model, 16, 512);
+    Selfplay s(&model, 16, 1024);
     s.start(inf_threads);
 
     bool should_quit = false;

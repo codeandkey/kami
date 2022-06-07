@@ -1,6 +1,7 @@
 #include "selfplay.h"
 #include "env.h"
 #include "mcts.h"
+#include "evaluate.h"
 
 #include <iostream>
 #include <stdexcept>
@@ -63,16 +64,17 @@ void Selfplay::inference_main(int id) { try {
 
         float* inputs = nullptr, *lmm = nullptr, *mcts = nullptr, result;
     };
-
     
     // Spin up environments
-    std::vector<MCTS> trees;
+    vector<MCTS> trees;
     vector<vector<T*>> trajectories;
+    vector<int> source_generation;
 
     for (int i = 0; i < ibatch; ++i)
     {
         trees.emplace_back();
         trajectories.emplace_back();
+        source_generation.push_back(model->generation);
     }
 
     float* batch = new float[ibatch * 8 * 8 * NFEATURES];
@@ -80,13 +82,20 @@ void Selfplay::inference_main(int id) { try {
     float* inf_value = new float[ibatch];
     float* inf_policy = new float[ibatch * PSIZE];
 
-    cout << "INFERENCE initialized batch buffers" << endl;
-
     while (status.code() == RUNNING)
     {
         // Build next batch
         for (int i = 0; i < ibatch; ++i)
         {
+            // Check if tree is out of date and needs replacing
+            if (source_generation[i] < model->generation)
+            {
+                // Replace environment and start again
+                trees[i].reset();
+                trajectories[i].clear();
+                source_generation[i] = model->generation;
+            }
+
             // Push up to node limit, or next observation
             while (trees[i].n() < nodes && !trees[i].select(batch + i * 8 * 8 * NFEATURES, lmm + i * PSIZE));
 
@@ -104,7 +113,12 @@ void Selfplay::inference_main(int id) { try {
 
             trajectories[i].push_back(new T(batch + i * 8 * 8 * NFEATURES, lmm + i * PSIZE, mcts));
 
-            int picked = trees[i].pick();
+            float alpha = ALPHA_FINAL;
+
+            if (trees[i].get_env().ply() < ALPHA_CUTOFF)
+                alpha = pow(ALPHA_DECAY, trees[i].get_env().ply()) * ALPHA_INITIAL;
+
+            int picked = trees[i].pick(alpha);
 
             trees[i].push(picked);
 
@@ -121,7 +135,6 @@ void Selfplay::inference_main(int id) { try {
 
                 // Replace environment and reobserve
                 trees[i].reset();
-                cout << "Recorded " << trajectories[i].size() << " experiences from tree " << i << endl;
 
                 for (auto& t : trajectories[i])
                 {
@@ -159,36 +172,62 @@ void Selfplay::training_main()
 {
     cout << "Starting training thread" << endl;
 
-    long last_total = 0, target_count = replay_buffer.size();
+    long target_count = replay_buffer.size(), target_from = 0;
+    int trajectories = replay_buffer.size() * TRAIN_AFTER_PCT / 100;
 
-    float* inputs = new float[TRAIN_BATCHSIZE * 8 * 8 * NFEATURES];
-    float* lmm = new float[TRAIN_BATCHSIZE * PSIZE];
-    float* mcts = new float[TRAIN_BATCHSIZE * PSIZE];
-    float* results = new float[TRAIN_BATCHSIZE];
+    float* inputs = new float[trajectories * 8 * 8 * NFEATURES];
+    float* lmm = new float[trajectories * PSIZE];
+    float* mcts = new float[trajectories * PSIZE];
+    float* results = new float[trajectories];
 
     // Wait for total trajectory target
     while (status.code() == RUNNING)
     {
-        // Check if replay buffer is filled and target percentage reached
-        if (replay_buffer.count() < replay_buffer.size())
-        {
-            this_thread::sleep_for(chrono::milliseconds(100));
-            continue;
-        }
-
         // Check if target percentage reached
         if (replay_buffer.count() < target_count)
         {
-            this_thread::sleep_for(chrono::milliseconds(100));
+            cout << "Gen " << model->generation << " RPB " << 100 * (replay_buffer.count() - target_from) / (target_count - target_from) << "% [" << replay_buffer.count() - target_from << " / " << target_count - target_from << "]" << endl;
+            cout.flush();
+            this_thread::sleep_for(chrono::milliseconds(1000));
             continue;
         }
 
         // Ready to train
-        cout << "Starting training step at " << replay_buffer.count() << " trajectories" << endl;
+        cout << "Gen " << model->generation << " Starting training step with " << trajectories << " trajectories sampled from last " << replay_buffer.size() << endl;
 
-        replay_buffer.select_batch(inputs, lmm, mcts, results, TRAIN_BATCHSIZE);
-        model->train(TRAIN_BATCHSIZE, inputs, lmm, mcts, results);
+        // Save the current model
+        model->write(MODEL_PATH);
 
+        // Generate candidate out-of-place
+        NN cmodel(8, 8, NFEATURES, PSIZE, false, model->generation);
+        cmodel.read(MODEL_PATH);
+
+        // Train new model
+        replay_buffer.select_batch(inputs, lmm, mcts, results, trajectories);
+        cmodel.train(trajectories, inputs, lmm, mcts, results);
+
+        // Evaluate new model
+        if (eval(model, &cmodel))
+        {
+            // Save the current model
+            cmodel.write(MODEL_PATH);
+            model->read(MODEL_PATH);
+            model->generation += 1;
+
+            cout << "Candidate accepted: using new generation " << model->generation << endl;
+
+            replay_buffer.clear();
+            target_count = replay_buffer.size();
+            target_from = 0;
+            
+            continue;
+        } else
+        {
+            cout << "Candidate rejected: generation remains " << model->generation << endl;
+            model->read(MODEL_PATH);
+        }
+
+        target_from = replay_buffer.size();
         target_count += replay_buffer.size() * TRAIN_AFTER_PCT / 100;
     }
 

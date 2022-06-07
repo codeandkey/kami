@@ -32,6 +32,13 @@ add_executable(selfplay
   selfplay.cpp
   ../src/nn/nn.cpp
   ../src/selfplay.cpp
+  ../src/evaluate.cpp
+  ../src/chess/thc.cpp
+)
+
+add_executable(play
+    play.cpp
+  ../src/nn/nn.cpp
   ../src/chess/thc.cpp
 )
 
@@ -40,3 +47,4 @@ target_link_libraries(nncuda "${TORCH_LIBRARIES}")
 target_link_libraries(nndisk "${TORCH_LIBRARIES}")
 target_link_libraries(nntrain "${TORCH_LIBRARIES}")
 target_link_libraries(selfplay "${TORCH_LIBRARIES}")
+target_link_libraries(play "${TORCH_LIBRARIES}")
