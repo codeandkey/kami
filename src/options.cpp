@@ -30,7 +30,7 @@ string options::getStr(string key, string def)
 {
     try {
         lock_guard<mutex> lock(values_lock);
-        return values[key];
+        return values.at(key);
     } catch (out_of_range) {
         return def;
     }
@@ -38,10 +38,13 @@ string options::getStr(string key, string def)
 
 int options::getInt(string key, int def)
 {
+    string sval;
+
     try {
-        return stoi(getStr(key, to_string(def)));
+        sval = getStr(key, to_string(def));
+        return stoi(sval);
     } catch (exception& e) {
-        throw runtime_error(string("conversion failure for key \"") + key + "\": " + e.what());
+        throw runtime_error(string("conversion failure for key \"") + key + "\" = \"" + sval + "\": " + e.what());
     }
 }
 

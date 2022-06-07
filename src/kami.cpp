@@ -52,8 +52,13 @@ int main(int argc, char** argv) {
     if (modelpath.size())
     {
         cout << "Restoring model from " << modelpath << endl;
-        model.read(modelpath);
-        cout << "Loaded model." << endl;
+
+        try {
+            model.read(modelpath);
+            cout << "Loaded model." << endl;
+        } catch (exception& e) {
+            cerr << "WARNING: model read from " << modelpath << "failed: " << e.what() << endl;
+        }
     }
 
     Selfplay s(&model);

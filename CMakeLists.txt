@@ -17,7 +17,7 @@ add_executable(kami
 target_link_libraries(kami "${TORCH_LIBRARIES}")
 set_property(TARGET kami PROPERTY CXX_STANDARD 17)
 
-#set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_BUILD_TYPE Debug)
 
 if (MSVC)
   file(GLOB TORCH_DLLS "${TORCH_INSTALL_PREFIX}/lib/*.dll")

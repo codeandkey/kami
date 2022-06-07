@@ -12,9 +12,9 @@ using namespace std;
 
 Selfplay::Selfplay(NN* model) :
     model(model),
-    ibatch(options::getInt("selfplay_batch")),
-    nodes(options::getInt("selfplay_nodes")),
-    replay_buffer(8 * 8 * NFEATURES, PSIZE, options::getInt("replaybuffer_size")) {}
+    ibatch(options::getInt("selfplay_batch", 16)),
+    nodes(options::getInt("selfplay_nodes", 512)),
+    replay_buffer(8 * 8 * NFEATURES, PSIZE, options::getInt("replaybuffer_size", 512)) {}
 
 void Selfplay::start()
 {
@@ -176,8 +176,8 @@ void Selfplay::training_main()
     string modelpath = options::getStr("model_path", "/tmp/model.pt");
 
     long target_count = replay_buffer.size(), target_from = 0;
-    int target_incr = replay_buffer.size() * options::getInt("rpb_train_pct");
-    int trajectories = replay_buffer.size() * 100 / options::getInt("training_sample_pct");
+    int target_incr = replay_buffer.size() * options::getInt("rpb_train_pct", 40);
+    int trajectories = replay_buffer.size() * 100 / options::getInt("training_sample_pct", 60);
 
     float* inputs = new float[trajectories * 8 * 8 * NFEATURES];
     float* lmm = new float[trajectories * PSIZE];
