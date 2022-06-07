@@ -86,7 +86,7 @@ std::vector<Tensor> NN::forward(std::vector<IValue> inputs)
     ph = policyfc->forward(ph);
     ph = torch::relu(ph).exp().mul(lmm);
 
-    Tensor total = at::sum(ph, 1, true);
+    Tensor total = at::sum(ph, 1, true) + 0.0001;
 
     ph = ph.div(total.expand({-1, psize}));
 
