@@ -104,9 +104,14 @@ int main(int argc, char** argv)
             score += 0.5f;
 
         string resp;
-        cout << "Score: " << score << "/" << game << "Continue? (Y/n)";
+        cout << "Score: " << score << "/" << game << "\nContinue? (Y/n)";
         cout.flush();
         getline(cin, resp);
+
+        if (tolower(resp[0]) != 'Y')
+            break;
+
+        tree.reset();
     }
 
     delete[] inf_policy;

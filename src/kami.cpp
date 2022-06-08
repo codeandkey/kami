@@ -15,7 +15,7 @@ int main(int argc, char** argv) {
     cout << "Starting kami." << endl;
 
     // Set default options
-    options::setInt("inference_threads", 4);
+    options::setInt("inference_threads", 1);
     options::setInt("cpuct", 1);
     options::setInt("selfplay_nodes", 1024);
     options::setInt("selfplay_batch", 16);
@@ -31,6 +31,8 @@ int main(int argc, char** argv) {
     options::setInt("training_batchsize", 8);
     options::setInt("training_mlr", 5);
     options::setInt("training_epochs", 8);
+    options::setInt("force_expand_unvisisted", 0);
+    options::setInt("unvisited_node_value_pct", 100);
 
     // Try and load options
     try {

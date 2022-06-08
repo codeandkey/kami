@@ -20,7 +20,7 @@ struct Node {
     Node* parent = nullptr;
 
     float turn;
-    float q() { return n > 0 ? w / n : 0; }
+    float q(float def = 1.0f) { return n > 0 ? w / n : def; }
 
     void clean()
     {
@@ -67,6 +67,8 @@ class MCTS {
         Env env;
         Node* target = nullptr;
         double cPUCT;
+        bool force_expand_unvisited;
+        float unvisited_node_value;
 
     public:
         Node* root = nullptr;
@@ -75,6 +77,8 @@ class MCTS {
             root = new Node();
             root->turn = -env.turn();
             cPUCT = options::getInt("cpuct", 1);
+            force_expand_unvisited = options::getInt("force_expand_unvisisted", 0);
+            unvisited_node_value = (float) options::getInt("unvisited_node_value_pct", 100) / 100.0f;
         }
 
         int n() { return root->n; }
@@ -187,14 +191,15 @@ class MCTS {
 
             for (auto& c : target->children)
             {
-                if (!c->n)
+                // Force expanding unvisisted children
+                if (force_expand_unvisited && !c->n)
                 {
                     target = c;
                     env.push(c->action);
                     return select(obs, lmm);
                 }
 
-                double uct = c->q() + c->p * cPUCT * sqrt(target->n) / (double) (c->n + 1);
+                double uct = c->q(unvisited_node_value) + c->p * cPUCT * sqrt(target->n) / (double) (c->n + 1);
 
                 if (uct > best_uct)
                 {
@@ -206,7 +211,7 @@ class MCTS {
             if (!best_child)
             {
                 for (auto& c : target->children)
-                    std::cerr << "child " << c->action << " : q=" << c->q() << ", p=" << c->p << ", pmul=" << cPUCT * sqrt(target->n) / (double) (c->n + 1) << std::endl;
+                    std::cerr << "child " << c->action << " : q=" << c->q(unvisited_node_value) << ", p=" << c->p << ", pmul=" << cPUCT * sqrt(target->n) / (double) (c->n + 1) << std::endl;
 
                 throw std::runtime_error("no best child to select, but children present!");
             }
