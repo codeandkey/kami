@@ -92,6 +92,10 @@ void Selfplay::inference_main(int id) { try {
             {
                 // Replace environment and start again
                 trees[i].reset();
+
+                for (T*& t : trajectories[i])
+                    delete t;
+
                 trajectories[i].clear();
                 source_generation[i] = model->generation;
             }
