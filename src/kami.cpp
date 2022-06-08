@@ -33,6 +33,7 @@ int main(int argc, char** argv) {
     options::setInt("training_epochs", 8);
     options::setInt("force_expand_unvisisted", 0);
     options::setInt("unvisited_node_value_pct", 100);
+    options::setInt("flush_old_trees", 1);
 
     // Try and load options
     try {

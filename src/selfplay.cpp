@@ -46,6 +46,8 @@ void Selfplay::stop()
 void Selfplay::inference_main(int id) { try {
     cout << "Starting inference thread: " << id << endl;
 
+    bool flush_old_trees = options::getInt("flush_old_trees", 1);
+
     struct T {
         T(float* i, float* l, float* m) {
             inputs = new float[8 * 8 * NFEATURES];
@@ -88,7 +90,7 @@ void Selfplay::inference_main(int id) { try {
         for (int i = 0; i < ibatch; ++i)
         {
             // Check if tree is out of date and needs replacing
-            if (source_generation[i] < model->generation)
+            if (flush_old_trees && source_generation[i] < model->generation)
             {
                 // Replace environment and start again
                 trees[i].reset();
