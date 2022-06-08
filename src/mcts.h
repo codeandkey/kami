@@ -81,6 +81,15 @@ class MCTS {
             unvisited_node_value = (float) options::getInt("unvisited_node_value_pct", 100) / 100.0f;
         }
 
+        ~MCTS()
+        {
+            if (root)
+            {
+                root->clean();
+                delete root;
+            }
+        }
+
         int n() { return root->n; }
 
         void push(int action)
