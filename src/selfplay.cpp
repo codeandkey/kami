@@ -67,13 +67,12 @@ void Selfplay::inference_main(int id) { try {
     };
     
     // Spin up environments
-    vector<MCTS> trees;
+    MCTS trees[ibatch];
     vector<vector<T*>> trajectories;
     vector<int> source_generation;
 
     for (int i = 0; i < ibatch; ++i)
     {
-        trees.emplace_back();
         trajectories.emplace_back();
         source_generation.push_back(model->generation);
     }
