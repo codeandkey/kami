@@ -207,7 +207,7 @@ class Env {
 
             int hmc = halfmove_clock.back() + 1;
 
-            if (mv.capture || board.squares[mv.src] == 'p' || board.squares[mv.src] == 'P')
+            if (mv.capture != ' ' || board.squares[mv.src] == 'p' || board.squares[mv.src] == 'P')
                 hmc = 0;
 
             halfmove_clock.push_back(hmc);
