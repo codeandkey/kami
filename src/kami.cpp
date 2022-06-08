@@ -14,6 +14,7 @@ using namespace std;
 int main(int argc, char** argv) {
     cout << "Starting kami." << endl;
 
+
     // Set default options
     options::setInt("inference_threads", 1);
     options::setInt("cpuct", 1);
@@ -34,6 +35,8 @@ int main(int argc, char** argv) {
     options::setInt("force_expand_unvisisted", 0);
     options::setInt("unvisited_node_value_pct", 100);
     options::setInt("flush_old_trees", 1);
+    options::setInt("flush_old_rpb", 1);
+    options::setInt("force_torch_single_threaded", 0);
 
     // Try and load options
     try {
@@ -45,6 +48,13 @@ int main(int argc, char** argv) {
     cout << "=========== OPTIONS ===========" << endl;
     options::print();
     cout << "========= END OPTIONS =========" << endl;
+
+    if (options::getInt("force_torch_single_threaded", 0))
+    {
+        // Force single-threaded torch (we do the multithreading around here!)
+        torch::set_num_threads(1);
+        torch::set_num_interop_threads(1);
+    }
 
     srand(time(NULL));
 
@@ -60,7 +70,7 @@ int main(int argc, char** argv) {
             model.read(modelpath);
             cout << "Loaded model." << endl;
         } catch (exception& e) {
-            cerr << "WARNING: model read from " << modelpath << "failed: " << e.what() << endl;
+            cerr << "WARNING: model read from " << modelpath << " failed: " << e.what() << endl;
         }
     }
 

@@ -6,6 +6,7 @@
 
 #include <iostream>
 #include <stdexcept>
+#include <cmath>
 
 using namespace kami;
 using namespace std;
@@ -225,9 +226,11 @@ void Selfplay::training_main()
 
             cout << "Candidate accepted: using new generation " << model->generation << endl;
 
-            replay_buffer.clear();
-            target_count = replay_buffer.size();
-            target_from = 0;
+            if (options::getInt("flush_old_rpb", 1))
+                replay_buffer.clear();
+
+            target_count = max((long) replay_buffer.size(), replay_buffer.count() + (long) target_incr);
+            target_from = replay_buffer.count();
             
             continue;
         } else
