@@ -44,13 +44,24 @@ bool kami::eval(NN* current_model, NN* candidate_model)
     float score = 0.0f; // Score
     int games = 0; // Games played
     
-    std::cout << "Starting evaluation of model generation " << candidate_model->generation << " over " << egames << " games" << std::endl;
+    std::cout << "Starting evaluation of model generation " << candidate_model->get_generation() << " over " << egames << " games" << std::endl;
     
     // Start playing games
     while (games < egames)
     {
         int cur_batch_size = 0;
         int cd_batch_size = 0;
+
+        // Check if model has already been updated
+        if (current_model->get_generation() >= candidate_model->get_generation())
+        {
+            std::cout << "Model was updated during evaluation, skipping!" << std::endl;
+            delete[] cur_inputs;
+            delete[] cur_lmm;
+            delete[] cd_inputs;
+            delete[] cd_lmm;
+            return false;
+        }
 
         // Build batches
         for (int i = 0; i < sizeof(trees) / sizeof(trees[0]); ++i)

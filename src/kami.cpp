@@ -17,6 +17,7 @@ int main(int argc, char** argv) {
 
     // Set default options
     options::setInt("inference_threads", 1);
+    options::setInt("training_threads", 1);
     options::setInt("cpuct", 1);
     options::setInt("selfplay_nodes", 1024);
     options::setInt("selfplay_batch", 16);
@@ -143,8 +144,8 @@ int main(int argc, char** argv) {
     commands["pgn"] = [&](vector<string>& args)
     {
         string nextpgn;
-        nextpgn = string("[White \"KAMI generation ") + to_string(model.generation.load()) + "\"]\n";
-        nextpgn += string("[Black \"KAMI generation ") + to_string(model.generation.load()) + "\"]\n";
+        nextpgn = string("[White \"KAMI generation ") + to_string(model.get_generation()) + "\"]\n";
+        nextpgn += string("[Black \"KAMI generation ") + to_string(model.get_generation()) + "\"]\n";
         nextpgn += s.get_next_pgn();
 
         cout << "\n" << nextpgn << "\n";
@@ -169,7 +170,7 @@ int main(int argc, char** argv) {
     {
         cout << "Inference threads: " << options::getInt("inference_threads") << endl;
         cout << "Total experiences: " << s.get_rbuf().count() << endl;
-        cout << "Current generation: " << model.generation << endl;
+        cout << "Current generation: " << model.get_generation() << endl;
     };
 
     string line;

@@ -1,16 +1,19 @@
 #include "nn.h"
 #include "../options.h"
 
+#include <memory>
 #include <random>
 #include <torch/cuda.h>
+
 #include <torch/nn/modules/loss.h>
 #include <torch/optim.h>
 #include <torch/optim/sgd.h>
-#include <torch/serialize/output-archive.h>
+#include <torch/serialize.h>
 
 using namespace kami;
 using namespace torch;
 using namespace torch::nn;
+using namespace std;
 
 NNResidual::NNResidual(int filters)
 {
@@ -18,25 +21,23 @@ NNResidual::NNResidual(int filters)
     conv2 = register_module("conv2", Conv2d(Conv2dOptions(filters, filters, 3).padding(1).padding_mode(torch::kZeros)));
     batchnorm1 = register_module("batchnorm1", BatchNorm2d(filters));
     batchnorm2 = register_module("batchnorm2", BatchNorm2d(filters));
-    relu = register_module("relu", ReLU());
 }
 
 Tensor NNResidual::forward(Tensor x)
 {
     auto skip = x;
 
-    x = relu(batchnorm1(conv1(x)));
+    x = torch::relu(batchnorm1(conv1(x)));
     x = skip + batchnorm2(conv2(x));
     
     return x;
 }
 
-NN::NN(int width, int height, int features, int psize, bool force_cpu, int generation) :
+NNModule::NNModule(int width, int height, int features, int psize) :
     width(width),
     height(height),
     features(features),
-    psize(psize),
-    generation(generation)
+    psize(psize)
 {
     int filters = options::getInt("filters", 16);
     int nresiduals = options::getInt("residuals", 4);
@@ -53,21 +54,10 @@ NN::NN(int width, int height, int features, int psize, bool force_cpu, int gener
 
     // residual layers
     for (int i = 0; i < nresiduals; ++i)
-        residuals.push_back(register_module("residual" + std::to_string(i), ModuleHolder<NNResidual>(filters)));
-
-    // try cuda
-    if (torch::cuda::is_available() && !force_cpu)
-    {
-        device = torch::Device(kCUDA, 0);
-        to(device);
-        return;
-    }
-
-    if (!force_cpu)
-        std::cerr << "WARNING: CUDA not available, NN operations will be slow\n";
+        residuals.push_back(register_module("residual" + to_string(i), ModuleHolder<NNResidual>(filters)));
 }
 
-std::vector<Tensor> NN::forward(std::vector<IValue> inputs)
+vector<Tensor> NNModule::forward(vector<IValue> inputs)
 {
     Tensor x = inputs[0].toTensor();
     Tensor lmm = inputs[1].toTensor();
@@ -106,6 +96,66 @@ std::vector<Tensor> NN::forward(std::vector<IValue> inputs)
     return { ph, vh };
 }
 
+Tensor NNModule::loss(Tensor& p, Tensor& v, Tensor& obsp, Tensor& obsv, Tensor& lmm)
+{
+    // Value loss: MSE
+    Tensor value_loss = mse_loss(v, obsv).sum();
+
+    // Policy loss -(obsp . log(p)) [maximize directional similarity to p-obsp]
+    Tensor policy_loss = obsp
+        .mul(lmm)
+        .mul(torch::log(p + 0.0001))
+        .sum()
+        .neg();
+
+    return policy_loss.add(value_loss);
+}
+
+NN::NN(int width, int height, int features, int psize, bool force_cpu) :
+    width(width),
+    height(height),
+    features(features),
+    psize(psize)
+{
+    mod = make_shared<NNModule>(width, height, features, psize);
+    generation = 0;
+
+    // try cuda
+    if (torch::cuda::is_available() && !force_cpu)
+    {
+        device = torch::Device(kCUDA, 0);
+        mod->to(device);
+        return;
+    }
+
+    if (!force_cpu)
+        cerr << "WARNING: CUDA not available, NN operations will be slow\n";
+}
+
+NN::NN(NN* other)
+{
+    other->mut.lock_shared();
+
+    width = other->width;
+    height = other->height;
+    features = other->features;
+    psize = other->psize;
+    device = other->device;
+    generation = other->generation;
+
+    mod = make_shared<NNModule>(width, height, features, psize);
+
+    std::stringstream sstr;
+
+    // Just serialize and de-serialize the model -- Cloneable<> is a mess
+    torch::save(other->mod, sstr);
+    torch::load(mod, sstr);
+
+    other->mut.unlock_shared();
+    
+    mod->to(device);
+}
+
 void NN::infer(float* input, float* inplmm, int batch, float* policy, float* value)
 {
     mut.lock_shared();
@@ -118,7 +168,7 @@ void NN::infer(float* input, float* inplmm, int batch, float* policy, float* val
     inputs = inputs.to(device, torch::kFloat32);
     lmm = lmm.to(device, torch::kFloat32);
 
-    std::vector<Tensor> outputs = forward({ inputs, lmm });
+    vector<Tensor> outputs = mod->forward({ inputs, lmm });
 
     outputs[0] = outputs[0].cpu();
     outputs[1] = outputs[1].cpu();
@@ -132,27 +182,34 @@ void NN::infer(float* input, float* inplmm, int batch, float* policy, float* val
     mut.unlock_shared();
 }
 
-void NN::write(std::string path)
+void NN::write(string path)
 {
     mut.lock_shared();
 
     serialize::OutputArchive a;
-    save(a);
+    mod->save(a);
+
+    a.write("generation", IValue(generation));
 
     a.save_to(path);
     mut.unlock_shared();
 }
 
-void NN::read(std::string path)
+void NN::read(string path)
 {
     mut.lock();
     try {
         serialize::InputArchive i;
         i.load_from(path);
 
-        load(i);
+        IValue genvalue;
+        i.read("generation", genvalue);
+
+        generation = genvalue.toInt();
+
+        mod->load(i);
         mut.unlock();
-    } catch (std::exception& e) {
+    } catch (exception& e) {
         mut.unlock();
         throw e;
     }
@@ -168,13 +225,13 @@ void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float*
 
     // initialize optimizer
     optim::SGD optimizer(
-        parameters(), optim::SGDOptions(lr)
+        mod->parameters(), optim::SGDOptions(lr)
     );
 
     // magic batch picker
-    std::vector<int> picker(trajectories, 0);
+    vector<int> picker(trajectories, 0);
 
-    auto rng = std::default_random_engine {};
+    auto rng = default_random_engine {};
 
     for (int i = 0; i < (int) picker.size(); ++i)
         picker[i] = i;
@@ -187,7 +244,7 @@ void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float*
     for (int epoch = 0; epoch < epochs; ++epoch)
     {
         // prepare picker
-        std::shuffle(picker.begin(), picker.end(), rng);
+        shuffle(picker.begin(), picker.end(), rng);
 
         // training batch data
         float next_input[tbatch][width][height][features];
@@ -195,10 +252,10 @@ void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float*
         float next_policy[tbatch][psize];
         float next_value[tbatch];
 
-        std::vector<Tensor> training_inputs;
-        std::vector<Tensor> training_lmm;
-        std::vector<Tensor> training_obsp;
-        std::vector<Tensor> training_obsv;
+        vector<Tensor> training_inputs;
+        vector<Tensor> training_lmm;
+        vector<Tensor> training_obsp;
+        vector<Tensor> training_obsv;
 
         int batch_base = 0;
 
@@ -270,12 +327,12 @@ void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float*
 
         for (int i = 0; i < training_inputs.size(); ++i)
         {
-            zero_grad();
+            mod->zero_grad();
 
-            std::vector<IValue> x = { training_inputs[i], training_lmm[i] };
-            std::vector<Tensor> outputs = forward(x);
+            vector<IValue> x = { training_inputs[i], training_lmm[i] };
+            vector<Tensor> outputs = mod->forward(x);
 
-            Tensor lossval = loss(
+            Tensor lossval = mod->loss(
                 outputs[0],
                 outputs[1],
                 training_obsp[i],
@@ -294,7 +351,7 @@ void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float*
         }
 
         avgloss /= (float) training_inputs.size();
-        std::cout << "Epoch " << epoch + 1 << "/" << epochs << ": loss " << epfirstloss << " => " << eplastloss << ", " << training_inputs.size() << " batches" << std::endl;
+        cout << "Epoch " << epoch + 1 << "/" << epochs << ": loss " << epfirstloss << " => " << eplastloss << ", " << training_inputs.size() << " batches" << endl;
 
         if (!epoch)
             firstloss = avgloss;
@@ -303,22 +360,7 @@ void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float*
     }
 
     ++generation;
+    cout << "Generated model " << generation << ", average loss " << firstloss << " to " << lastloss << " over " << epochs << " epochs\n";
+
     mut.unlock();
-
-    std::cout << "Generated model " << generation << ", average loss " << firstloss << " to " << lastloss << " over " << epochs << " epochs\n";
-}
-
-Tensor NN::loss(Tensor& p, Tensor& v, Tensor& obsp, Tensor& obsv, Tensor& lmm)
-{
-    // Value loss: MSE
-    Tensor value_loss = mse_loss(v, obsv).sum();
-
-    // Policy loss -(obsp . log(p)) [maximize directional similarity to p-obsp]
-    Tensor policy_loss = obsp
-        .mul(lmm)
-        .mul(torch::log(p + 0.0001))
-        .sum()
-        .neg();
-
-    return policy_loss.add(value_loss);
 }

@@ -10,6 +10,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <list>
 
 /** Reporting
  *
@@ -89,7 +90,7 @@ class Selfplay {
 
     private:
         std::vector<std::thread> inference;
-        std::thread training;
+        std::vector<std::thread> training;
 
         NN* model;
 
@@ -101,8 +102,11 @@ class Selfplay {
         std::atomic<bool> wants_pgn;
         std::string ret_pgn;
 
+        std::list<std::atomic<int>> partial_trajectories;
+        std::mutex partial_trajectories_lock;
+
         void inference_main(int id);
-        void training_main();
+        void training_main(int id);
 
 }; // class Selfplay
 } // namespace kami

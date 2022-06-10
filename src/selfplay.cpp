@@ -21,10 +21,16 @@ void Selfplay::start()
 {
     status.code(RUNNING);
 
-    for (int i = 0; i < options::getInt("inference_threads", 1); ++i)
-        inference.push_back(thread(&Selfplay::inference_main, this, i));
+    int n_inference = options::getInt("inference_threads", 1);
 
-    training = thread(&Selfplay::training_main, this);
+    for (int i = 0; i < n_inference; ++i)
+    {
+        partial_trajectories.emplace_back(0);
+        inference.push_back(thread(&Selfplay::inference_main, this, i));
+    }
+
+    for (int i = 0; i < options::getInt("training_threads", 1); ++i)
+        training.push_back(thread(&Selfplay::training_main, this, i));
 }
 
 void Selfplay::stop()
@@ -39,7 +45,11 @@ void Selfplay::stop()
         t.join();
 
     inference.clear();
-    training.join();
+
+    for (auto& t : training)
+        t.join();
+
+    training.clear();
 
     status.code(STOPPED);
 }
@@ -77,7 +87,7 @@ void Selfplay::inference_main(int id) { try {
     for (int i = 0; i < ibatch; ++i)
     {
         trajectories.emplace_back();
-        source_generation.push_back(model->generation);
+        source_generation.push_back(model->get_generation());
     }
 
     float* batch = new float[ibatch * 8 * 8 * NFEATURES];
@@ -85,13 +95,15 @@ void Selfplay::inference_main(int id) { try {
     float* inf_value = new float[ibatch];
     float* inf_policy = new float[ibatch * PSIZE];
 
+    int partials = 0;
+
     while (status.code() == RUNNING)
     {
         // Build next batch
         for (int i = 0; i < ibatch; ++i)
         {
             // Check if tree is out of date and needs replacing
-            if (flush_old_trees && source_generation[i] < model->generation)
+            if (flush_old_trees && source_generation[i] < model->get_generation())
             {
                 // Replace environment and start again
                 trees[i].reset();
@@ -99,8 +111,9 @@ void Selfplay::inference_main(int id) { try {
                 for (T*& t : trajectories[i])
                     delete t;
 
+                partials -= trajectories[i].size();
                 trajectories[i].clear();
-                source_generation[i] = model->generation;
+                source_generation[i] = model->get_generation();
             }
 
             // Push up to node limit, or next observation
@@ -118,6 +131,7 @@ void Selfplay::inference_main(int id) { try {
             float mcts[PSIZE];
             trees[i].snapshot(mcts);
 
+            ++partials;
             trajectories[i].push_back(new T(batch + i * 8 * 8 * NFEATURES, lmm + i * PSIZE, mcts));
 
             float alpha = ALPHA_FINAL;
@@ -150,6 +164,7 @@ void Selfplay::inference_main(int id) { try {
                     delete t;
                 }
 
+                partials -= trajectories[i].size();
                 trajectories[i].clear();
             }
 
@@ -164,6 +179,11 @@ void Selfplay::inference_main(int id) { try {
         // Expansion
         for (int i = 0; i < ibatch; ++i)
             trees[i].expand(inf_policy + i * PSIZE, inf_value[i]);
+
+        // Update partial trajectories
+        auto pt = partial_trajectories.begin();
+        advance(pt, id);
+        *pt = partials;
     }
 
     delete[] batch;
@@ -172,12 +192,12 @@ void Selfplay::inference_main(int id) { try {
 
     cout << "Terminating inference thread: " << id << endl;
 } catch (exception& e) {
-    cerr << "INFERENCE thread failed: " << status.message() << endl;
+    cerr << "Inference thread " << id << " failed: " << e.what() << endl;
 }}
 
-void Selfplay::training_main()
+void Selfplay::training_main(int id)
 {
-    cout << "Starting training thread" << endl;
+    cout << "Starting training thread " << id << endl;
 
     string modelpath = options::getStr("model_path", "/tmp/model.pt");
 
@@ -193,24 +213,33 @@ void Selfplay::training_main()
     // Wait for total trajectory target
     while (status.code() == RUNNING)
     {
-        // Check if target percentage reached
+        // Check if target percentage reached, also grab the current generation
         if (replay_buffer.count() < target_count)
         {
-            cout << "Gen " << model->generation << " RPB " << 100 * (replay_buffer.count() - target_from) / (target_count - target_from) << "% [" << replay_buffer.count() - target_from << " / " << target_count - target_from << "]" << endl;
-            cout.flush();
+            if (!id)
+            {
+                cout << "Gen " << model->get_generation() << " RPB " << 100 * (replay_buffer.count() - target_from) / (target_count - target_from) << "% [" << replay_buffer.count() - target_from << " / " << target_count - target_from << "] | Partials: ";
+
+                auto ct = partial_trajectories.begin();
+
+                for (int inf = 0; inf < inference.size(); ++inf)
+                {
+                    cout << " Inf " << inf << ": " << *ct;
+                    ++ct;
+                }
+
+                cout << endl;
+            }
+
             this_thread::sleep_for(chrono::milliseconds(1000));
             continue;
         }
 
         // Ready to train
-        cout << "Gen " << model->generation << " Starting training step with " << trajectories << " trajectories sampled from last " << replay_buffer.size() << endl;
+        cout << "Trainer " << id << ": training generation " << model->get_generation() << " with " << trajectories << " trajectories sampled from last " << replay_buffer.size() << endl;
 
-        // Save the current model
-        model->write(modelpath);
-
-        // Generate candidate out-of-place
-        NN cmodel(8, 8, NFEATURES, PSIZE, false, model->generation);
-        cmodel.read(modelpath);
+        // Clone the current model
+        NN cmodel(model);
 
         // Train new model
         replay_buffer.select_batch(inputs, lmm, mcts, results, trajectories);
@@ -222,9 +251,8 @@ void Selfplay::training_main()
             // Save the current model
             cmodel.write(modelpath);
             model->read(modelpath);
-            model->generation += 1;
 
-            cout << "Candidate accepted: using new generation " << model->generation << endl;
+            cout << "Candidate accepted: using new generation " << model->get_generation() << endl;
 
             if (options::getInt("flush_old_rpb", 1))
                 replay_buffer.clear();
@@ -235,8 +263,7 @@ void Selfplay::training_main()
             continue;
         } else
         {
-            cout << "Candidate rejected: generation remains " << model->generation << endl;
-            model->read(modelpath);
+            cout << "Candidate rejected: generation remains " << model->get_generation() << endl;
         }
 
         target_from = replay_buffer.count();
