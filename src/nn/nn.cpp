@@ -168,7 +168,12 @@ void NN::infer(float* input, float* inplmm, int batch, float* policy, float* val
     inputs = inputs.to(device, torch::kFloat32);
     lmm = lmm.to(device, torch::kFloat32);
 
-    vector<Tensor> outputs = mod->forward({ inputs, lmm });
+    vector<Tensor> outputs;
+
+    {
+        torch::NoGradGuard guard;
+        outputs = mod->forward({ inputs, lmm });
+    }
 
     outputs[0] = outputs[0].cpu();
     outputs[1] = outputs[1].cpu();
