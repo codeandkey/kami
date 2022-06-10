@@ -278,7 +278,7 @@ class Env {
                 return true;
             }
 
-            if (board.IsInsufficientDraw(false, drawtype))
+            if (board.IsInsufficientDraw(false, drawtype) && drawtype == thc::DRAWTYPE::DRAWTYPE_INSUFFICIENT_AUTO)
             {
                 out = "Draw by insufficient material";
                 *value = 0.0f;
