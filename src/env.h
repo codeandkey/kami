@@ -278,6 +278,13 @@ class Env {
                 return true;
             }
 
+            if (board.IsInsufficientDraw(false, drawtype))
+            {
+                out = "Draw by insufficient material";
+                *value = 0.0f;
+                return true;
+            }
+
             return false;
         }
 
