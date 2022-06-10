@@ -143,7 +143,7 @@ class MCTS {
             {
                 Node* child = root->children[i];
 
-                double d = ((double) child->n / (double) root->n) * pow(child->n, alpha);
+                double d = ((double) child->n / (double) root->n) * pow(child->n, 1.0f / alpha);
 
                 dist[i] = d;
                 length += d;
