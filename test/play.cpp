@@ -24,7 +24,6 @@ int main(int argc, char** argv)
     }
 
     float* obs = new float[8 * 8 * NFEATURES];
-    float* lmm = new float[PSIZE];
     float* inf_policy = new float[PSIZE];
     float inf_value;
 
@@ -71,10 +70,10 @@ int main(int argc, char** argv)
 
                     if (!tree.root->children.size())
                     {
-                        if (!tree.select(obs, lmm))
+                        if (!tree.select(obs))
                             throw runtime_error("expected tree to have children, can't expand for model!");
 
-                        model.infer(obs, lmm, 1, inf_policy, &inf_value);
+                        model.infer(obs, 1, inf_policy, &inf_value);
                         tree.expand(inf_policy, inf_value);
                     }
 
@@ -85,9 +84,9 @@ int main(int argc, char** argv)
                 cout << "Computer to move. Searching over " << nodes << " nodes." << endl;
 
                 while (tree.n() < nodes)
-                if (tree.select(obs, lmm))
+                if (tree.select(obs))
                 {
-                    model.infer(obs, lmm, 1, inf_policy, &inf_value);
+                    model.infer(obs, 1, inf_policy, &inf_value);
                     tree.expand(inf_policy, inf_value);
                 }
 
@@ -116,7 +115,6 @@ int main(int argc, char** argv)
 
     delete[] inf_policy;
     delete[] obs;
-    delete[] lmm;
 
     cout << "Quitting. Final score " << score << "/" << game << endl;
     return 0;
