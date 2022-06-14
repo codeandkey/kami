@@ -15,7 +15,8 @@ Selfplay::Selfplay(NN* model) :
     model(model),
     ibatch(options::getInt("selfplay_batch", 16)),
     nodes(options::getInt("selfplay_nodes", 512)),
-    replay_buffer(8 * 8 * NFEATURES, PSIZE, options::getInt("replaybuffer_size", 512)) {}
+    wants_pgn(false),
+    replay_buffer(OBSIZE, PSIZE, options::getInt("replaybuffer_size", 512)) {}
 
 void Selfplay::start()
 {
@@ -60,14 +61,16 @@ void Selfplay::inference_main(int id) { try {
     bool flush_old_trees = options::getInt("flush_old_trees", 1);
 
     struct T {
-        T(float* i, float* l, float* m) {
-            inputs = new float[8 * 8 * NFEATURES];
+        T(float* i, float* l, float* m, float pov) {
+            inputs = new float[OBSIZE];
             lmm = new float[PSIZE];
             mcts = new float[PSIZE];
 
-            memcpy(inputs, i, sizeof(float) * 8 * 8 * NFEATURES);
+            memcpy(inputs, i, sizeof(float) * OBSIZE);
             memcpy(lmm, l, sizeof(float) * PSIZE);
             memcpy(mcts, m, sizeof(float) * PSIZE);
+
+            this->pov = pov;
         }
 
         ~T() {
@@ -76,7 +79,7 @@ void Selfplay::inference_main(int id) { try {
             delete[] mcts;
         }
 
-        float* inputs = nullptr, *lmm = nullptr, *mcts = nullptr, result;
+        float* inputs = nullptr, *lmm = nullptr, *mcts = nullptr, pov;
     };
     
     // Spin up environments
@@ -90,7 +93,7 @@ void Selfplay::inference_main(int id) { try {
         source_generation.push_back(model->get_generation());
     }
 
-    float* batch = new float[ibatch * 8 * 8 * NFEATURES];
+    float* batch = new float[ibatch * OBSIZE];
     float* lmm = new float[ibatch * PSIZE];
     float* inf_value = new float[ibatch];
     float* inf_policy = new float[ibatch * PSIZE];
@@ -117,7 +120,7 @@ void Selfplay::inference_main(int id) { try {
             }
 
             // Push up to node limit, or next observation
-            while (trees[i].n() < nodes && !trees[i].select(batch + i * 8 * 8 * NFEATURES, lmm + i * PSIZE));
+            while (trees[i].n() < nodes && !trees[i].select(batch + i * OBSIZE, lmm + i * PSIZE));
 
             // If not ready, this observation is done
             if (trees[i].n() < nodes) continue;
@@ -125,14 +128,14 @@ void Selfplay::inference_main(int id) { try {
             // Otherwise, save this trajectory and perform the action
 
             // Reuse batch space, it will be overwritten anyway
-            trees[i].get_env().observe(batch + i * 8 * 8 * NFEATURES);
+            trees[i].get_env().observe(batch + i * OBSIZE);
             trees[i].get_env().lmm(lmm + i * PSIZE);
 
             float mcts[PSIZE];
             trees[i].snapshot(mcts);
 
             ++partials;
-            trajectories[i].push_back(new T(batch + i * 8 * 8 * NFEATURES, lmm + i * PSIZE, mcts));
+            trajectories[i].push_back(new T(batch + i * OBSIZE, lmm + i * PSIZE, mcts, trees[i].get_env().turn()));
 
             float alpha = ALPHA_FINAL;
 
@@ -159,8 +162,7 @@ void Selfplay::inference_main(int id) { try {
 
                 for (auto& t : trajectories[i])
                 {
-                    t->result = value;
-                    replay_buffer.add(t->inputs, t->lmm, t->mcts, t->result);
+                    replay_buffer.add(t->inputs, t->mcts, t->pov * value);
                     delete t;
                 }
 
@@ -204,9 +206,12 @@ void Selfplay::training_main(int id)
     long target_count = replay_buffer.size(), target_from = 0;
     int target_incr = replay_buffer.size() * options::getInt("rpb_train_pct", 40) / 100;
     int trajectories = replay_buffer.size() * options::getInt("training_sample_pct", 60) / 100;
+    bool detect_anomaly = options::getInt("training_detect_anomaly", 0);
 
-    float* inputs = new float[trajectories * 8 * 8 * NFEATURES];
-    float* lmm = new float[trajectories * PSIZE];
+    if (detect_anomaly && !id)
+        cout << "Anomaly detection enabled" << endl;
+
+    float* inputs = new float[trajectories * OBSIZE];
     float* mcts = new float[trajectories * PSIZE];
     float* results = new float[trajectories];
 
@@ -242,8 +247,8 @@ void Selfplay::training_main(int id)
         NN cmodel(model);
 
         // Train new model
-        replay_buffer.select_batch(inputs, lmm, mcts, results, trajectories);
-        cmodel.train(trajectories, inputs, lmm, mcts, results);
+        replay_buffer.select_batch(inputs, mcts, results, trajectories);
+        cmodel.train(trajectories, inputs, mcts, results, detect_anomaly);
 
         // Evaluate new model
         if (eval(model, &cmodel))

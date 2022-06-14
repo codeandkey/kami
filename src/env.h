@@ -9,8 +9,11 @@
 #include "chess/thc.h"
 
 namespace kami {
-constexpr int NFEATURES = 1 + 8 + 6 + 4 + 12;
-constexpr int PSIZE = 4096 + 4 * 22;
+constexpr int NFEATURES = 8 + 6 + 4 + 12;
+constexpr int PSIZE = 64 * 64 + (8 + 14) * 4;
+constexpr int WIDTH = 8;
+constexpr int HEIGHT = 8;
+constexpr int OBSIZE = WIDTH * HEIGHT * NFEATURES;
 
 class Env {
     private:
@@ -136,35 +139,47 @@ class Env {
         }
 
         void observe(float* dst) {
-            float header[1 + 8 + 6 + 4];
+            float header[8 + 6 + 4];
 
-            header[0] = 0.5f + curturn / 2.0f;
+            // Clear observation
+            for (int i = 0; i < OBSIZE; ++i)
+                dst[i] = 0.0f;
 
+            // Build square headers
             for (int i = 0; i < 8; ++i)
-                header[1 + i] = (history.size() >> (i + 1)) & 1;
+                header[i] = (history.size() >> (i + 1)) & 1;
 
             for (int i = 0; i < 6; ++i)
-                header[9 + i] = (board.half_move_clock >> i) & 1;
+                header[8 + i] = (board.half_move_clock >> i) & 1;
 
-            header[15] = board.wking_allowed() ? 1.0f : 0.0f;
-            header[16] = board.wqueen_allowed() ? 1.0f : 0.0f;
-            header[17] = board.bking_allowed() ? 1.0f : 0.0f;
-            header[18] = board.bqueen_allowed() ? 1.0f : 0.0f;
+            header[14] = board.wking_allowed() ? 1.0f : 0.0f;
+            header[15] = board.wqueen_allowed() ? 1.0f : 0.0f;
+            header[16] = board.bking_allowed() ? 1.0f : 0.0f;
+            header[17] = board.bqueen_allowed() ? 1.0f : 0.0f;
+
+            bool our_col = curturn < 0;
 
             for (int rank = 0; rank < 8; ++rank)
             {
                 for (int file = 0; file < 8; ++file)
                 {
-                    float* base = dst + (rank * 8 * NFEATURES) + (file * NFEATURES);
+                    float* base;
 
-                    for (int h = 0; h < 19; ++h)
+                    if (our_col)
+                        base = dst + (rank * WIDTH * NFEATURES) + (file * NFEATURES);
+                    else
+                        base = dst + ((7 - rank) * WIDTH * NFEATURES) + ((7 - file) * NFEATURES);
+
+                    for (int h = 0; h < 18; ++h)
                         base[h] = header[h];
 
                     char pc = board.squares[(7 - rank) * 8 + file];
 
-                    base += 19;
+                    base += 18;
 
-                    if (pc == tolower(pc))
+                    bool pc_col = pc == tolower(pc);
+
+                    if (pc_col != our_col)
                         base += 6;
 
                     pc = tolower(pc);

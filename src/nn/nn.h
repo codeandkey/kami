@@ -35,8 +35,8 @@ namespace kami {
         public:
             NNModule(int width, int height, int features, int psize);
 
-            std::vector<torch::Tensor> forward(std::vector<torch::IValue> x);
-            Tensor loss(Tensor& p, Tensor& v, Tensor& obsp, Tensor& obsv, Tensor& lmm);
+            std::vector<torch::Tensor> forward(Tensor x);
+            Tensor loss(Tensor& p, Tensor& v, Tensor& obsp, Tensor& obsv);
     };
 
     class NN {
@@ -66,7 +66,7 @@ namespace kami {
             int polsize() const { return psize; }
 
             void infer(float* input, float* inplmm, int batch, float* policy, float* value);
-            void train(int trajectories, float* inputs, float* lmm, float* obs_p, float* obs_v);
+            void train(int trajectories, float* inputs, float* obs_p, float* obs_v, bool detect_anomaly=false);
 
             void read(std::string path);
             void write(std::string path);

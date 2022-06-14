@@ -18,14 +18,12 @@ class ReplayBuffer {
             bufsize(bufsize)
         {
             input_buffer = new float[obsize * bufsize];
-            lmm_buffer = new float[bufsize * psize];
             mcts_buffer = new float[bufsize * psize];
             result_buffer = new float[bufsize];
         }
 
         ~ReplayBuffer() {
             delete[] input_buffer;
-            delete[] lmm_buffer;
             delete[] result_buffer;
             delete[] mcts_buffer;
         }
@@ -35,7 +33,7 @@ class ReplayBuffer {
             write_index = 0;
         }
 
-        void add(float* input, float* lmm, float* mcts, float result)
+        void add(float* input, float* mcts, float result)
         {
             std::lock_guard<std::mutex> lock(buffer_mut);
 
@@ -43,12 +41,6 @@ class ReplayBuffer {
                 input_buffer + write_index * obsize,
                 input,
                 sizeof(float) * obsize
-            );
-
-            memcpy(
-                lmm_buffer + write_index * psize,
-                lmm,
-                sizeof(float) * psize
             );
 
             memcpy(
@@ -66,7 +58,7 @@ class ReplayBuffer {
         int size() { return bufsize; }
         long count() { return total; }
 
-        void select_batch(float* dst_input, float* dst_lmm, float* dst_mcts, float* dst_result, int n)
+        void select_batch(float* dst_input, float* dst_mcts, float* dst_result, int n)
         {
             std::lock_guard<std::mutex> lock(buffer_mut);
 
@@ -82,12 +74,6 @@ class ReplayBuffer {
                 );
 
                 memcpy(
-                    dst_lmm + i * psize,
-                    lmm_buffer + source * psize,
-                    sizeof(float) * psize
-                );
-
-                memcpy(
                     dst_mcts + i * psize,
                     mcts_buffer + source * psize,
                     sizeof(float) * psize
@@ -100,7 +86,7 @@ class ReplayBuffer {
     private:
         int obsize, psize, bufsize;
         std::mutex buffer_mut;
-        float* input_buffer, *lmm_buffer, *result_buffer, *mcts_buffer;
+        float* input_buffer, *result_buffer, *mcts_buffer;
         int write_index = 0;
         long total = 0;
 }; // class ReplayBuffer

@@ -57,11 +57,8 @@ NNModule::NNModule(int width, int height, int features, int psize) :
         residuals.push_back(register_module("residual" + to_string(i), ModuleHolder<NNResidual>(filters)));
 }
 
-vector<Tensor> NNModule::forward(vector<IValue> inputs)
+vector<Tensor> NNModule::forward(Tensor x)
 {
-    Tensor x = inputs[0].toTensor();
-    Tensor lmm = inputs[1].toTensor();
-
     // initial convolution
     x = x.permute({0, 3, 1, 2});
     x = conv1->forward(x);
@@ -78,11 +75,7 @@ vector<Tensor> NNModule::forward(vector<IValue> inputs)
     ph = torch::relu(ph);
     ph = ph.flatten(1);
     ph = policyfc->forward(ph);
-    ph = torch::relu(ph).exp().mul(lmm);
-
-    Tensor total = at::sum(ph, 1, true) + 0.0001;
-
-    ph = ph.div(total.expand({-1, psize}));
+    ph = torch::softmax(ph, 1);
 
     // value head
     Tensor vh = valueconv->forward(x);
@@ -96,14 +89,13 @@ vector<Tensor> NNModule::forward(vector<IValue> inputs)
     return { ph, vh };
 }
 
-Tensor NNModule::loss(Tensor& p, Tensor& v, Tensor& obsp, Tensor& obsv, Tensor& lmm)
+Tensor NNModule::loss(Tensor& p, Tensor& v, Tensor& obsp, Tensor& obsv)
 {
     // Value loss: MSE
     Tensor value_loss = mse_loss(v, obsv).sum();
 
     // Policy loss -(obsp . log(p)) [maximize directional similarity to p-obsp]
     Tensor policy_loss = obsp
-        .mul(lmm)
         .mul(torch::log(p + 0.0001))
         .sum()
         .neg();
@@ -158,12 +150,9 @@ NN::NN(NN* other)
 
 void NN::infer(float* input, float* inplmm, int batch, float* policy, float* value)
 {
-    mut.lock_shared();
-
-    Tensor inputs = torch::from_blob(input, { batch, width, height, features }, {1, 1, 1, 1}, torch::kCPU);
-    Tensor lmm = torch::from_blob(inplmm, { batch, psize }, {1, 1}, torch::kCPU);
+    Tensor inputs = torch::from_blob(input, { batch, width, height, features }, torch::kCPU);
+    Tensor lmm = torch::from_blob(inplmm, { batch, psize }, torch::kCPU);
     inputs = inputs.reshape({ batch, width, height, features });
-    lmm = lmm.reshape({ batch, psize });
 
     inputs = inputs.to(device, torch::kFloat32);
     lmm = lmm.to(device, torch::kFloat32);
@@ -172,19 +161,40 @@ void NN::infer(float* input, float* inplmm, int batch, float* policy, float* val
 
     {
         torch::NoGradGuard guard;
-        outputs = mod->forward({ inputs, lmm });
+        mut.lock_shared();
+        outputs = mod->forward(inputs);
+        mut.unlock_shared();
     }
 
-    outputs[0] = outputs[0].cpu();
-    outputs[1] = outputs[1].cpu();
+    Tensor ph = outputs[0], vh = outputs[1];
 
-    float* policy_data = outputs[0].data_ptr<float>();
-    float* value_data = outputs[1].data_ptr<float>();
+    ph = ph.mul(lmm);
+
+    Tensor psum = at::sum(ph, 1, true).clamp(0.0001).expand({-1, psize});
+
+    #ifndef NDEBUG
+        if ((psum == 0).any().item().toBool())
+            throw runtime_error("infer: policy sum contains a zero");
+    #endif
+
+    ph = ph.div(psum);
+
+    ph = ph.cpu();
+    vh = vh.cpu();
+    
+    #ifndef NDEBUG
+        if (ph.isnan().any().item().toBool())
+            throw runtime_error("infer: final policy output contains NaN");
+
+        if (vh.isnan().any().item().toBool())
+            throw runtime_error("infer: final value output contains NaN");
+    #endif
+
+    float* policy_data = ph.data_ptr<float>();
+    float* value_data = vh.data_ptr<float>();
 
     memcpy(policy, policy_data, batch * psize * sizeof(float));
     memcpy(value, value_data, batch * sizeof(float));
-
-    mut.unlock_shared();
 }
 
 void NN::write(string path)
@@ -220,9 +230,13 @@ void NN::read(string path)
     }
 }
 
-void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float* obs_v)
+void NN::train(int trajectories, float* inputs, float* obs_p, float* obs_v, bool detect_anomaly)
 {
     mut.lock();
+
+    // Detect anomalies
+    if (detect_anomaly)
+        torch::autograd::AnomalyMode::set_enabled(true);
 
     float lr = (float) options::getInt("training_mlr", 5) / 1000.0f;
     int epochs = options::getInt("training_epochs", 8);
@@ -253,12 +267,10 @@ void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float*
 
         // training batch data
         float next_input[tbatch][width][height][features];
-        float next_lmm[tbatch][psize];
         float next_policy[tbatch][psize];
         float next_value[tbatch];
 
         vector<Tensor> training_inputs;
-        vector<Tensor> training_lmm;
         vector<Tensor> training_obsp;
         vector<Tensor> training_obsv;
 
@@ -269,6 +281,7 @@ void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float*
             // build batch
             int i;
 
+            // copy observations
             for (i = 0; i < tbatch && i + batch_base <= picker.size() - 1; ++i)
                 memcpy(
                     &next_input[i][0][0],
@@ -287,14 +300,6 @@ void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float*
             // copy values 
             for (int j = 0; j < i; ++j)
                 next_value[j] = obs_v[picker[batch_base + j]];
-
-            // copy lmm 
-            for (int j = 0; j < i; ++j)
-                memcpy(
-                    &next_lmm[j][0],
-                    lmm + picker[batch_base + j] * psize,
-                    sizeof(float) * psize
-                );
 
             batch_base += i;
 
@@ -316,12 +321,6 @@ void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float*
                 {tbatch, 1},
                 kCPU
             ).to(device, kFloat32));
-
-            training_lmm.push_back(torch::from_blob(
-                next_lmm, 
-                {tbatch, psize},
-                kCPU
-            ).to(device, kFloat32));
         }
 
         // train
@@ -334,15 +333,28 @@ void NN::train(int trajectories, float* inputs, float* lmm, float* obs_p, float*
         {
             mod->zero_grad();
 
-            vector<IValue> x = { training_inputs[i], training_lmm[i] };
-            vector<Tensor> outputs = mod->forward(x);
+            if (detect_anomaly)
+            {
+                if (training_inputs[i].isnan().any().cpu().item().toBool())
+                    throw runtime_error("training input ind " + to_string(i) + " contains NaN");
+            }
+
+            vector<Tensor> outputs = mod->forward(training_inputs[i]);
+
+            if (detect_anomaly)
+            {
+                if (outputs[1].isnan().any().cpu().item().toBool())
+                    throw runtime_error("forward value output contains NaN");
+
+                if (outputs[0].isnan().any().cpu().item().toBool())
+                    throw runtime_error("forward policy output contains NaN");
+            }
 
             Tensor lossval = mod->loss(
                 outputs[0],
                 outputs[1],
                 training_obsp[i],
-                training_obsv[i],
-                training_lmm[i]
+                training_obsv[i]
             );
 
             lossval.backward();

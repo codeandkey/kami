@@ -143,7 +143,7 @@ class MCTS {
             {
                 Node* child = root->children[i];
 
-                double d = ((double) child->n / (double) root->n) * pow(child->n, 1.0f / alpha);
+                double d = pow(child->n, 1.0f / alpha);
 
                 dist[i] = d;
                 length += d;
@@ -241,10 +241,16 @@ class MCTS {
                 new_child->turn = -target->turn;
                 new_child->p = policy[action];
 
+                #ifndef NDEBUG
+                    if (std::isnan(policy[action]))
+                        throw std::runtime_error("NaN policy received from NN!");
+                #endif
+
                 target->children.push_back(new_child);
             }
 
-            target->backprop(value);
+            // We have the NN output the value from the current player's POV.
+            target->backprop(value * target->turn);
 
             while (target != root)
             {
