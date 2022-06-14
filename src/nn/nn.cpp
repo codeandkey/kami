@@ -148,14 +148,12 @@ NN::NN(NN* other)
     mod->to(device);
 }
 
-void NN::infer(float* input, float* inplmm, int batch, float* policy, float* value)
+void NN::infer(float* input, int batch, float* policy, float* value)
 {
     Tensor inputs = torch::from_blob(input, { batch, width, height, features }, torch::kCPU);
-    Tensor lmm = torch::from_blob(inplmm, { batch, psize }, torch::kCPU);
     inputs = inputs.reshape({ batch, width, height, features });
 
     inputs = inputs.to(device, torch::kFloat32);
-    lmm = lmm.to(device, torch::kFloat32);
 
     vector<Tensor> outputs;
 
@@ -168,27 +166,8 @@ void NN::infer(float* input, float* inplmm, int batch, float* policy, float* val
 
     Tensor ph = outputs[0], vh = outputs[1];
 
-    ph = ph.mul(lmm);
-
-    Tensor psum = at::sum(ph, 1, true).clamp(0.0001).expand({-1, psize});
-
-    #ifndef NDEBUG
-        if ((psum == 0).any().item().toBool())
-            throw runtime_error("infer: policy sum contains a zero");
-    #endif
-
-    ph = ph.div(psum);
-
     ph = ph.cpu();
     vh = vh.cpu();
-    
-    #ifndef NDEBUG
-        if (ph.isnan().any().item().toBool())
-            throw runtime_error("infer: final policy output contains NaN");
-
-        if (vh.isnan().any().item().toBool())
-            throw runtime_error("infer: final value output contains NaN");
-    #endif
 
     float* policy_data = ph.data_ptr<float>();
     float* value_data = vh.data_ptr<float>();

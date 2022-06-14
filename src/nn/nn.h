@@ -65,7 +65,7 @@ namespace kami {
             int obsize() const { return width * height * features; }
             int polsize() const { return psize; }
 
-            void infer(float* input, float* inplmm, int batch, float* policy, float* value);
+            void infer(float* input, int batch, float* policy, float* value);
             void train(int trajectories, float* inputs, float* obs_p, float* obs_v, bool detect_anomaly=false);
 
             void read(std::string path);

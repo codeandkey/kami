@@ -23,11 +23,9 @@ bool kami::eval(NN* current_model, NN* candidate_model)
 
     // Input buffers
     float* cur_inputs = new float[ebatch * 8 * 8 * NFEATURES];
-    float* cur_lmm = new float[ebatch * PSIZE];
 
     // Input buffers (candidate)
     float* cd_inputs = new float[ebatch * 8 * 8 * NFEATURES];
-    float* cd_lmm = new float[ebatch * PSIZE];
 
     // Trees
     MCTS trees[ebatch];
@@ -57,9 +55,7 @@ bool kami::eval(NN* current_model, NN* candidate_model)
         {
             std::cout << "Model was updated during evaluation, skipping!" << std::endl;
             delete[] cur_inputs;
-            delete[] cur_lmm;
             delete[] cd_inputs;
-            delete[] cd_lmm;
             return false;
         }
 
@@ -67,12 +63,11 @@ bool kami::eval(NN* current_model, NN* candidate_model)
         for (int i = 0; i < sizeof(trees) / sizeof(trees[0]); ++i)
         {
             float* inputs = trees[i].get_env().turn() == candidate_turns[i] ? cd_inputs : cur_inputs;
-            float* lmm = trees[i].get_env().turn() == candidate_turns[i] ? cd_lmm : cur_lmm;
 
             int boff = trees[i].get_env().turn() == candidate_turns[i] ? cd_batch_size : cur_batch_size;
 
             // Push up to node limit, or next observation
-            while (trees[i].n() < enodes && !trees[i].select(inputs + boff * 8 * 8 * NFEATURES, lmm + boff * PSIZE));
+            while (trees[i].n() < enodes && !trees[i].select(inputs + boff * 8 * 8 * NFEATURES));
 
             // If not ready, this observation is done, we pass it to the model
             if (trees[i].n() < enodes)
@@ -111,7 +106,7 @@ bool kami::eval(NN* current_model, NN* candidate_model)
         // Batch inference
         if (cur_batch_size)
         {
-            current_model->infer(cur_inputs, cur_lmm, cur_batch_size, policy, value);
+            current_model->infer(cur_inputs, cur_batch_size, policy, value);
 
             for (int i = 0; i < cur_batch_size; ++i)
                 trees[cur_targets[i]].expand(policy + i * PSIZE, value[i]);
@@ -120,7 +115,7 @@ bool kami::eval(NN* current_model, NN* candidate_model)
         // Batch inference (on candidate)
         if (cd_batch_size)
         {
-            candidate_model->infer(cd_inputs, cd_lmm, cd_batch_size, policy, value);
+            candidate_model->infer(cd_inputs, cd_batch_size, policy, value);
 
             for (int i = 0; i < cd_batch_size; ++i)
                 trees[cd_targets[i]].expand(policy + i * PSIZE, value[i]);
@@ -128,9 +123,7 @@ bool kami::eval(NN* current_model, NN* candidate_model)
     }
 
     delete[] cur_inputs;
-    delete[] cur_lmm;
     delete[] cd_inputs;
-    delete[] cd_lmm;
 
     std::cout << "Finished evaluating: score " << (int) (score * 100 / games) << "%, target " << etarget << std::endl;
 

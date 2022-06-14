@@ -165,7 +165,7 @@ class MCTS {
             return root->children.back()->action;
         }
 
-        bool select(float* obs, float* lmm)
+        bool select(float* obs)
         {
             if (!target)
                 target = root;
@@ -190,7 +190,6 @@ class MCTS {
                 }
 
                 env.observe(obs);
-                env.lmm(lmm);
                 return true;
             }
 
@@ -205,7 +204,7 @@ class MCTS {
                 {
                     target = c;
                     env.push(c->action);
-                    return select(obs, lmm);
+                    return select(obs);
                 }
 
                 double uct = c->q(unvisited_node_value) + c->p * cPUCT * sqrt(target->n) / (double) (c->n + 1);
@@ -227,21 +226,31 @@ class MCTS {
 
             env.push(best_child->action);
             target = best_child;
-            return select(obs, lmm);
+            return select(obs);
         }
 
         void expand(float* policy, float value)
         {
-            for (auto& action : env.actions())
+            std::vector<int> actions = env.actions();
+
+            float ptotal = 0.0001f;
+
+            for (int action : actions)
+                ptotal += policy[action];
+
+            for (int action : actions)
             {
                 Node* new_child = new Node();
 
                 new_child->action = action;
                 new_child->parent = target;
                 new_child->turn = -target->turn;
-                new_child->p = policy[action];
+                new_child->p = policy[action] / ptotal;
 
                 #ifndef NDEBUG
+                    if (policy[action] < 0.0f)
+                        throw std::runtime_error("unexpected negative policy " + std::to_string(policy[action]));
+
                     if (std::isnan(policy[action]))
                         throw std::runtime_error("NaN policy received from NN!");
                 #endif

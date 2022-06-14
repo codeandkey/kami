@@ -142,20 +142,26 @@ class Env {
             float header[8 + 6 + 4];
 
             // Clear observation
-            for (int i = 0; i < OBSIZE; ++i)
-                dst[i] = 0.0f;
+            memset(dst, 0, sizeof(float) * OBSIZE);
 
             // Build square headers
-            for (int i = 0; i < 8; ++i)
-                header[i] = (history.size() >> (i + 1)) & 1;
+            int ply = history.size();
 
+            for (int i = 0; i < 8; ++i)
+                header[i] = (ply >> i) & 1;
+
+            int hmc = halfmove_clock.back();
             for (int i = 0; i < 6; ++i)
-                header[8 + i] = (board.half_move_clock >> i) & 1;
+                header[8 + i] = (hmc >> i) & 1;
 
             header[14] = board.wking_allowed() ? 1.0f : 0.0f;
             header[15] = board.wqueen_allowed() ? 1.0f : 0.0f;
             header[16] = board.bking_allowed() ? 1.0f : 0.0f;
             header[17] = board.bqueen_allowed() ? 1.0f : 0.0f;
+
+            // Write all square headers
+            for (int sq = 0; sq < 64; ++sq)
+                memcpy(dst + sq * NFEATURES, header, sizeof(header));
 
             bool our_col = curturn < 0;
 
@@ -163,24 +169,18 @@ class Env {
             {
                 for (int file = 0; file < 8; ++file)
                 {
-                    float* base;
+                    float* base = dst;
 
                     if (our_col)
-                        base = dst + (rank * WIDTH * NFEATURES) + (file * NFEATURES);
+                        base += (rank * WIDTH * NFEATURES) + (file * NFEATURES);
                     else
-                        base = dst + ((7 - rank) * WIDTH * NFEATURES) + ((7 - file) * NFEATURES);
+                        base += ((7 - rank) * WIDTH * NFEATURES) + ((7 - file) * NFEATURES);
 
-                    for (int h = 0; h < 18; ++h)
-                        base[h] = header[h];
-
-                    char pc = board.squares[(7 - rank) * 8 + file];
+                    // Note: board is flipped vertically due to THC but this should be OK anyway
+                    char pc = board.squares[rank * 8 + file];
 
                     base += 18;
-
-                    bool pc_col = pc == tolower(pc);
-
-                    if (pc_col != our_col)
-                        base += 6;
+                    base += (isupper(pc) == (curturn < 1.0f)) * 6;
 
                     pc = tolower(pc);
 
@@ -339,8 +339,7 @@ class Env {
 
         void lmm(float* out)
         {
-            for (int i = 0; i < PSIZE; ++i)
-                out[i] = 0.0f;
+            memset(out, 0, sizeof(float) * PSIZE);
 
             for (int& i : actions())
                 out[i] = 1.0f;

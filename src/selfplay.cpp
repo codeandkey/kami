@@ -61,13 +61,11 @@ void Selfplay::inference_main(int id) { try {
     bool flush_old_trees = options::getInt("flush_old_trees", 1);
 
     struct T {
-        T(float* i, float* l, float* m, float pov) {
+        T(float* i, float* m, float pov) {
             inputs = new float[OBSIZE];
-            lmm = new float[PSIZE];
             mcts = new float[PSIZE];
 
             memcpy(inputs, i, sizeof(float) * OBSIZE);
-            memcpy(lmm, l, sizeof(float) * PSIZE);
             memcpy(mcts, m, sizeof(float) * PSIZE);
 
             this->pov = pov;
@@ -75,11 +73,10 @@ void Selfplay::inference_main(int id) { try {
 
         ~T() {
             delete[] inputs;
-            delete[] lmm;
             delete[] mcts;
         }
 
-        float* inputs = nullptr, *lmm = nullptr, *mcts = nullptr, pov;
+        float* inputs = nullptr, *mcts = nullptr, pov;
     };
     
     // Spin up environments
@@ -94,7 +91,6 @@ void Selfplay::inference_main(int id) { try {
     }
 
     float* batch = new float[ibatch * OBSIZE];
-    float* lmm = new float[ibatch * PSIZE];
     float* inf_value = new float[ibatch];
     float* inf_policy = new float[ibatch * PSIZE];
 
@@ -120,7 +116,7 @@ void Selfplay::inference_main(int id) { try {
             }
 
             // Push up to node limit, or next observation
-            while (trees[i].n() < nodes && !trees[i].select(batch + i * OBSIZE, lmm + i * PSIZE));
+            while (trees[i].n() < nodes && !trees[i].select(batch + i * OBSIZE));
 
             // If not ready, this observation is done
             if (trees[i].n() < nodes) continue;
@@ -129,13 +125,12 @@ void Selfplay::inference_main(int id) { try {
 
             // Reuse batch space, it will be overwritten anyway
             trees[i].get_env().observe(batch + i * OBSIZE);
-            trees[i].get_env().lmm(lmm + i * PSIZE);
 
             float mcts[PSIZE];
             trees[i].snapshot(mcts);
 
             ++partials;
-            trajectories[i].push_back(new T(batch + i * OBSIZE, lmm + i * PSIZE, mcts, trees[i].get_env().turn()));
+            trajectories[i].push_back(new T(batch + i * OBSIZE, mcts, trees[i].get_env().turn()));
 
             float alpha = ALPHA_FINAL;
 
@@ -176,7 +171,7 @@ void Selfplay::inference_main(int id) { try {
         }
 
         // Inference
-        model->infer(batch, lmm, ibatch, inf_policy, inf_value);
+        model->infer(batch, ibatch, inf_policy, inf_value);
 
         // Expansion
         for (int i = 0; i < ibatch; ++i)
