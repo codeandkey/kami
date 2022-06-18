@@ -23,8 +23,8 @@ namespace kami {
 
 // MCTS alpha parameter curve
 constexpr float ALPHA_INITIAL = 1.0f;
-constexpr float ALPHA_DECAY = 0.98f;
-constexpr int ALPHA_CUTOFF = 25;
+constexpr float ALPHA_DECAY = 0.95f;
+constexpr int ALPHA_CUTOFF = 30;
 constexpr float ALPHA_FINAL = 0.0f;
 
 // Path to model

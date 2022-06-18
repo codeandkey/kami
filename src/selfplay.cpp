@@ -59,6 +59,15 @@ void Selfplay::inference_main(int id) { try {
     cout << "Starting inference thread: " << id << endl;
 
     bool flush_old_trees = options::getInt("flush_old_trees", 1);
+    
+    // Value used for training the network in draw situations.
+    // The search will still consider draws neutral, but hopefully
+    // training the network with draw trajectories considered as losses,
+    // the network will be much less likely to immediately shoot for a fast
+    // draw to prevent a loss.
+    float draw_value;
+
+    draw_value = (options::getInt("draw_value_pct", 50) / 100.0f) * 2.0f - 1.0f;
 
     struct T {
         T(float* i, float* m, float pov) {
@@ -155,7 +164,11 @@ void Selfplay::inference_main(int id) { try {
                 // Replace environment and reobserve
                 trees[i].reset();
 
-                for (auto& t : trajectories[i])
+                if (value == 0.0f) for (auto& t : trajectories[i])
+                {
+                    replay_buffer.add(t->inputs, t->mcts, draw_value);
+                    delete t;
+                } else for (auto& t : trajectories[i])
                 {
                     replay_buffer.add(t->inputs, t->mcts, t->pov * value);
                     delete t;

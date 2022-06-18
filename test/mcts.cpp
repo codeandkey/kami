@@ -27,13 +27,13 @@ int main()
 
         for (int i : tree.get_env().actions()) 
         {
-            if (tree.get_env().decode(i) != tree.get_env().decode(tree.get_env().encode(tree.get_env().decode(i))))
+            if (i != tree.get_env().encode(tree.get_env().decode(i)))
             {
-                cout << i << " failed, decodes to " << tree.get_env().decode(i).TerseOut() << "\n";
-                cout << ", but " << tree.get_env().decode(i).TerseOut() << " encodes to " << tree.get_env().encode(tree.get_env().decode(i)) << "\n";
+                cout << i << " failed, decodes to " << tree.get_env().debug_action(i) << "\n";
+                cout << ", but " << tree.get_env().debug_action(i) << " encodes to " << tree.get_env().encode(tree.get_env().decode(i)) << "\n";
             }
 
-            cout << " " << tree.get_env().decode(i).NaturalOut(&tree.get_env().board);
+            cout << " " << tree.get_env().debug_action(i);
         }
 
         cout << "\n";
@@ -71,7 +71,7 @@ int main()
         }
 
         int action = tree.pick();
-        cout << "picking move " << tree.get_env().decode(action).NaturalOut(&tree.get_env().board) << "\n";
+        cout << "picking move " << tree.get_env().debug_action(action) << "\n";
         tree.push(action);
     }
 

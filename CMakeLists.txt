@@ -5,19 +5,7 @@ project (kami)
 find_package(Torch REQUIRED)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
-add_executable(kami
-  src/kami.cpp
-  src/chess/thc.cpp
-  src/nn/nn.cpp
-  src/selfplay.cpp
-  src/evaluate.cpp
-  src/options.cpp
-)
-
-target_link_libraries(kami "${TORCH_LIBRARIES}")
-set_property(TARGET kami PROPERTY CXX_STANDARD 17)
-
-set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_BUILD_TYPE Release)
 
 if (MSVC)
   file(GLOB TORCH_DLLS "${TORCH_INSTALL_PREFIX}/lib/*.dll")
@@ -29,3 +17,4 @@ if (MSVC)
 endif (MSVC)
 
 add_subdirectory(test)
+add_subdirectory(src)

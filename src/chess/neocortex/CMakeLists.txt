@@ -1,0 +1,16 @@
+add_library(neocortex
+   attacks.cpp
+   bitboard.cpp
+   board.cpp
+   eval_consts.cpp
+   eval.cpp
+   log.cpp
+   move.cpp
+   perft.cpp
+   piece.cpp
+   position.cpp
+   square.cpp
+   tt.cpp
+   util.cpp
+   zobrist.cpp
+)

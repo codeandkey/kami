@@ -44,7 +44,7 @@ int main(int argc, char** argv)
                 vector<int> legal_actions = e.actions();
 
                 for (int a : legal_actions)
-                    legal_moves += ' ' + e.decode(a).NaturalOut(&e.board);
+                    legal_moves += ' ' + e.debug_action(a);
 
                 while (1) {
                     string mv;
@@ -54,10 +54,16 @@ int main(int argc, char** argv)
                     cin >> mv;
 
                     // Try decoding player move
-                    thc::Move m;
-                    bool ok = m.NaturalIn(&e.board, mv.c_str());
+                    int selected = -1;
 
-                    if (!ok)
+                    for (auto& a : legal_actions)
+                    if (tree.get_env().decode(a).match_uci(mv))
+                    {
+                        selected = a;
+                        break;
+                    }
+
+                    if (selected < 0)
                     {
                         cout << "Invalid move\n";
                         cout << "Legal moves:" << legal_moves;
@@ -77,7 +83,7 @@ int main(int argc, char** argv)
                         tree.expand(inf_policy, inf_value);
                     }
 
-                    tree.push(e.encode(m));
+                    tree.push(selected);
                     break;
                 }
             } else {
@@ -92,7 +98,7 @@ int main(int argc, char** argv)
 
                 int picked = tree.pick();
 
-                cout << "NN picks: " << e.decode(picked).NaturalOut(&e.board) << endl;
+                cout << "NN picks: " << e.debug_action(picked) << endl;
                 tree.push(picked);
             }
         }

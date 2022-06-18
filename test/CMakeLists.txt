@@ -1,12 +1,10 @@
 add_executable(bench
   bench.cpp
-  ../src/chess/thc.cpp
   ../src/options.cpp
 )
 
 add_executable(mcts
   mcts.cpp
-  ../src/chess/thc.cpp
   ../src/options.cpp
 )
 
@@ -39,20 +37,20 @@ add_executable(selfplay
   ../src/nn/nn.cpp
   ../src/selfplay.cpp
   ../src/evaluate.cpp
-  ../src/chess/thc.cpp
   ../src/options.cpp
 )
 
 add_executable(play
     play.cpp
   ../src/nn/nn.cpp
-  ../src/chess/thc.cpp
   ../src/options.cpp
 )
 
+target_link_libraries(bench neocortex thc)
+target_link_libraries(mcts neocortex thc)
 target_link_libraries(nn "${TORCH_LIBRARIES}")
 target_link_libraries(nncuda "${TORCH_LIBRARIES}")
 target_link_libraries(nndisk "${TORCH_LIBRARIES}")
 target_link_libraries(nntrain "${TORCH_LIBRARIES}")
-target_link_libraries(selfplay "${TORCH_LIBRARIES}")
-target_link_libraries(play "${TORCH_LIBRARIES}")
+target_link_libraries(selfplay "${TORCH_LIBRARIES}" neocortex thc)
+target_link_libraries(play "${TORCH_LIBRARIES}" neocortex thc)

@@ -45,7 +45,7 @@ struct Node {
         std::stringstream out;
         float value;
 
-        out << std::setw(6) << e->decode(action).NaturalOut(&e->board);
+        out << std::setw(6) << e->debug_action(action);
         out << " Visits: " << std::setw(4) << std::to_string(n);
         out << " Average: " << std::to_string(q());
         out << " Policy: " << std::to_string(p);

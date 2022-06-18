@@ -6,7 +6,10 @@
 
 #include <cstring>
 #define strcpy_s(s, n, p) strncpy(s, p, n)
-#include "chess/thc.h"
+#include "chess/thc/thc.h"
+#include "chess/neocortex/move.h"
+#include "chess/neocortex/piece.h"
+#include "chess/neocortex/position.h"
 
 namespace kami {
 constexpr int NFEATURES = 8 + 6 + 4 + 12;
@@ -15,59 +18,66 @@ constexpr int WIDTH = 8;
 constexpr int HEIGHT = 8;
 constexpr int OBSIZE = WIDTH * HEIGHT * NFEATURES;
 
+class NCInit {
+    public: NCInit() {
+        static bool initialized = false;
+
+        if (!initialized) {
+            initialized = true;
+            neocortex::zobrist::init();
+            neocortex::attacks::init();
+        }
+    }
+};
+
+static NCInit nc_initializer;
+
 class Env {
     private:
         float curturn;
-        std::vector<thc::Move> history;
+        std::vector<neocortex::Move> history;
         std::vector<char*> square_hist;
         std::vector<int> cur_actions;
         bool actions_utd;
 
+        neocortex::Position game;
+
     public:
-        thc::ChessRules board;
-        std::vector<int> repetitions;
-        std::vector<int> halfmove_clock;
 
         Env() {
             curturn = 1.0f;
-            repetitions.push_back(1);
-            halfmove_clock.push_back(0);
-
-            char* squares_dup = new char[sizeof(board.squares)];
-            memcpy(squares_dup, board.squares, sizeof board.squares);
-            square_hist.push_back(squares_dup);
             actions_utd = false;
         }
 
         int ply() { return history.size(); }
 
-        int encode(thc::Move move) 
+        int encode(neocortex::Move move) 
         {
             int base;
 
-            switch (move.special)
+            switch (move.ptype())
             {
-                case thc::SPECIAL_PROMOTION_QUEEN:
+                case neocortex::piece::QUEEN:
                     base = 4096;
                     break;
-                case thc::SPECIAL_PROMOTION_ROOK:
+                case neocortex::piece::ROOK:
                     base = 4096 + 22;
                     break;
-                case thc::SPECIAL_PROMOTION_BISHOP:
+                case neocortex::piece::BISHOP:
                     base = 4096 + (22 * 2);
                     break;
-                case thc::SPECIAL_PROMOTION_KNIGHT:
+                case neocortex::piece::KNIGHT:
                     base = 4096 + (22 * 3);
                     break;
-                default:
-                    return move.src * 64 + move.dst;
+                case neocortex::piece::null:
+                    return move.src() * 64 + move.dst();
             }
 
             // Push
             char srcfile, dstfile;
 
-            srcfile = move.src & 7;
-            dstfile = move.dst & 7;
+            srcfile = neocortex::square::file(move.src());
+            dstfile = neocortex::square::file(move.dst());
 
             if (srcfile == dstfile)
                 return base + srcfile;
@@ -78,64 +88,65 @@ class Env {
             return base + 15 + srcfile;
         }
 
-        thc::Move decode(int action)
+        neocortex::Move decode(int action)
         {
-            thc::Move out;
-            out.Invalid();
-
-            char mv[6] = {0};
+            neocortex::Move out;
 
             if (action < 4096)
-            {
-                thc::Square src = static_cast<thc::Square>(action / 64);
-                thc::Square dst = static_cast<thc::Square>(action % 64);
-
-                mv[0] = thc::get_file(src);
-                mv[1] = thc::get_rank(src);
-                mv[2] = thc::get_file(dst);
-                mv[3] = thc::get_rank(dst);
-
-                out.TerseIn(&board, mv);
-                return out;
-            }
+                return neocortex::Move(action / 64, action % 64);
 
             action -= 4096;
 
-            const char* ptypes = "qrbn";
-            mv[4] = ptypes[action / 22];
+            int ptypes[] = {
+                neocortex::piece::QUEEN,
+                neocortex::piece::ROOK,
+                neocortex::piece::KNIGHT,
+                neocortex::piece::BISHOP,
+            };
+
+            int ptype = ptypes[action / 22];
+            int srcrank, dstrank;
+            int srcfile, dstfile;
+
             action %= 22;
 
-            mv[1] = board.WhiteToPlay() ? '7' : '2';
-            mv[3] = board.WhiteToPlay() ? '8' : '1';
+            if (game.get_color_to_move() == neocortex::piece::WHITE)
+            {
+                srcrank = 6;
+                dstrank = 7;
+            } else
+            {
+                srcrank = 1;
+                dstrank = 0;
+            }
 
             if (action < 8)
             {
-                mv[0] = mv[2] = 'a' + action;
-
-                out.TerseIn(&board, mv);
-                return out;
-            }
-
-            action -= 8;
-
-            // Leftcap
-            if (action < 7)
+                srcfile = dstfile = action;
+            } else
             {
-                mv[0] = 'b' + action;
-                mv[2] = 'a' + action;
+                action -= 8;
 
-                out.TerseIn(&board, mv);
-                return out;
+                // Leftcap
+                if (action < 7)
+                {
+                    srcfile = action + 1;
+                    dstfile = action;
+                } else
+                {
+                    // Rightcap
+                    action -= 7;
+
+                    srcfile = action;
+                    dstfile = action + 1;
+                }
             }
 
-            action -= 7;
-
-            // Rightcap
-            mv[0] = 'a' + action;
-            mv[2] = 'b' + action;
-
-            out.TerseIn(&board, mv);
-            return out;
+            return neocortex::Move(
+                neocortex::square::at(srcrank, srcfile),
+                neocortex::square::at(dstrank, dstfile),
+                ptype
+            );
         }
 
         void observe(float* dst) {
@@ -150,14 +161,14 @@ class Env {
             for (int i = 0; i < 8; ++i)
                 header[i] = (ply >> i) & 1;
 
-            int hmc = halfmove_clock.back();
+            int hmc = game.halfmove_clock();
             for (int i = 0; i < 6; ++i)
                 header[8 + i] = (hmc >> i) & 1;
 
-            header[14] = board.wking_allowed() ? 1.0f : 0.0f;
-            header[15] = board.wqueen_allowed() ? 1.0f : 0.0f;
-            header[16] = board.bking_allowed() ? 1.0f : 0.0f;
-            header[17] = board.bqueen_allowed() ? 1.0f : 0.0f;
+            header[14] = game.has_castle_right(neocortex::CASTLE_WHITE_K) ? 1.0f : 0.0f;
+            header[15] = game.has_castle_right(neocortex::CASTLE_WHITE_Q) ? 1.0f : 0.0f;
+            header[16] = game.has_castle_right(neocortex::CASTLE_BLACK_K) ? 1.0f : 0.0f;
+            header[17] = game.has_castle_right(neocortex::CASTLE_BLACK_Q) ? 1.0f : 0.0f;
 
             // Write all square headers
             for (int sq = 0; sq < 64; ++sq)
@@ -177,130 +188,130 @@ class Env {
                         base += ((7 - rank) * WIDTH * NFEATURES) + ((7 - file) * NFEATURES);
 
                     // Note: board is flipped vertically due to THC but this should be OK anyway
-                    char pc = board.squares[rank * 8 + file];
+                    int pc = game.get_board().get_piece(rank * 8 + file);
 
-                    base += 18;
-                    base += (isupper(pc) == (curturn < 1.0f)) * 6;
+                    if (!neocortex::piece::is_valid(pc))
+                        continue;
 
-                    pc = tolower(pc);
+                    if (neocortex::piece::color(pc) == game.get_color_to_move())
+                        base += 18;
+                    else
+                        base += 24;
 
-                    switch (pc)
-                    {
-                        case 'p':
-                            base[0] = 1.0f;
-                            break;
-                        case 'b':
-                            base[1] = 1.0f;
-                            break;
-                        case 'n':
-                            base[2] = 1.0f;
-                            break;
-                        case 'r':
-                            base[3] = 1.0f;
-                            break;
-                        case 'q':
-                            base[4] = 1.0f;
-                            break;
-                        case 'k':
-                            base[5] = 1.0f;
-                            break;
-                    }
+                    base[neocortex::piece::type(pc)] = 1.0f;
                 }
             }
         }
 
         void push(int action)
         {
-            thc::Move mv = decode(action);
-            //std::cout << "pushing " << mv.TerseOut() << std::endl;
+            neocortex::Move mv = decode(action);
+            game.make_move(mv);
             history.push_back(mv);
-            board.PlayMove(history.back());
             curturn = -curturn;
-            char* squares_dup = new char[sizeof(board.squares)];
-            memcpy(squares_dup, board.squares, sizeof board.squares);
-            square_hist.push_back(squares_dup);
-
-            int hmc = halfmove_clock.back() + 1;
-
-            if (mv.capture != ' ' || board.squares[mv.src] == 'p' || board.squares[mv.src] == 'P')
-                hmc = 0;
-
-            halfmove_clock.push_back(hmc);
-
-            int reps = 0;
-
-            for (unsigned i = 0; i < square_hist.size(); ++i)
-                if (!memcmp(squares_dup, square_hist[i], sizeof board.squares))
-                    reps++;
-
-            repetitions.push_back(reps);
             actions_utd = false;
         }
 
         void pop()
         {
-            //std::cout << "popping " << history.back().TerseOut() << std::endl;
-            board.PopMove(history.back());
+            game.unmake_move(history.back());
             history.pop_back();
             curturn = -curturn;
-
-            delete[] square_hist.back();
-            square_hist.pop_back();
-            repetitions.pop_back();
-            halfmove_clock.pop_back();
             actions_utd = false;
+        }
+
+        std::string debug_action(int action)
+        {
+            return decode(action).to_uci();
         }
 
         bool terminal_str(float* value, std::string& out)
         {
-            thc::TERMINAL val;
-            thc::DRAWTYPE drawtype;
-
-            board.Evaluate(val);
-
-            switch (val)
+            // 50-move rule
+            if (game.halfmove_clock() >= 50)
             {
-                case thc::TERMINAL_BCHECKMATE:
-                    *value = 1.0f;
-                    out = "Black is checkmated";
-                    return true;
-                case thc::TERMINAL_WCHECKMATE:
+                *value = 0;
+                out = "Draw by 50-move rule";
+                return true;
+            }
+
+            // Threefold repetition (usually faster than movegen)
+            if (game.num_repetitions() >= 3)
+            {
+                *value = 0;
+                out = "Draw by threefold repetition";
+                return true;
+            }
+
+            // Insufficient material
+            neocortex::bitboard kings, knights, bishops, global, white, black;
+
+            kings = game.get_board().get_piece_occ(neocortex::piece::KING);
+            knights = game.get_board().get_piece_occ(neocortex::piece::KNIGHT);
+            bishops = game.get_board().get_piece_occ(neocortex::piece::BISHOP);
+            global = game.get_board().get_global_occ();
+            white = game.get_board().get_color_occ(neocortex::piece::WHITE);
+            black = game.get_board().get_color_occ(neocortex::piece::BLACK);
+
+            if (
+                kings == global // K vs K
+
+                || (global == (kings | bishops) && ( // K/B endgame
+                        neocortex::bb::popcount(bishops) == 1 // K vs KB
+                        || (neocortex::bb::popcount(white) == neocortex::bb::popcount(black) && neocortex::bb::popcount(bishops) == 2) // KB vs KB
+                   ))
+
+                || (global == (kings | knights) && ( // K/N endgame
+                        neocortex::bb::popcount(knights) == 1 // K vs KN
+                        || (neocortex::bb::popcount(white) == neocortex::bb::popcount(black) && neocortex::bb::popcount(knights) == 2) // KN vs KN
+                   ))
+            ) 
+            {
+                *value = 0;
+                out = "Draw by insufficient material";
+                return true;
+            }
+
+            // Generate moves
+            neocortex::Move moves[MAXMOVES];
+            int n = game.pseudolegal_moves(moves);
+            int n_legal = 0;
+
+            // Test if at least one legal move
+            for (int i = 0; i < n; ++i)
+            {
+                if (game.make_move(moves[i]))
+                    n_legal++;
+
+                game.unmake_move(moves[i]);
+            }
+
+            if (n_legal)
+                return false;
+
+            if (game.check())
+            {
+                if (game.get_color_to_move() == neocortex::piece::WHITE)
+                {
                     *value = -1.0f;
                     out = "White is checkmated";
-                    return true;
-                case thc::TERMINAL_WSTALEMATE:
-                    *value = 0.0f;
-                    out = "White is stalemated";
-                    return true;
-                case thc::TERMINAL_BSTALEMATE:
-                    *value = 0.0f;
-                    out = "Black is stalemated";
-                    return true;
-                default:;
-            }
+                } else
+                {
+                    *value = 1.0f;
+                    out = "Black is checkmated";
+                }
 
-            if (repetitions.back() >= 3)
-            {
-                out = "Draw by threefold repetition";
-                *value = 0.0f;
                 return true;
             }
 
-            if (halfmove_clock.back() >= 100)
-            {
-                out = "Draw by 50-move rule";
-                *value = 0.0f;
-                return true;
-            }
+            *value = 0.0f;
 
-            if (board.IsInsufficientDraw(false, drawtype) && drawtype == thc::DRAWTYPE::DRAWTYPE_INSUFFICIENT_AUTO)
-            {
-                out = "Draw by insufficient material";
-                *value = 0.0f;
-                return true;
-            }
+            if (game.get_color_to_move() == neocortex::piece::WHITE)
+                out = "White is stalemated";
+            else
+                out = "Black is stalemated";
 
-            return false;
+            return true;
         }
 
         bool terminal(float* value)
@@ -318,13 +329,21 @@ class Env {
         {
             if (!actions_utd)
             {
-                std::vector<thc::Move> moves;
+                // Generate moves
+                neocortex::Move moves[MAXMOVES];
+                int n = game.pseudolegal_moves(moves);
+                int n_legal = 0;
+
                 cur_actions.clear();
 
-                board.GenLegalMoveList(moves);
+                // Test if at least one legal move
+                for (int i = 0; i < n; ++i)
+                {
+                    if (game.make_move(moves[i]))
+                        cur_actions.push_back(encode(moves[i]));
 
-                for (auto& m : moves)
-                    cur_actions.push_back(encode(m));
+                    game.unmake_move(moves[i]);
+                }
 
                 actions_utd = true;
             }
@@ -334,15 +353,7 @@ class Env {
 
         std::string print()
         {
-            return board.ToDebugStr();
-        }
-
-        void lmm(float* out)
-        {
-            memset(out, 0, sizeof(float) * PSIZE);
-
-            for (int& i : actions())
-                out[i] = 1.0f;
+            return game.to_fen();
         }
 
         std::string pgn()
@@ -364,44 +375,26 @@ class Env {
 
             result += " {" + tstr + "}";
 
-            std::vector<std::string> moves;
-            std::vector<thc::Move> history_back;
-
-            // Walk through move history.
-            while (history.size())
-            {
-                thc::Move move = history.back();
-                history_back.push_back(move);
-                pop();
-
-                moves.push_back(move.NaturalOut(&board));
-            }
-
-            // Restore state
-            while (history_back.size())
-            {
-                push(encode(history_back.back()));
-                history_back.pop_back();
-            }
-
-            // Walk in reverse through the generated moves.
             int mn = 1;
 
-            while (moves.size()) {
-                output += std::to_string(mn) + ". ";
-                output += moves.back();
-                moves.pop_back();
+            thc::ChessRules board;
+            board.Init();
 
-                if (!moves.size()) break;
+            // Walk through move history.
+            for (auto& mv : history)
+            {
+                if (board.WhiteToPlay())
+                    output += (mn == 1 ? "" : " ") + std::to_string(mn) + ".";
 
-                output += " " + moves.back() + " ";
-                moves.pop_back();
+                thc::Move move;
+                std::string uci = mv.to_uci();
+                move.TerseIn(&board, uci.c_str());
+                output += move.NaturalOut(&board);
 
-                ++mn;
+                board.PushMove(move);
             }
 
-            output += " " + result;
-            return output;
+            return output + " " + result;
         }
 };
 }
