@@ -48,9 +48,9 @@ add_executable(play
 
 target_link_libraries(bench neocortex thc)
 target_link_libraries(mcts neocortex thc)
-target_link_libraries(nn "${TORCH_LIBRARIES}")
-target_link_libraries(nncuda "${TORCH_LIBRARIES}")
-target_link_libraries(nndisk "${TORCH_LIBRARIES}")
-target_link_libraries(nntrain "${TORCH_LIBRARIES}")
+target_link_libraries(nn "${TORCH_LIBRARIES}" neocortex thc)
+target_link_libraries(nncuda "${TORCH_LIBRARIES}" neocortex thc)
+target_link_libraries(nndisk "${TORCH_LIBRARIES}" neocortex thc)
+target_link_libraries(nntrain "${TORCH_LIBRARIES}" neocortex thc)
 target_link_libraries(selfplay "${TORCH_LIBRARIES}" neocortex thc)
 target_link_libraries(play "${TORCH_LIBRARIES}" neocortex thc)
