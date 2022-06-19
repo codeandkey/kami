@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <iostream>
 
 #include <vector>
@@ -20,12 +21,13 @@ constexpr int OBSIZE = WIDTH * HEIGHT * NFEATURES;
 
 class NCInit {
     public: NCInit() {
-        static bool initialized = false;
+        static std::atomic<bool> initialized = false;
 
-        if (!initialized) {
-            initialized = true;
+        if (!initialized.exchange(true)) {
+            neocortex::bb::init();
             neocortex::zobrist::init();
             neocortex::attacks::init();
+            std::cout << "Initialized neocortex lookup tables" << std::endl;
         }
     }
 };
@@ -36,7 +38,6 @@ class Env {
     private:
         float curturn;
         std::vector<neocortex::Move> history;
-        std::vector<char*> square_hist;
         std::vector<int> cur_actions;
         bool actions_utd;
 
@@ -90,8 +91,6 @@ class Env {
 
         neocortex::Move decode(int action)
         {
-            neocortex::Move out;
-
             if (action < 4096)
                 return neocortex::Move(action / 64, action % 64);
 
@@ -272,21 +271,8 @@ class Env {
                 return true;
             }
 
-            // Generate moves
-            neocortex::Move moves[MAXMOVES];
-            int n = game.pseudolegal_moves(moves);
-            int n_legal = 0;
-
             // Test if at least one legal move
-            for (int i = 0; i < n; ++i)
-            {
-                if (game.make_move(moves[i]))
-                    n_legal++;
-
-                game.unmake_move(moves[i]);
-            }
-
-            if (n_legal)
+            if (actions().size())
                 return false;
 
             if (game.check())
@@ -299,6 +285,28 @@ class Env {
                 {
                     *value = 1.0f;
                     out = "Black is checkmated";
+                }
+
+                // DEBUG crazy terminals
+                if (history.size() <= 3) // impossible game
+                {
+                    neocortex::Move moves[neocortex::MAX_PL_MOVES];
+                    int npl = game.pseudolegal_moves(moves);
+                    std::cout << "actions.size(): " << actions().size() << std::endl;
+                    std::cout << "actions:";
+                    for (auto& i : actions())
+                        std::cout << " " << i;
+                    std::cout << "history:";
+                    for (auto& i : history)
+                        std::cout << " " << i.to_uci();
+                    std::cout << std::endl;
+                    std::cout << "state: " << game.to_fen() << std::endl;
+                    std::cout << "check: " << game.check() << std::endl;
+                    std::cout << "PL moves:";
+                    for (int i = 0; i < npl; ++i)
+                        std::cout << " " << moves[i].to_uci();
+                    std::cout << std::endl;
+                    throw std::runtime_error("impossible game occurred");
                 }
 
                 return true;
@@ -330,9 +338,9 @@ class Env {
             if (!actions_utd)
             {
                 // Generate moves
-                neocortex::Move moves[MAXMOVES];
+                neocortex::Move moves[neocortex::MAX_PL_MOVES];
                 int n = game.pseudolegal_moves(moves);
-                int n_legal = 0;
+                game.order_moves(moves, n);
 
                 cur_actions.clear();
 
@@ -385,16 +393,28 @@ class Env {
             {
                 if (board.WhiteToPlay())
                     output += (mn == 1 ? "" : " ") + std::to_string(mn) + ".";
+                else
+                    ++mn;
 
                 thc::Move move;
                 std::string uci = mv.to_uci();
                 move.TerseIn(&board, uci.c_str());
-                output += move.NaturalOut(&board);
+                output += " " + move.NaturalOut(&board);
 
                 board.PushMove(move);
             }
 
             return output + " " + result;
+        }
+
+        float bootstrap_value(float window)
+        {
+            float score = (float) game.evaluate() / window;
+            
+            score = std::min(score, 1.0f);
+            score = std::max(score, -1.0f);
+
+            return score;
         }
 };
 }
