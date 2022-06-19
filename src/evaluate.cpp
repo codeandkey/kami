@@ -80,7 +80,6 @@ bool kami::eval(NN* current_model, NN* candidate_model)
                 continue;
             }
 
-
             // Make action
             trees[i].push(trees[i].pick());
 
@@ -109,7 +108,7 @@ bool kami::eval(NN* current_model, NN* candidate_model)
             current_model->infer(cur_inputs, cur_batch_size, policy, value);
 
             for (int i = 0; i < cur_batch_size; ++i)
-                trees[cur_targets[i]].expand(policy + i * PSIZE, value[i]);
+                trees[cur_targets[i]].expand(policy + i * PSIZE, value[i], true);
         }
 
         // Batch inference (on candidate)
@@ -118,7 +117,7 @@ bool kami::eval(NN* current_model, NN* candidate_model)
             candidate_model->infer(cd_inputs, cd_batch_size, policy, value);
 
             for (int i = 0; i < cd_batch_size; ++i)
-                trees[cd_targets[i]].expand(policy + i * PSIZE, value[i]);
+                trees[cd_targets[i]].expand(policy + i * PSIZE, value[i], true);
         }
     }
 

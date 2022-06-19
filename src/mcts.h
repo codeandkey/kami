@@ -69,6 +69,10 @@ class MCTS {
         double cPUCT;
         bool force_expand_unvisited;
         float unvisited_node_value;
+        float bootstrap_weight;
+        float bootstrap_window;
+        float bootstrap_amp;
+        int scale_cpuct_by_actions;
 
     public:
         Node* root = nullptr;
@@ -77,8 +81,12 @@ class MCTS {
             root = new Node();
             root->turn = -env.turn();
             cPUCT = options::getInt("cpuct", 1);
-            force_expand_unvisited = options::getInt("force_expand_unvisisted", 0);
+            force_expand_unvisited = options::getInt("force_expand_unvisited", 0);
             unvisited_node_value = (float) options::getInt("unvisited_node_value_pct", 100) / 100.0f;
+            bootstrap_weight = (float) options::getInt("bootstrap_weight", 0) / 100.0f;
+            bootstrap_window = (float) options::getInt("bootstrap_window", 1600);
+            bootstrap_amp = (float) options::getInt("bootstrap_amp_pct", 75) / 100.0f;
+            scale_cpuct_by_actions = options::getInt("scale_cpuct_by_actions", 0);
         }
 
         ~MCTS()
@@ -197,6 +205,11 @@ class MCTS {
             double best_uct = -1000.0;
             Node* best_child = nullptr;
 
+            float cpuct = cPUCT;
+
+            if (scale_cpuct_by_actions)
+                cpuct /= (float) target->children.size();
+
             for (auto& c : target->children)
             {
                 // Force expanding unvisisted children
@@ -207,7 +220,7 @@ class MCTS {
                     return select(obs);
                 }
 
-                double uct = c->q(unvisited_node_value) + c->p * cPUCT * sqrt(target->n) / (double) (c->n + 1);
+                double uct = c->q(unvisited_node_value) + c->p * cpuct * sqrt(target->n) / (double) (c->n + 1);
 
                 if (uct > best_uct)
                 {
@@ -216,22 +229,29 @@ class MCTS {
                 }
             }
 
+            #ifndef NDEBUG
             if (!best_child)
             {
                 for (auto& c : target->children)
-                    std::cerr << "child " << c->action << " : q=" << c->q(unvisited_node_value) << ", p=" << c->p << ", pmul=" << cPUCT * sqrt(target->n) / (double) (c->n + 1) << std::endl;
+                    std::cerr << "child " << c->action << " : q=" << c->q(unvisited_node_value) << ", p=" << c->p << ", pmul=" << cpuct * sqrt(target->n) / (double) (c->n + 1) << std::endl;
 
                 throw std::runtime_error("no best child to select, but children present!");
             }
+            #endif
 
             env.push(best_child->action);
             target = best_child;
             return select(obs);
         }
 
-        void expand(float* policy, float value)
+        void expand(float* policy, float value, bool disable_bootstrap=false)
         {
             std::vector<int> actions = env.actions();
+
+            #ifndef NDEBUG
+            if (!actions.size())
+                throw std::runtime_error("expand() called with no actions");
+            #endif
 
             float ptotal = 0.0001f;
 
@@ -258,7 +278,16 @@ class MCTS {
                 target->children.push_back(new_child);
             }
 
-            // We have the NN output the value from the current player's POV.
+            // When bootstrapping, borrow some percentage of the value from
+            // the neocortex evaluation. Here the evaluation is the score relative to the player
+            // AFTER the action is performed. Then we invert it to find the utility of the player
+            // who performed the action.
+            if (!disable_bootstrap && bootstrap_weight > 0.0f)
+                value = (1 - bootstrap_weight) * value + bootstrap_weight * -env.bootstrap_value(bootstrap_window) * bootstrap_amp;
+
+            // 'value' corresponds to the value of this ACTION.
+            // Then the absolute value estimate (by player) is the preference of this action multiplied by
+            // the action player.
             target->backprop(value * target->turn);
 
             while (target != root)
