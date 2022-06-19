@@ -1514,12 +1514,11 @@ int Position::evaluate(std::string* dbg) {
 		*dbg = output;
 	}
 
-	/* Flip eval if BTM */
-	if (color_to_move == piece::BLACK) {
+	// Invert score if black POV
+	if (color_to_move == piece::BLACK)
 		score *= -1;
-	}
 
-	return score + eval::TEMPO_BONUS;
+	return score;
 }
 
 zobrist::Key Position::get_tt_key() {
