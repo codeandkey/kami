@@ -27,7 +27,6 @@ namespace neocortex {
 		extern const int PHASE_VALS[6];
 		extern const int PHASE_TOTAL;
 
-		constexpr int TEMPO_BONUS = 4;
 		constexpr int CENTER_CONTROL = 1;
 		constexpr int KING_SAFETY = 7;
 		constexpr int PASSED_PAWNS = 11;
