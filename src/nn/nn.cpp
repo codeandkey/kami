@@ -187,6 +187,8 @@ void NN::write(string path)
 
     a.save_to(path);
     mut.unlock_shared();
+
+    cout << "Saved model to " << path << endl;
 }
 
 void NN::read(string path)
