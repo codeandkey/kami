@@ -94,6 +94,25 @@ bool kami::eval(NN* current_model, NN* candidate_model)
                 // Reset model POV to match this model
                 trees[i].reset();
                 candidate_turns[i] = (inputs == cd_inputs) ? 1.0f : -1.0f;
+
+                float target_score = (egames * etarget) / 100;
+
+                // Pass or fail early if possible
+                if ((score + (egames - games)) < target_score)
+                {
+                    delete[] cur_inputs;
+                    delete[] cd_inputs;
+                    std::cout << "Aborting evaluation, score is too low" << std::endl;
+                    return false;
+                }
+
+                if (score >= target_score)
+                {
+                    delete[] cur_inputs;
+                    delete[] cd_inputs;
+                    std::cout << "Passing evaluation early, score is high enough" << std::endl;
+                    return true;
+                }
             }
 
             // Try again
