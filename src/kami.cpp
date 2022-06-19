@@ -14,31 +14,6 @@ using namespace std;
 int main(int argc, char** argv) {
     cout << "Starting kami." << endl;
 
-
-    // Set default options
-    options::setInt("inference_threads", 1);
-    options::setInt("training_threads", 1);
-    options::setInt("cpuct", 1);
-    options::setInt("selfplay_nodes", 1024);
-    options::setInt("selfplay_batch", 16);
-    options::setInt("evaluate_nodes", 512);
-    options::setInt("evaluate_batch", 16);
-    options::setInt("evaluate_games", 10);
-    options::setInt("replaybuffer_size", 1024);
-    options::setInt("rpb_train_pct", 40);
-    options::setInt("training_sample_pct", 60);
-    options::setInt("evaluate_target_pct", 54);
-    options::setInt("residuals", 4);
-    options::setInt("filters", 16);
-    options::setInt("training_batchsize", 8);
-    options::setInt("training_mlr", 5);
-    options::setInt("training_epochs", 8);
-    options::setInt("force_expand_unvisisted", 0);
-    options::setInt("unvisited_node_value_pct", 100);
-    options::setInt("flush_old_trees", 1);
-    options::setInt("flush_old_rpb", 1);
-    options::setInt("force_torch_single_threaded", 0);
-
     // Try and load options
     try {
         options::load();
