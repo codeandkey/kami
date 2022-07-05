@@ -155,7 +155,8 @@ namespace neocortex {
 		int halfmove_clock();
 
 		/**
-		 * Evaluates the current position.
+		 * Evaluates the current position. Returns a positive CP value
+		 * for white advantage, and a negative CP score for black advantage.
 		 *
 		 * @param dbg String output pointer for debug information.
 		 * @return Evaluation score.

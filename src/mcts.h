@@ -278,17 +278,16 @@ class MCTS {
                 target->children.push_back(new_child);
             }
 
-            // When bootstrapping, borrow some percentage of the value from
-            // the neocortex evaluation. Here the evaluation is the score relative to the player
-            // AFTER the action is performed. Then we invert it to find the utility of the player
-            // who performed the action.
-            if (!disable_bootstrap && bootstrap_weight > 0.0f)
-                value = (1 - bootstrap_weight) * value + bootstrap_weight * -env.bootstrap_value(bootstrap_window) * bootstrap_amp;
+            // The NN outputs a value relative to this action. We are looking
+            // for the absolute value of the position. Then we simply normalize
+            // the NN output and then apply the unflipped neocortex evaluation.
 
-            // 'value' corresponds to the value of this ACTION.
-            // Then the absolute value estimate (by player) is the preference of this action multiplied by
-            // the action player.
-            target->backprop(value * target->turn);
+            value *= target->turn;
+
+            if (!disable_bootstrap && bootstrap_weight > 0.0f)
+                value = (1 - bootstrap_weight) * value + bootstrap_weight * env.bootstrap_value(bootstrap_window) * bootstrap_amp;
+
+            target->backprop(value);
 
             while (target != root)
             {
