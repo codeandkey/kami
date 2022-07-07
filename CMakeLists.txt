@@ -5,7 +5,13 @@ project (kami)
 find_package(Torch REQUIRED)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
-set(CMAKE_BUILD_TYPE Release)
+#if (MSVC)
+#    add_compile_options(/W4 /WX)
+#else()
+#    add_compile_options(-Wall -Wextra -pedantic -Werror)
+#endif()
+
+set(CMAKE_BUILD_TYPE Debug)
 
 if (MSVC)
   file(GLOB TORCH_DLLS "${TORCH_INSTALL_PREFIX}/lib/*.dll")

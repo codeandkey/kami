@@ -28,7 +28,7 @@ Tensor NNResidual::forward(Tensor x)
     auto skip = x;
 
     x = torch::relu(batchnorm1(conv1(x)));
-    x = skip + batchnorm2(conv2(x));
+    x = skip + torch::relu(batchnorm2(conv2(x)));
     
     return x;
 }
@@ -39,18 +39,17 @@ NNModule::NNModule(int width, int height, int features, int psize) :
     features(features),
     psize(psize)
 {
-    int filters = options::getInt("filters", 16);
-    int nresiduals = options::getInt("residuals", 4);
+    int filters = options::getInt("filters", 256);
+    int nresiduals = options::getInt("residuals", 2);
 
     batchnorm = register_module("batchnorm1", BatchNorm2d(filters));
-    vbatchnorm = register_module("vbatchnorm", BatchNorm2d(3));
-    pbatchnorm = register_module("pbatchnorm", BatchNorm2d(32));
+    vbatchnorm = register_module("vbatchnorm", BatchNorm2d(1));
+    pbatchnorm = register_module("pbatchnorm", BatchNorm2d(256));
     conv1 = register_module("conv1", Conv2d(Conv2dOptions(features, filters, 3).padding(1).padding_mode(torch::kZeros)));
-    valueconv = register_module("valueconv", Conv2d(Conv2dOptions(filters, 3, 1)));
-    policyconv = register_module("policyconv", Conv2d(Conv2dOptions(filters, 32, 1)));
-    policyfc = register_module("policyfc", Linear(32 * width * height, psize));
-    valuefc1 = register_module("valuefc1", Linear(3 * width * height, 128));
-    valuefc2 = register_module("valuefc2", Linear(128, 1));
+    valueconv = register_module("valueconv", Conv2d(Conv2dOptions(filters, 1, 1)));
+    policyconv = register_module("policyconv", Conv2d(Conv2dOptions(filters, 256, 1)));
+    policyconv2 = register_module("policyconv2", Conv2d(Conv2dOptions(256, 73, 1)));
+    valuefc = register_module("valuefc", Linear(width * height, 256));
 
     // residual layers
     for (int i = 0; i < nresiduals; ++i)
@@ -73,8 +72,11 @@ vector<Tensor> NNModule::forward(Tensor x)
     Tensor ph = policyconv->forward(x);
     ph = pbatchnorm->forward(ph);
     ph = torch::relu(ph);
+    ph = policyconv2->forward(ph);
+
+    // Reorder policy to action space
+    ph = ph.permute({0, 2, 3, 1});
     ph = ph.flatten(1);
-    ph = policyfc->forward(ph);
     ph = torch::softmax(ph, 1);
 
     // value head
@@ -82,8 +84,7 @@ vector<Tensor> NNModule::forward(Tensor x)
     vh = vbatchnorm->forward(vh);
     vh = torch::relu(vh);
     vh = vh.flatten(1);
-    vh = valuefc1->forward(vh);
-    vh = valuefc2->forward(vh);
+    vh = valuefc->forward(vh);
     vh = vh.tanh();
 
     return { ph, vh };

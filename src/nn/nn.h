@@ -26,8 +26,9 @@ namespace kami {
     class NNModule : public Module {
         private:
             BatchNorm2d batchnorm{nullptr}, vbatchnorm{nullptr}, pbatchnorm{nullptr};
-            Conv2d conv1{nullptr}, valueconv{nullptr}, policyconv{nullptr};
-            Linear policyfc{nullptr}, valuefc1{nullptr}, valuefc2{nullptr};
+            Conv2d conv1{nullptr}, valueconv{nullptr}, policyconv{nullptr}, policyconv2{nullptr};
+
+            Linear valuefc{nullptr};
             std::vector<ModuleHolder<NNResidual>> residuals;
 
             int width, height, features, psize;

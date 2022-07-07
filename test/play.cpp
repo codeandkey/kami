@@ -55,9 +55,10 @@ int main(int argc, char** argv)
 
                     // Try decoding player move
                     int selected = -1;
+                    ncMove wants = ncMoveFromUci((char*) mv.c_str());
 
                     for (auto& a : legal_actions)
-                    if (tree.get_env().decode(a).match_uci(mv))
+                    if (tree.get_env().decode(a) == wants)
                     {
                         selected = a;
                         break;

@@ -8,13 +8,16 @@
 #include <cstring>
 #define strcpy_s(s, n, p) strncpy(s, p, n)
 #include "chess/thc/thc.h"
-#include "chess/neocortex/move.h"
-#include "chess/neocortex/piece.h"
+
+extern "C" {
+#include "chess/neocortex/types.h"
 #include "chess/neocortex/position.h"
+#include "chess/neocortex/attacks.h"
+}
 
 namespace kami {
 constexpr int NFEATURES = 8 + 6 + 4 + 12;
-constexpr int PSIZE = 64 * 64 + (8 + 14) * 4;
+constexpr int PSIZE = 73 * 64;
 constexpr int WIDTH = 8;
 constexpr int HEIGHT = 8;
 constexpr int OBSIZE = WIDTH * HEIGHT * NFEATURES;
@@ -24,9 +27,10 @@ class NCInit {
         static std::atomic<bool> initialized = false;
 
         if (!initialized.exchange(true)) {
-            neocortex::bb::init();
-            neocortex::zobrist::init();
-            neocortex::attacks::init();
+            ncAttacksInit();
+            ncBitboardInitBetween();
+            ncBitboardInitRays();
+            ncZobristInit();
             std::cout << "Initialized neocortex lookup tables" << std::endl;
         }
     }
@@ -37,119 +41,167 @@ static NCInit nc_initializer;
 class Env {
     private:
         float curturn;
-        std::vector<neocortex::Move> history;
+        std::vector<ncMove> history;
         std::vector<int> cur_actions;
         bool actions_utd;
 
-        neocortex::Position game;
+        ncPosition game;
 
     public:
 
         Env() {
             curturn = 1.0f;
             actions_utd = false;
+            ncPositionInit(&game);
         }
 
         int ply() { return history.size(); }
 
-        int encode(neocortex::Move move) 
+        int encode(ncMove move) 
         {
+            assert(ncMoveValid(move));
+
             int base;
 
-            switch (move.ptype())
+            ncSquare src = ncMoveSrc(move);
+            ncSquare dst = ncMoveDst(move);
+            ncPiece srcpiece = ncBoardGetPiece(&game.board, src);
+            ncPiece ptype = ncMovePtype(move);
+
+            if (ncPositionGetCTM(&game) == NC_BLACK)
             {
-                case neocortex::piece::QUEEN:
-                    base = 4096;
-                    break;
-                case neocortex::piece::ROOK:
-                    base = 4096 + 22;
-                    break;
-                case neocortex::piece::BISHOP:
-                    base = 4096 + (22 * 2);
-                    break;
-                case neocortex::piece::KNIGHT:
-                    base = 4096 + (22 * 3);
-                    break;
-                case neocortex::piece::null:
-                    return move.src() * 64 + move.dst();
+                // Flip POV when black
+                src = 63 - src;
+                dst = 63 - dst;
             }
 
-            // Push
-            char srcfile, dstfile;
+            int srcrank = ncSquareRank(src);
+            int dstrank = ncSquareRank(dst);
+            int srcfile = ncSquareFile(src);
+            int dstfile = ncSquareFile(dst);
 
-            srcfile = neocortex::square::file(move.src());
-            dstfile = neocortex::square::file(move.dst());
+            switch (ncPieceType(srcpiece))
+            {
+                case NC_PAWN:
+                    if (ncPieceTypeValid(ptype) && ptype != NC_QUEEN)
+                    {
+                        switch (ptype)
+                        {
+                            case NC_KNIGHT:
+                                return 73 * src + 64 + (dstfile - srcfile) + 1;
+                            case NC_BISHOP:
+                                return 73 * src + 64 + (dstfile - srcfile) + 4;
+                            case NC_ROOK:
+                                return 73 * src + 64 + (dstfile - srcfile) + 7;
+                        }
+                    }
+                case NC_QUEEN:
+                case NC_ROOK:
+                case NC_BISHOP:
+                case NC_KING:
+                {
+                    int ind = ncBitboardPopcnt(ncBitboardBetween(src, dst));
+                    ncBitboard dstmask = ncSquareMask(dst);
 
-            if (srcfile == dstfile)
-                return base + srcfile;
+                    if (ncBitboardRay(src, NC_NORTH) & dstmask)
+                        return 73 * src + ind;
+                    else if (ncBitboardRay(src, NC_SOUTH) & dstmask)
+                        return 73 * src + 7 + ind;
+                    else if (ncBitboardRay(src, NC_EAST) & dstmask)
+                        return 73 * src + 14 + ind;
+                    else if (ncBitboardRay(src, NC_WEST) & dstmask)
+                        return 73 * src + 21 + ind;
+                    else if (ncBitboardRay(src, NC_NORTHEAST) & dstmask)
+                        return 73 * src + 28 + ind;
+                    else if (ncBitboardRay(src, NC_NORTHWEST) & dstmask)
+                        return 73 * src + 35 + ind;
+                    else if (ncBitboardRay(src, NC_SOUTHEAST) & dstmask)
+                        return 73 * src + 42 + ind;
+                    else
+                        return 73 * src + 49 + ind;
+                }
+                case NC_KNIGHT:
+                {
+                    int ind = 0;
 
-            if (srcfile == dstfile + 1)
-                return base + 8 + srcfile - 1;
+                    // Order W-NW, N-NW, E-NE, N-NE, W-SW, S-SW, E-SE, S-SE
 
-            return base + 15 + srcfile;
+                    if (srcrank > dstrank)
+                        ind += 4;
+
+                    if (srcfile < dstfile)
+                        ind += 2;
+
+                    ind += abs(srcrank - dstrank) - 1;
+
+                    return 73 * src + 56 + ind;
+                }
+                default:
+                    assert(0);
+                    return 0;
+            }
         }
 
-        neocortex::Move decode(int action)
+        ncMove decode(int action)
         {
-            if (action < 4096)
-                return neocortex::Move(action / 64, action % 64);
+            assert(action >= 0 && action < PSIZE);
 
-            action -= 4096;
+            ncSquare src = action / 73;
+            int atype = action % 73;
 
-            int ptypes[] = {
-                neocortex::piece::QUEEN,
-                neocortex::piece::ROOK,
-                neocortex::piece::KNIGHT,
-                neocortex::piece::BISHOP,
-            };
+            ncSquare dst;
 
-            int ptype = ptypes[action / 22];
-            int srcrank, dstrank;
-            int srcfile, dstfile;
-
-            action %= 22;
-
-            if (game.get_color_to_move() == neocortex::piece::WHITE)
+            if (atype < 56)
             {
-                srcrank = 6;
-                dstrank = 7;
-            } else
-            {
-                srcrank = 1;
-                dstrank = 0;
+                // Ray move
+                int dirs[] = { NC_NORTH, NC_SOUTH, NC_EAST, NC_WEST, NC_NORTHEAST, NC_NORTHWEST, NC_SOUTHEAST, NC_SOUTHWEST };
+                dst = src + dirs[atype / 7] * ((atype % 7) + 1);
             }
-
-            if (action < 8)
+            else if (atype < 64)
             {
-                srcfile = dstfile = action;
-            } else
+                // Knight move
+                int dirs[] = {
+                    NC_WEST + NC_NORTHWEST,
+                    NC_NORTH + NC_NORTHWEST,
+                    NC_EAST + NC_NORTHEAST,
+                    NC_NORTH + NC_NORTHEAST,
+                    NC_WEST + NC_SOUTHWEST,
+                    NC_SOUTH + NC_SOUTHWEST,
+                    NC_EAST + NC_SOUTHEAST,
+                    NC_SOUTH + NC_SOUTHEAST,
+                };
+
+                dst = src + dirs[atype - 56];
+            }
+            else
             {
-                action -= 8;
+                // Minor promoting move
+                int dirs[] = { NC_NORTHWEST, NC_NORTH, NC_NORTHEAST };
+                int ptypes[] = { NC_KNIGHT, NC_BISHOP, NC_ROOK };
+                
+                dst = src + dirs[(atype - 64) % 3];
 
-                // Leftcap
-                if (action < 7)
+                if (ncPositionGetCTM(&game) == NC_BLACK)
                 {
-                    srcfile = action + 1;
-                    dstfile = action;
-                } else
-                {
-                    // Rightcap
-                    action -= 7;
-
-                    srcfile = action;
-                    dstfile = action + 1;
+                    src = 63 - src;
+                    dst = 63 - dst;
                 }
+
+                return ncMoveMakeP(src, dst, ptypes[(atype - 64) / 3]);
             }
 
-            return neocortex::Move(
-                neocortex::square::at(srcrank, srcfile),
-                neocortex::square::at(dstrank, dstfile),
-                ptype
-            );
+            if (ncPositionGetCTM(&game) == NC_BLACK)
+            {
+                src = 63 - src;
+                dst = 63 - dst;
+            }
+
+            return ncMoveMake(src, dst);
         }
 
         void observe(float* dst) {
             float header[8 + 6 + 4];
+            ncColor our_col = ncPositionGetCTM(&game);
 
             // Clear observation
             memset(dst, 0, sizeof(float) * OBSIZE);
@@ -160,52 +212,59 @@ class Env {
             for (int i = 0; i < 8; ++i)
                 header[i] = (ply >> i) & 1;
 
-            int hmc = game.halfmove_clock();
+            int hmc = ncPositionHalfmoveClock(&game);
             for (int i = 0; i < 6; ++i)
                 header[8 + i] = (hmc >> i) & 1;
 
-            header[14] = game.has_castle_right(neocortex::CASTLE_WHITE_K) ? 1.0f : 0.0f;
-            header[15] = game.has_castle_right(neocortex::CASTLE_WHITE_Q) ? 1.0f : 0.0f;
-            header[16] = game.has_castle_right(neocortex::CASTLE_BLACK_K) ? 1.0f : 0.0f;
-            header[17] = game.has_castle_right(neocortex::CASTLE_BLACK_Q) ? 1.0f : 0.0f;
+            int our_k = NC_CASTLE_WHITE_K;
+            int our_q = NC_CASTLE_WHITE_Q;
+            int opp_k = NC_CASTLE_BLACK_K;
+            int opp_q = NC_CASTLE_BLACK_Q;
+
+            if (our_col == NC_BLACK)
+            {
+                our_k = NC_CASTLE_BLACK_K;
+                our_q = NC_CASTLE_BLACK_Q;
+                opp_k = NC_CASTLE_WHITE_K;
+                opp_q = NC_CASTLE_WHITE_Q;
+            }
+
+            header[14] = game.ply[game.nply - 1].castle_rights & our_k;
+            header[15] = game.ply[game.nply - 1].castle_rights & our_q;
+            header[16] = game.ply[game.nply - 1].castle_rights & opp_k;
+            header[17] = game.ply[game.nply - 1].castle_rights & opp_q;
 
             // Write all square headers
             for (int sq = 0; sq < 64; ++sq)
                 memcpy(dst + sq * NFEATURES, header, sizeof(header));
 
-            bool our_col = curturn < 0;
-
             for (int rank = 0; rank < 8; ++rank)
             {
                 for (int file = 0; file < 8; ++file)
                 {
-                    float* base = dst;
+                    int sq = ncSquareAt(rank, file);
+                    int povsq = (our_col == NC_BLACK) ? 63 - sq : sq;
 
-                    if (our_col)
-                        base += (rank * WIDTH * NFEATURES) + (file * NFEATURES);
-                    else
-                        base += ((7 - rank) * WIDTH * NFEATURES) + ((7 - file) * NFEATURES);
+                    float* base = dst + NFEATURES * povsq + 18;
 
                     // Note: board is flipped vertically due to THC but this should be OK anyway
-                    int pc = game.get_board().get_piece(rank * 8 + file);
+                    ncPiece pc = ncBoardGetPiece(&game.board, sq);
 
-                    if (!neocortex::piece::is_valid(pc))
+                    if (!ncPieceValid(pc))
                         continue;
 
-                    if (neocortex::piece::color(pc) == game.get_color_to_move())
-                        base += 18;
-                    else
-                        base += 24;
+                    if (ncPieceColor(pc) != our_col)
+                        base += 6;
 
-                    base[neocortex::piece::type(pc)] = 1.0f;
+                    base[ncPieceType(pc)] = 1.0f;
                 }
             }
         }
 
         void push(int action)
         {
-            neocortex::Move mv = decode(action);
-            game.make_move(mv);
+            ncMove mv = decode(action);
+            ncPositionMakeMove(&game, mv);
             history.push_back(mv);
             curturn = -curturn;
             actions_utd = false;
@@ -213,7 +272,7 @@ class Env {
 
         void pop()
         {
-            game.unmake_move(history.back());
+            ncPositionUnmakeMove(&game);
             history.pop_back();
             curturn = -curturn;
             actions_utd = false;
@@ -221,13 +280,15 @@ class Env {
 
         std::string debug_action(int action)
         {
-            return decode(action).to_uci();
+            char uci[6];
+            ncMoveUCI(decode(action), uci);
+            return uci;
         }
 
         bool terminal_str(float* value, std::string& out)
         {
             // 50-move rule
-            if (game.halfmove_clock() >= 50)
+            if (ncPositionHalfmoveClock(&game) >= 50)
             {
                 *value = 0;
                 out = "Draw by 50-move rule";
@@ -235,7 +296,7 @@ class Env {
             }
 
             // Threefold repetition (usually faster than movegen)
-            if (game.num_repetitions() >= 3)
+            if (ncPositionRepCount(&game) > 3)
             {
                 *value = 0;
                 out = "Draw by threefold repetition";
@@ -243,26 +304,26 @@ class Env {
             }
 
             // Insufficient material
-            neocortex::bitboard kings, knights, bishops, global, white, black;
+            ncBitboard kings, knights, bishops, global, white, black;
 
-            kings = game.get_board().get_piece_occ(neocortex::piece::KING);
-            knights = game.get_board().get_piece_occ(neocortex::piece::KNIGHT);
-            bishops = game.get_board().get_piece_occ(neocortex::piece::BISHOP);
-            global = game.get_board().get_global_occ();
-            white = game.get_board().get_color_occ(neocortex::piece::WHITE);
-            black = game.get_board().get_color_occ(neocortex::piece::BLACK);
+            kings = ncBoardPieceOcc(&game.board, NC_KING);
+            knights = ncBoardPieceOcc(&game.board, NC_KNIGHT);
+            bishops = ncBoardPieceOcc(&game.board, NC_BISHOP);
+            global = ncBoardGlobalOcc(&game.board);
+            white = ncBoardColorOcc(&game.board, NC_WHITE);
+            black = ncBoardColorOcc(&game.board, NC_BLACK);
 
             if (
                 kings == global // K vs K
 
                 || (global == (kings | bishops) && ( // K/B endgame
-                        neocortex::bb::popcount(bishops) == 1 // K vs KB
-                        || (neocortex::bb::popcount(white) == neocortex::bb::popcount(black) && neocortex::bb::popcount(bishops) == 2) // KB vs KB
+                        ncBitboardPopcnt(bishops) == 1 // K vs KB
+                        || (ncBitboardPopcnt(white) == ncBitboardPopcnt(black) && ncBitboardPopcnt(bishops) == 2) // KB vs KB
                    ))
 
                 || (global == (kings | knights) && ( // K/N endgame
-                        neocortex::bb::popcount(knights) == 1 // K vs KN
-                        || (neocortex::bb::popcount(white) == neocortex::bb::popcount(black) && neocortex::bb::popcount(knights) == 2) // KN vs KN
+                        ncBitboardPopcnt(knights) == 1 // K vs KN
+                        || (ncBitboardPopcnt(white) == ncBitboardPopcnt(black) && ncBitboardPopcnt(knights) == 2) // KN vs KN
                    ))
             ) 
             {
@@ -275,9 +336,9 @@ class Env {
             if (actions().size())
                 return false;
 
-            if (game.check())
+            if (ncPositionIsCheck(&game))
             {
-                if (game.get_color_to_move() == neocortex::piece::WHITE)
+                if (ncPositionGetCTM(&game) == NC_WHITE)
                 {
                     *value = -1.0f;
                     out = "White is checkmated";
@@ -288,6 +349,7 @@ class Env {
                 }
 
                 // DEBUG crazy terminals
+                /*
                 if (history.size() <= 3) // impossible game
                 {
                     neocortex::Move moves[neocortex::MAX_PL_MOVES];
@@ -307,14 +369,14 @@ class Env {
                         std::cout << " " << moves[i].to_uci();
                     std::cout << std::endl;
                     throw std::runtime_error("impossible game occurred");
-                }
+                }*/
 
                 return true;
             }
 
             *value = 0.0f;
 
-            if (game.get_color_to_move() == neocortex::piece::WHITE)
+            if (ncPositionGetCTM(&game) == NC_WHITE)
                 out = "White is stalemated";
             else
                 out = "Black is stalemated";
@@ -338,19 +400,20 @@ class Env {
             if (!actions_utd)
             {
                 // Generate moves
-                neocortex::Move moves[neocortex::MAX_PL_MOVES];
-                int n = game.pseudolegal_moves(moves);
-                game.order_moves(moves, n);
+                ncMove moves[NC_MAX_PL_MOVES];
+                int n = ncPositionPLMoves(&game, moves);
+                ncPositionOrderMoves(&game, moves, n);
 
                 cur_actions.clear();
 
                 // Test if at least one legal move
                 for (int i = 0; i < n; ++i)
                 {
-                    if (game.make_move(moves[i]))
-                        cur_actions.push_back(encode(moves[i]));
+                    int legal = ncPositionMakeMove(&game, moves[i]);
+                    ncPositionUnmakeMove(&game);
 
-                    game.unmake_move(moves[i]);
+                    if (legal)
+                        cur_actions.push_back(encode(moves[i]));
                 }
 
                 actions_utd = true;
@@ -361,7 +424,9 @@ class Env {
 
         std::string print()
         {
-            return game.to_fen();
+            char fen[100];
+            ncPositionToFen(&game, fen, sizeof(fen));
+            return fen;
         }
 
         std::string pgn()
@@ -397,8 +462,9 @@ class Env {
                     ++mn;
 
                 thc::Move move;
-                std::string uci = mv.to_uci();
-                move.TerseIn(&board, uci.c_str());
+                char uci[6];
+                ncMoveUCI(mv, uci);
+                move.TerseIn(&board, uci);
                 output += " " + move.NaturalOut(&board);
 
                 board.PushMove(move);
@@ -409,7 +475,7 @@ class Env {
 
         float bootstrap_value(float window)
         {
-            float score = (float) game.evaluate() / window;
+            float score = (float) ncPositionEvaluate(&game) / window;
             
             score = std::min(score, 1.0f);
             score = std::max(score, -1.0f);

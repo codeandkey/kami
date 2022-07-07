@@ -46,7 +46,12 @@ add_executable(play
   ../src/options.cpp
 )
 
+add_executable(encoding
+    encoding.cpp
+)
+
 target_link_libraries(bench neocortex thc)
+target_link_libraries(encoding neocortex thc)
 target_link_libraries(mcts neocortex thc)
 target_link_libraries(nn "${TORCH_LIBRARIES}" neocortex thc)
 target_link_libraries(nncuda "${TORCH_LIBRARIES}" neocortex thc)
