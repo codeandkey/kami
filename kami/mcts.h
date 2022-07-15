@@ -220,7 +220,7 @@ class MCTS {
                     return select(obs);
                 }
 
-                double uct = c->q(unvisited_node_value) + c->p * cpuct * sqrt(target->n) / (double) (c->n + 1);
+                double uct = c->q(unvisited_node_value * c->turn) + c->p * cpuct * sqrt(target->n) / (double) (c->n + 1);
 
                 if (uct > best_uct)
                 {
