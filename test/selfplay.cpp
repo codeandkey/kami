@@ -1,5 +1,5 @@
-#include "../src/selfplay.h"
-#include "../src/env.h"
+#include "../kami/selfplay.h"
+#include "../kami/env.h"
 
 #include <chrono>
 

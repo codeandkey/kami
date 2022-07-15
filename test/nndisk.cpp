@@ -1,5 +1,5 @@
-#include "../src/nn/nn.h"
-#include "../src/env.h"
+#include "../kami/nn/nn.h"
+#include "../kami/env.h"
 
 using namespace kami;
 using namespace std;

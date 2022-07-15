@@ -1,5 +1,5 @@
-#include "../src/nn/nn.h"
-#include "../src/env.h"
+#include "../kami/nn/nn.h"
+#include "../kami/env.h"
 
 #define TESTSIZE 4096 // observations per batch test
 

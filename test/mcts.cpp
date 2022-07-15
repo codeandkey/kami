@@ -5,8 +5,8 @@
 #include <cmath>
 #include <ctime>
 
-#include "../src/mcts.h"
-#include "../src/env.h"
+#include "../kami/mcts.h"
+#include "../kami/env.h"
 
 using namespace kami;
 using namespace std;

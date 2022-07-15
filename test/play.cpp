@@ -1,6 +1,6 @@
-#include "../src/mcts.h"
-#include "../src/env.h"
-#include "../src/nn/nn.h"
+#include "../kami/mcts.h"
+#include "../kami/env.h"
+#include "../kami/nn/nn.h"
 
 #include <iostream>
 #include <string>
