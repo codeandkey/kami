@@ -27,9 +27,6 @@ constexpr float ALPHA_DECAY = 0.95f;
 constexpr int ALPHA_CUTOFF = 1000;
 constexpr float ALPHA_FINAL = 0.0f;
 
-// Path to model
-static const char* MODEL_PATH = "/tmp/model.pt";
-
 class Selfplay {
     public:
         Selfplay(NN* model);

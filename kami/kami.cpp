@@ -63,7 +63,7 @@ int main(int argc, char** argv) {
         string path;
 
         if (!args.size())
-            args.push_back(MODEL_PATH);
+            args.push_back(modelpath);
 
         for (int i = 0; i < args.size(); ++i)
         {
@@ -92,7 +92,7 @@ int main(int argc, char** argv) {
         string path;
 
         if (!args.size())
-            args.push_back(MODEL_PATH);
+            args.push_back(modelpath);
 
         for (int i = 0; i < args.size(); ++i)
         {
