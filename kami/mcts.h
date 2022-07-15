@@ -80,7 +80,7 @@ class MCTS {
         {
             root = new Node();
             root->turn = -env.turn();
-            cPUCT = options::getInt("cpuct", 1);
+            cPUCT = options::getFloat("cpuct", 1.0f);
             force_expand_unvisited = options::getInt("force_expand_unvisited", 0);
             unvisited_node_value = (float) options::getInt("unvisited_node_value_pct", 100) / 100.0f;
             bootstrap_weight = (float) options::getInt("bootstrap_weight", 0) / 100.0f;

@@ -20,6 +20,12 @@ void options::setInt(std::string key, int value)
     values[key] = to_string(value);
 }
 
+void options::setFloat(std::string key, float value)
+{
+    lock_guard<mutex> lock(values_lock);
+    values[key] = to_string(value);
+}
+
 void options::setStr(string key, string value)
 {
     lock_guard<mutex> lock(values_lock);
@@ -43,6 +49,18 @@ int options::getInt(string key, int def)
     try {
         sval = getStr(key, to_string(def));
         return stoi(sval);
+    } catch (exception& e) {
+        throw runtime_error(string("conversion failure for key \"") + key + "\" = \"" + sval + "\": " + e.what());
+    }
+}
+
+float options::getFloat(string key, float def)
+{
+    string sval;
+
+    try {
+        sval = getStr(key, to_string(def));
+        return stof(sval);
     } catch (exception& e) {
         throw runtime_error(string("conversion failure for key \"") + key + "\" = \"" + sval + "\": " + e.what());
     }

@@ -138,8 +138,12 @@ void Selfplay::inference_main(int id) {
             float mcts[PSIZE];
             trees[i].snapshot(mcts);
 
+            // We've selected an action and pushed it -- the color which made
+            // the action is the opposite of the current color to move.
+            float pov = -trees[i].get_env().turn();
+
             ++partials;
-            trajectories[i].push_back(new T(batch + i * OBSIZE, mcts, trees[i].get_env().turn()));
+            trajectories[i].push_back(new T(batch + i * OBSIZE, mcts, pov));
 
             float alpha = ALPHA_FINAL;
 

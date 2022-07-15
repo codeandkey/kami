@@ -8,7 +8,7 @@ bootstrap_window: 1600
 bootstrap_amp_pct: 75
 
 # cpuct value in PUCT calculation (exploration constant)
-cpuct: 1
+cpuct: 1.5
 
 # value of drawn games in saved trajectories, relative to POV
 draw_value_pct: 50
