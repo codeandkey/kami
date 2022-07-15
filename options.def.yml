@@ -1,29 +1,86 @@
-bootstrap_weight: 0            # weight of neocortex value at node expansion in selfplay games
-bootstrap_window: 1600         # centipawn imbalance considered a WIN in neocortex eval
-bootstrap_amp_pct: 75          # percent multiplier applied to bootstrap value
-cpuct: 1                       # cpuct value in PUCT calculation
-draw_value_pct: 50             # value of drawn games in saved trajectories, relative to POV
-evaluate_batch: 8              # number of concurrent evaluation games
-evaluate_games: 10             # total evaluation games
-evaluate_nodes: 512            # nodes per action in evaluation games
-evaluate_target_pct: 54        # target percentage of points in evaluation to accept new candidate
-filters: 16                    # convolutional filters in model (2x per residual)
-flush_old_rpb: 0               # flush experience replay buffer after accepting new model (bad)
-flush_old_trees: 0             # flush all current games after accepting new model
-force_expand_unvisited: 0      # always select an unvisisted child for expansion in MCTS
-force_torch_single_threaded: 0 # try to force torch to avoid multithreading
-inference_threads: 3           # number of inference threads
-model_path: model.pt           # path to model file
-replaybuffer_size: 1024        # max trajectories in replay buffer
-residuals: 2                   # number of residual layers in model
-rpb_train_pct: 40              # train after replacing this percent of the replay buffer
-scale_cpuct_by_actions: 0      # multiplies cpuct by (1 / nActions) at select time
-selfplay_batch: 16             # number of concurrent selfplay games
-selfplay_nodes: 1024           # nodes per action in selfplay games
-training_batchsize: 8          # NN training batch size
-training_detect_anomaly: 0     # enable torch anomaly detection (slow)
-training_epochs: 8             # number of epochs (traversal over entire training set)
-training_mlr: 5                # training learning rate (* 1000)
-training_sample_pct: 60        # percentage of the replaybuffer to sample from and train over
-training_threads: 2            # number of training (/ evaluation) threads
-unvisited_node_value_pct: 50   # average value of unvisited nodes in MCTS
+# weight of neocortex value at node expansion in selfplay games
+bootstrap_weight: 20
+
+# centipawn imbalance considered a WIN in neocortex eval
+bootstrap_window: 1600
+
+# percent multiplier applied to bootstrap value (max prediction amplitude)
+bootstrap_amp_pct: 75
+
+# cpuct value in PUCT calculation (exploration constant)
+cpuct: 1
+
+# value of drawn games in saved trajectories, relative to POV
+draw_value_pct: 50
+
+# number of concurrent evaluation games
+evaluate_batch: 8
+
+# total evaluation games
+evaluate_games: 10
+
+# nodes per action in evaluation games
+evaluate_nodes: 512
+
+# target percentage of points in evaluation to accept new candidate
+evaluate_target_pct: 54
+
+# convolutional filters in model (2x per residual layer)
+filters: 64
+
+# flush experience replay buffer after accepting new model (bad)
+flush_old_rpb: 0
+
+# flush all current games after accepting new model (possibly wasteful)
+flush_old_trees: 0
+
+# always pick an unvisisted child for expansion in MCTS
+force_expand_unvisited: 0
+
+# try to force torch to avoid multithreading (seems slower)
+force_torch_single_threaded: 0
+
+# number of inference threads
+inference_threads: 3
+
+# path to model file
+model_path: model.pt
+
+# max trajectories in replay buffer
+replaybuffer_size: 1024
+
+# number of residual layers in model
+residuals: 2
+
+# train after replacing this percent of the replay buffer
+rpb_train_pct: 40
+
+# multiplies cpuct by (1 / nActions) at select time (probably bad)
+scale_cpuct_by_actions: 0
+
+# number of concurrent selfplay games
+selfplay_batch: 16
+
+# nodes per action in selfplay games
+selfplay_nodes: 1024
+
+# NN training batch size
+training_batchsize: 8
+
+# enable torch anomaly detection (slow)
+training_detect_anomaly: 0
+
+# number of epochs (traversal over entire training set)
+training_epochs: 8
+
+# training learning rate * 1000 , higher values lead to unstable training
+training_mlr: 2
+
+# percentage of the replaybuffer to sample from and train over
+training_sample_pct: 60
+
+# number of training (/ evaluation) threads
+training_threads: 2
+
+# average value of unvisited nodes in MCTS (first-play urgency)
+unvisited_node_value_pct: 50
