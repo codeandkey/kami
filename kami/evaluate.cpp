@@ -7,7 +7,7 @@
 
 using namespace kami;
 
-bool kami::eval(NN* current_model, NN* candidate_model)
+bool kami::eval(NN* current_model, NN* candidate_model, int trainer)
 {
     int ebatch = options::getInt("evaluate_batch");
     int egames = options::getInt("evaluate_games");
@@ -28,7 +28,7 @@ bool kami::eval(NN* current_model, NN* candidate_model)
     float* cd_inputs = new float[ebatch * 8 * 8 * NFEATURES];
 
     // Trees
-    MCTS trees[ebatch];
+    MCTS trees[egames];
 
     // P/V
     float policy[ebatch * PSIZE];
@@ -42,7 +42,7 @@ bool kami::eval(NN* current_model, NN* candidate_model)
     float score = 0.0f; // Score
     int games = 0; // Games played
     
-    std::cout << "Starting evaluation of model generation " << candidate_model->get_generation() << " over " << egames << " games" << std::endl;
+    std::cout << "EVAL " << trainer << ": evaluating model generation " << candidate_model->get_generation() << " over " << egames << " games" << std::endl;
     
     // Start playing games
     while (games < egames)
@@ -53,7 +53,7 @@ bool kami::eval(NN* current_model, NN* candidate_model)
         // Check if model has already been updated
         if (current_model->get_generation() >= candidate_model->get_generation())
         {
-            std::cout << "Model was updated during evaluation, skipping!" << std::endl;
+            std::cout << "EVAL " << trainer << ": model was updated during evaluation, skipping!" << std::endl;
             delete[] cur_inputs;
             delete[] cd_inputs;
             return false;
@@ -62,6 +62,9 @@ bool kami::eval(NN* current_model, NN* candidate_model)
         // Build batches
         for (int i = 0; i < sizeof(trees) / sizeof(trees[0]); ++i)
         {
+            if (cur_batch_size >= ebatch && cd_batch_size >= ebatch)
+                break;
+
             float* inputs = trees[i].get_env().turn() == candidate_turns[i] ? cd_inputs : cur_inputs;
 
             int boff = trees[i].get_env().turn() == candidate_turns[i] ? cd_batch_size : cur_batch_size;
@@ -72,9 +75,9 @@ bool kami::eval(NN* current_model, NN* candidate_model)
             // If not ready, this observation is done, we pass it to the model
             if (trees[i].n() < enodes)
             {
-                if (trees[i].get_env().turn() == candidate_turns[i])
+                if (trees[i].get_env().turn() == candidate_turns[i] && cd_batch_size < ebatch - 1)
                     cd_targets[cd_batch_size++] = i;
-                else
+                else if (trees[i].get_env().turn() == -candidate_turns[i] && cur_batch_size < ebatch - 1)
                     cur_targets[cur_batch_size++] = i;
 
                 continue;
@@ -89,7 +92,7 @@ bool kami::eval(NN* current_model, NN* candidate_model)
                 score += tvalue * candidate_turns[i] / 2.0f + 0.5f;
                 games++;
 
-                std::cout << "Game " << games << " of " << egames << " [" << tvalue * candidate_turns[i] << "]: score " << (int) (score * 100 / games) << "%" << std::endl;
+                std::cout << "EVAL " << trainer << ": game " << games << " of " << egames << " [" << tvalue * candidate_turns[i] << "]: score " << (int) (score * 100 / games) << "%" << std::endl;
 
                 // Reset model POV to match this model
                 trees[i].reset();
@@ -102,15 +105,15 @@ bool kami::eval(NN* current_model, NN* candidate_model)
                 {
                     delete[] cur_inputs;
                     delete[] cd_inputs;
-                    std::cout << "Aborting evaluation, score is too low" << std::endl;
+                    std::cout << "EVAL " << trainer << ": aborting evaluation, score is too low" << std::endl;
                     return false;
                 }
 
-                if (score >= target_score)
+                if (score >= target_score && games < egames)
                 {
                     delete[] cur_inputs;
                     delete[] cd_inputs;
-                    std::cout << "Passing evaluation early, score is high enough" << std::endl;
+                    std::cout << "EVAL " << trainer << ": finished evaluating early: score >=" << (int) (score * 100 / games) << "%, target " << etarget << std::endl;
                     return true;
                 }
             }
@@ -143,7 +146,7 @@ bool kami::eval(NN* current_model, NN* candidate_model)
     delete[] cur_inputs;
     delete[] cd_inputs;
 
-    std::cout << "Finished evaluating: score " << (int) (score * 100 / games) << "%, target " << etarget << std::endl;
+    std::cout << "EVAL " << trainer << ": finished evaluating: score " << (int) (score * 100 / games) << "%, target " << etarget << std::endl;
 
     return score * 100 / games >= etarget;
 }

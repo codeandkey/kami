@@ -7,37 +7,34 @@
 
 #include <torch/nn.h>
 
-using namespace torch;
-using namespace torch::nn;
-
 namespace kami {
-    class NNResidual : public Module {
+    class NNResidual : public torch::nn::Module {
         private:
-            Conv2d conv1{nullptr}, conv2{nullptr};
-            ReLU relu{nullptr};
-            BatchNorm2d batchnorm1{nullptr}, batchnorm2{nullptr};
+            torch::nn::Conv2d conv1{nullptr}, conv2{nullptr};
+            torch::nn::ReLU relu{nullptr};
+            torch::nn::BatchNorm2d batchnorm1{nullptr}, batchnorm2{nullptr};
 
         public:
             NNResidual(int filters);
 
-            Tensor forward(Tensor inputs);
+            torch::Tensor forward(torch::Tensor inputs);
     };
 
-    class NNModule : public Module {
+    class NNModule : public torch::nn::Module {
         private:
-            BatchNorm2d batchnorm{nullptr}, vbatchnorm{nullptr}, pbatchnorm{nullptr};
-            Conv2d conv1{nullptr}, valueconv{nullptr}, policyconv{nullptr}, policyconv2{nullptr};
+            torch::nn::BatchNorm2d batchnorm{nullptr}, vbatchnorm{nullptr}, pbatchnorm{nullptr};
+            torch::nn::Conv2d conv1{nullptr}, valueconv{nullptr}, policyconv{nullptr}, policyconv2{nullptr};
 
-            Linear valuefc{nullptr};
-            std::vector<ModuleHolder<NNResidual>> residuals;
+            torch::nn::Linear valuefc{nullptr};
+            std::vector<torch::nn::ModuleHolder<NNResidual>> residuals;
 
             int width, height, features, psize;
 
         public:
             NNModule(int width, int height, int features, int psize);
 
-            std::vector<torch::Tensor> forward(Tensor x);
-            Tensor loss(Tensor& p, Tensor& v, Tensor& obsp, Tensor& obsv);
+            std::vector<torch::Tensor> forward(torch::Tensor x);
+            torch::Tensor loss(torch::Tensor& p, torch::Tensor& v, torch::Tensor& obsp, torch::Tensor& obsv);
     };
 
     class NN {

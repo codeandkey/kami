@@ -9,4 +9,5 @@ add_executable(kami
 )
 
 target_link_libraries(kami "${TORCH_LIBRARIES}" neocortex thc)
+target_precompile_headers(kami PUBLIC nn/nn.h)
 set_property(TARGET kami PROPERTY CXX_STANDARD 17)

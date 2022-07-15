@@ -44,11 +44,11 @@ NNModule::NNModule(int width, int height, int features, int psize) :
 
     batchnorm = register_module("batchnorm1", BatchNorm2d(filters));
     vbatchnorm = register_module("vbatchnorm", BatchNorm2d(1));
-    pbatchnorm = register_module("pbatchnorm", BatchNorm2d(256));
+    pbatchnorm = register_module("pbatchnorm", BatchNorm2d(128));
     conv1 = register_module("conv1", Conv2d(Conv2dOptions(features, filters, 3).padding(1).padding_mode(torch::kZeros)));
     valueconv = register_module("valueconv", Conv2d(Conv2dOptions(filters, 1, 1)));
-    policyconv = register_module("policyconv", Conv2d(Conv2dOptions(filters, 256, 1)));
-    policyconv2 = register_module("policyconv2", Conv2d(Conv2dOptions(256, 73, 1)));
+    policyconv = register_module("policyconv", Conv2d(Conv2dOptions(filters, 128, 1)));
+    policyconv2 = register_module("policyconv2", Conv2d(Conv2dOptions(128, 73, 1)));
     valuefc = register_module("valuefc", Linear(width * height, 256));
 
     // residual layers
@@ -77,7 +77,7 @@ vector<Tensor> NNModule::forward(Tensor x)
     // Reorder policy to action space
     ph = ph.permute({0, 2, 3, 1});
     ph = ph.flatten(1);
-    ph = torch::softmax(ph, 1);
+    ph = torch::exp(torch::log_softmax(ph, 0));
 
     // value head
     Tensor vh = valueconv->forward(x);
@@ -97,7 +97,7 @@ Tensor NNModule::loss(Tensor& p, Tensor& v, Tensor& obsp, Tensor& obsv)
 
     // Policy loss -(obsp . log(p)) [maximize directional similarity to p-obsp]
     Tensor policy_loss = obsp
-        .mul(torch::log(p + 0.0001))
+        .mul(torch::log(p + 0.001))
         .sum()
         .neg();
 
@@ -112,6 +112,8 @@ NN::NN(int width, int height, int features, int psize, bool force_cpu) :
 {
     mod = make_shared<NNModule>(width, height, features, psize);
     generation = 0;
+
+    mod->eval();
 
     // try cuda
     if (torch::cuda::is_available() && !force_cpu)
@@ -147,6 +149,7 @@ NN::NN(NN* other)
     other->mut.unlock_shared();
     
     mod->to(device);
+    mod->eval();
 }
 
 void NN::infer(float* input, int batch, float* policy, float* value)
@@ -169,6 +172,12 @@ void NN::infer(float* input, int batch, float* policy, float* value)
 
     ph = ph.cpu();
     vh = vh.cpu();
+
+    if (ph.isnan().any().item().toBool())
+        throw runtime_error("inference policy output contains NaN");
+
+    if (vh.isnan().any().item().toBool())
+        throw runtime_error("inference value output contains NaN");
 
     float* policy_data = ph.data_ptr<float>();
     float* value_data = vh.data_ptr<float>();
@@ -215,6 +224,8 @@ void NN::read(string path)
 void NN::train(int trajectories, float* inputs, float* obs_p, float* obs_v, bool detect_anomaly)
 {
     mut.lock();
+
+    mod->train();
 
     // Detect anomalies
     if (detect_anomaly)
@@ -361,5 +372,6 @@ void NN::train(int trajectories, float* inputs, float* obs_p, float* obs_v, bool
     ++generation;
     cout << "Generated model " << generation << ", average loss " << firstloss << " to " << lastloss << " over " << epochs << " epochs\n";
 
+    mod->eval();
     mut.unlock();
 }

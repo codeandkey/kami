@@ -11,7 +11,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 #    add_compile_options(-Wall -Wextra -pedantic -Werror)
 #endif()
 
-set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_BUILD_TYPE Release)
 
 if (MSVC)
   file(GLOB TORCH_DLLS "${TORCH_INSTALL_PREFIX}/lib/*.dll")
@@ -22,5 +22,5 @@ if (MSVC)
                      $<TARGET_FILE_DIR:kami>)
 endif (MSVC)
 
+add_subdirectory(kami)
 add_subdirectory(test)
-add_subdirectory(src)

@@ -1,49 +1,49 @@
 add_executable(bench
   bench.cpp
-  ../src/options.cpp
+  ../kami/options.cpp
 )
 
 add_executable(mcts
   mcts.cpp
-  ../src/options.cpp
+  ../kami/options.cpp
 )
 
 add_executable(nn
   nn.cpp
-  ../src/nn/nn.cpp
-  ../src/options.cpp
+  ../kami/nn/nn.cpp
+  ../kami/options.cpp
 )
 
 add_executable(nncuda
   nncuda.cpp
-  ../src/nn/nn.cpp
-  ../src/options.cpp
+  ../kami/nn/nn.cpp
+  ../kami/options.cpp
 )
 
 add_executable(nndisk
   nndisk.cpp
-  ../src/nn/nn.cpp
-  ../src/options.cpp
+  ../kami/nn/nn.cpp
+  ../kami/options.cpp
 )
 
 add_executable(nntrain
   nntrain.cpp
-  ../src/nn/nn.cpp
-  ../src/options.cpp
+  ../kami/nn/nn.cpp
+  ../kami/options.cpp
 )
 
 add_executable(selfplay
   selfplay.cpp
-  ../src/nn/nn.cpp
-  ../src/selfplay.cpp
-  ../src/evaluate.cpp
-  ../src/options.cpp
+  ../kami/nn/nn.cpp
+  ../kami/selfplay.cpp
+  ../kami/evaluate.cpp
+  ../kami/options.cpp
 )
 
 add_executable(play
     play.cpp
-  ../src/nn/nn.cpp
-  ../src/options.cpp
+  ../kami/nn/nn.cpp
+  ../kami/options.cpp
 )
 
 add_executable(encoding

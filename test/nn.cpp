@@ -1,7 +1,7 @@
-#include "../src/nn/nn.h"
-#include "../src/env.h"
+#include "../kami/nn/nn.h"
+#include "../kami/env.h"
 
-#define TESTSIZE 1000
+#define TESTSIZE 10000
 
 using namespace kami;
 using namespace std;

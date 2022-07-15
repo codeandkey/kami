@@ -55,7 +55,7 @@ void Selfplay::stop()
     status.code(STOPPED);
 }
 
-void Selfplay::inference_main(int id) { try {
+void Selfplay::inference_main(int id) {
     cout << "Starting inference thread: " << id << endl;
 
     bool flush_old_trees = options::getInt("flush_old_trees", 1);
@@ -201,13 +201,11 @@ void Selfplay::inference_main(int id) { try {
     delete[] inf_policy;
 
     cout << "Terminating inference thread: " << id << endl;
-} catch (exception& e) {
-    cerr << "Inference thread " << id << " failed: " << e.what() << endl;
-}}
+}
 
 void Selfplay::training_main(int id)
 {
-    cout << "Starting training thread " << id << endl;
+    cout << "TRAIN " << id << ": starting thread " << id << endl;
 
     string modelpath = options::getStr("model_path", "/tmp/model.pt");
 
@@ -249,7 +247,7 @@ void Selfplay::training_main(int id)
         }
 
         // Ready to train
-        cout << "Trainer " << id << ": training generation " << model->get_generation() << " with " << trajectories << " trajectories sampled from last " << replay_buffer.size() << endl;
+        cout << "TRAIN " << id << ": training generation " << model->get_generation() << " with " << trajectories << " trajectories sampled from last " << replay_buffer.size() << endl;
 
         // Clone the current model
         NN cmodel(model);
@@ -258,14 +256,24 @@ void Selfplay::training_main(int id)
         replay_buffer.select_batch(inputs, mcts, results, trajectories);
         cmodel.train(trajectories, inputs, mcts, results, detect_anomaly);
 
+        bool eval_result;
+
+        try {
+            eval_result = eval(model, &cmodel, id);
+        } catch (exception& e)
+        {
+            cerr << "TRAIN " << id << ": evaluation failed: " << e.what() << endl;
+            eval_result = false;
+        }
+
         // Evaluate new model
-        if (eval(model, &cmodel))
+        if (eval_result)
         {
             // Save the current model
             cmodel.write(modelpath);
             model->read(modelpath);
 
-            cout << "Candidate accepted: using new generation " << model->get_generation() << endl;
+            cout << "TRAIN " << id << ": candidate accepted: using new generation " << model->get_generation() << endl;
 
             if (options::getInt("flush_old_rpb", 1))
                 replay_buffer.clear();
@@ -276,12 +284,12 @@ void Selfplay::training_main(int id)
             continue;
         } else
         {
-            cout << "Candidate rejected: generation remains " << model->get_generation() << endl;
+            cout << "TRAIN " << id << ": candidate rejected: generation remains " << model->get_generation() << endl;
         }
 
         target_from = replay_buffer.count();
         target_count += target_incr;
     }
 
-    cout << "Stopping training thread" << endl;
+    cout << "TRAIN " << id << ": stopping thread" << endl;
 }

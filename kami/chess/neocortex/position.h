@@ -16,7 +16,7 @@
 #define NC_CASTLE_BLACK_Q 8
 
 #define NC_MAX_PL_MOVES 128
-#define NC_MAX_PLY      512
+#define NC_MAX_PLY      2048
 #define NC_SEE_ILLEGAL     -100000
 
 #define NC_EVAL_NOISE 100

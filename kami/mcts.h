@@ -253,10 +253,15 @@ class MCTS {
                 throw std::runtime_error("expand() called with no actions");
             #endif
 
-            float ptotal = 0.0001f;
+            float ptotal = 0.0f;
 
             for (int action : actions)
                 ptotal += policy[action];
+
+            #ifndef NDEBUG
+                if (ptotal <= 0.0f)
+                    throw std::runtime_error("NN policy sums to " + std::to_string(ptotal));
+            #endif
 
             for (int action : actions)
             {
@@ -301,7 +306,7 @@ class MCTS {
         Env& get_env() { return env; }
 
         void reset() {
-            env = Env();         
+            env = Env();
             target = nullptr;
             root->clean();
 
