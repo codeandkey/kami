@@ -69,16 +69,24 @@ bool kami::eval(NN* current_model, NN* candidate_model, int trainer)
 
             int boff = trees[i].get_env().turn() == candidate_turns[i] ? cd_batch_size : cur_batch_size;
 
+            float tinput[OBSIZE];
+
             // Push up to node limit, or next observation
-            while (trees[i].n() < enodes && !trees[i].select(inputs + boff * 8 * 8 * NFEATURES));
+            while (trees[i].n() < enodes && !trees[i].select(tinput));
 
             // If not ready, this observation is done, we pass it to the model
             if (trees[i].n() < enodes)
             {
-                if (trees[i].get_env().turn() == candidate_turns[i] && cd_batch_size < ebatch - 1)
+                if (trees[i].get_env().turn() == candidate_turns[i] && cd_batch_size < ebatch)
+                {
                     cd_targets[cd_batch_size++] = i;
-                else if (trees[i].get_env().turn() == -candidate_turns[i] && cur_batch_size < ebatch - 1)
+                    memcpy(inputs + boff * OBSIZE, tinput, sizeof(float) * OBSIZE);
+                }
+                else if (trees[i].get_env().turn() == -candidate_turns[i] && cur_batch_size < ebatch)
+                {
                     cur_targets[cur_batch_size++] = i;
+                    memcpy(inputs + boff * OBSIZE, tinput, sizeof(float) * OBSIZE);
+                }
 
                 continue;
             }
