@@ -69,6 +69,11 @@ void Selfplay::inference_main(int id) {
 
     draw_value = (options::getInt("draw_value_pct", 50) / 100.0f) * 2.0f - 1.0f;
 
+    float alpha_initial = options::getFloat("selfplay_alpha_initial", 1.0f);
+    float alpha_decay = options::getFloat("selfplay_alpha_decay", 1.0f);
+    float alpha_final = options::getFloat("selfplay_alpha_final", 1.0f);
+    int alpha_cutoff = options::getFloat("selfplay_alpha_cutoff", 1.0f);
+
     struct T {
         T(float* i, float* m, float pov) {
             inputs = new float[OBSIZE];
@@ -145,10 +150,10 @@ void Selfplay::inference_main(int id) {
             ++partials;
             trajectories[i].push_back(new T(batch + i * OBSIZE, mcts, pov));
 
-            float alpha = ALPHA_FINAL;
+            float alpha = alpha_final;
 
-            if (trees[i].get_env().ply() < ALPHA_CUTOFF)
-                alpha = pow(ALPHA_DECAY, trees[i].get_env().ply()) * ALPHA_INITIAL;
+            if (trees[i].get_env().ply() < alpha_cutoff)
+                alpha = pow(alpha_decay, trees[i].get_env().ply()) * alpha_initial;
 
             int picked = trees[i].pick(alpha);
 
