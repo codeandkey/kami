@@ -4,6 +4,7 @@
 #include "options.h"
 
 #include <cmath>
+#include <random>
 #include <vector>
 #include <stdexcept>
 #include <string>
@@ -70,9 +71,14 @@ class MCTS {
         bool force_expand_unvisited;
         float unvisited_node_value;
         float bootstrap_weight;
+
         float bootstrap_window;
         float bootstrap_amp;
+        float noise_weight;
+        float noise_alpha;
         int scale_cpuct_by_actions;
+
+        std::mt19937 rng;
 
     public:
         Node* root = nullptr;
@@ -87,6 +93,10 @@ class MCTS {
             bootstrap_window = (float) options::getInt("bootstrap_window", 1600);
             bootstrap_amp = (float) options::getInt("bootstrap_amp_pct", 75) / 100.0f;
             scale_cpuct_by_actions = options::getInt("scale_cpuct_by_actions", 0);
+            noise_alpha = options::getFloat("mcts_noise_alpha", 0.05f);
+            noise_weight = options::getFloat("mcts_noise_weight", 0.05f);
+
+            rng.seed(time(NULL));
         }
 
         ~MCTS()
@@ -251,6 +261,13 @@ class MCTS {
             #ifndef NDEBUG
             if (!actions.size())
                 throw std::runtime_error("expand() called with no actions");
+
+            float tsum = 0.0f;
+            for (int i = 0; i < PSIZE; ++i)
+                tsum += policy[i];
+
+            if (tsum <= 0.999f)
+                throw std::runtime_error("softmax sums to " + std::to_string(tsum));
             #endif
 
             float ptotal = 0.0f;
@@ -258,26 +275,32 @@ class MCTS {
             for (int action : actions)
                 ptotal += policy[action];
 
-            #ifndef NDEBUG
-                if (ptotal <= 0.0f)
-                    throw std::runtime_error("NN policy sums to " + std::to_string(ptotal));
-            #endif
+            // Generate noise for each action
+            std::vector<float> noise(actions.size(), 0.0f);
+            float total_noise = 0.0f;
 
-            for (int action : actions)
+            for (int i = 0; i < noise.size(); ++i)
+            {
+                std::gamma_distribution<> dist(1.0f, 1.0f);
+                noise[i] = dist(rng);
+                total_noise += noise[i];
+            }
+
+            for (int i = 0; i < actions.size(); ++i)
             {
                 Node* new_child = new Node();
 
-                new_child->action = action;
+                new_child->action = actions[i];
                 new_child->parent = target;
                 new_child->turn = -target->turn;
-                new_child->p = policy[action] / ptotal;
+                new_child->p = (1 - noise_weight) * policy[actions[i]] / ptotal + noise_weight * (noise[i] / total_noise);
 
                 #ifndef NDEBUG
-                    if (policy[action] < 0.0f)
-                        throw std::runtime_error("unexpected negative policy " + std::to_string(policy[action]));
+                    if (policy[actions[i]] < 0.0f)
+                        throw std::runtime_error("negative policy detected: " + std::to_string(policy[actions[i]]));
 
-                    if (std::isnan(policy[action]))
-                        throw std::runtime_error("NaN policy received from NN!");
+                    if (std::isnan(policy[actions[i]]))
+                        throw std::runtime_error("NaN policy detected");
                 #endif
 
                 target->children.push_back(new_child);
