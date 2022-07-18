@@ -77,7 +77,7 @@ vector<Tensor> NNModule::forward(Tensor x)
     // Reorder policy to action space
     ph = ph.permute({0, 2, 3, 1});
     ph = ph.flatten(1);
-    ph = torch::exp(torch::log_softmax(ph, 0));
+    ph = torch::exp(torch::log_softmax(ph, 1));
 
     // value head
     Tensor vh = valueconv->forward(x);
